@@ -1,6 +1,6 @@
 # WhatsApp Web Incognito
 This is the source code of a chrome extension that disables read receipts and presence updates on WhatsApp Web.
-You can find the original extension in store [here](https://chrome.google.com/webstore/detail/whatsapp-web-incognito/dmojkdggbdjlhgmakakajjbbdibkjkgj).
+You can find the original extension in [Chrome Web Store](https://chrome.google.com/webstore/detail/whatsapp-web-incognito/dmojkdggbdjlhgmakakajjbbdibkjkgj).
 ## How it works
 This extension works by intercepting the WebSocket frames between chrome and WhatsApp's servers using a modified `WebSocket` constructor (see [wsHook](https://github.com/skepticfx/wshook)). 
 
