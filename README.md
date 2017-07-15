@@ -13,5 +13,5 @@ The resulting "nodes" are then simply checked to see if WhatsApp tries to send o
 ## Organization
 The main code of the extension is located in `Core/Main.js` and `UI.js`. 
 
-Other files inside the `Crypto` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
+Other files inside the `Core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
 `background.js` mainly keeps track of the saved prefrences using `localStorage`.
