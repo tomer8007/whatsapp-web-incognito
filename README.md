@@ -11,5 +11,7 @@ Those frames are then decrypted if needed using the local encryption keys (store
 
 The resulting "nodes" are then simply checked to see if WhatsApp tries to send out a `read`  or `presence` action, and if so, the extension blocks it and fakes a failure response from the server.
 ## Organization
-The main code of the extension is located in `Core/Main.js` and `UI.js`. Other files inside the `Crypto` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
+The main code of the extension is located in `Core/Main.js` and `UI.js`. 
+
+Other files inside the `Crypto` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
 `background.js` mainly keeps track of the saved prefrences using `localStorage`.
