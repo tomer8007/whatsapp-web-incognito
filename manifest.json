@@ -1,4 +1,4 @@
-﻿{
+{
   "manifest_version": 2,
   "name": "WhatsApp Web Incognito",
   "short_name": "WhatsIncognito",
@@ -11,24 +11,24 @@
    },
    "browser_action": {
     "default_icon": "images/icon_128.png"
-  },
+   },
    "background":
    {
     "scripts": ["background.js"],
     "persistent": true
    },
-"content_scripts": 
-[
-    {
-      "matches": ["https://web.whatsapp.com/*"],
-      "js": ["core_injection.js"],
-	  "run_at": "document_start"
-    },
+   "content_scripts": 
+   [
 	{
-      "matches": ["https://web.whatsapp.com/*"],
-      "js": ["core/UI.js", "lib/drop/drop.js", "lib/sweetalert/sweetalert.min.js"],
+	  "matches": ["https://web.whatsapp.com/*"],
+	  "js": ["core_injection.js"],
+	  "run_at": "document_start"
+	},
+	{
+	  "matches": ["https://web.whatsapp.com/*"],
+	  "js": ["core/UI.js", "lib/drop/drop.js", "lib/sweetalert/sweetalert.min.js"],
 	  "css": ["styles.css", "lib/drop/css/drop-theme-basic.css", "lib/sweetalert/sweetalert.css"]
-    }
-],
-"web_accessible_resources": ["lib/drop/drop.js", "core/*", "images/incognito.png", "images/incognito_gray.png", "lib/sweetalert/sweetalert.min.js"]
+	}
+   ],
+	"web_accessible_resources": ["lib/drop/drop.js", "core/*", "images/incognito.png", "images/incognito_gray.png", "lib/sweetalert/sweetalert.min.js"]
 }

@@ -1,4 +1,4 @@
-﻿inject();
+inject();
 
 async function inject() 
 {
@@ -25,4 +25,3 @@ function addScript(scriptName) {
 		(document.head||document.documentElement).appendChild(s);
 	});
 }
-
