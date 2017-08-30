@@ -94,7 +94,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e) {
     var chatsShown = document.getElementsByClassName("unread chat");
 	for (var i=0;i<chatsShown.length;i++)
 	{
-		var id = FindReact(chatsShown[i]).props.id;
+		var id = FindReact(chatsShown[i]).props.children[0].props.children.props.id;
 		if (id == blockedJid)
 		{
 			chatsShown[i].getElementsByClassName("icon-meta unread-count")[0].className += " incognito";
@@ -307,6 +307,7 @@ window.FindReact = function(dom) {
         if (key.startsWith("__reactInternalInstance$")) {
             var compInternals = dom[key]._currentElement;
             var compWrapper = compInternals._owner;
+			if (compWrapper == null) return compInternals;
             var comp = compWrapper._instance;
             return comp;
         }
