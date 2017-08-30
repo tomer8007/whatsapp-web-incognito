@@ -47,11 +47,11 @@ else
 function onMainUIReady() 
 {
 	checkInterception();
-	var firstMenuItem = document.getElementsByClassName("menu-item")[0];
+	var firstMenuItem = document.getElementsByClassName("menu-horizontal-item")[0];
 	if (firstMenuItem != undefined)
 	{
 		var menuItemElem = document.createElement("div");
-		menuItemElem.setAttribute("class", "menu-item menu-item-incognito");
+		menuItemElem.setAttribute("class", "menu-horizontal-item menu-item-incognito");
 		var iconElem = document.createElement("button");
 		iconElem.setAttribute("class", "icon icon-incognito");
 		iconElem.setAttribute("title", "Incognito options");
@@ -68,12 +68,14 @@ function onMainUIReady()
 					<div class='incognito-options-container' dir='ltr'> \
 						<div class='incognito-options-title'>Incognito options</div> \
 						<div id='incognito-option-read-confirmations' class='incognito-options-item'> \
-							<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked" : "unchecked") + "'><div class='checkmark'></div>		                        </div> \
+							<div class='checkbox-container' style='display:inline !important'> \
+							<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked" : "unchecked") + "'><div class='checkmark'></div>		                        </div></div> \
 							Don't send read confirmations \
 							<div class='incognito-options-description'>Messages that their read confirmation was blocked will be marked in red instead of green.</div> \
 						</div> \
 						<div id='incognito-option-presence-updates' class='incognito-options-item'> \
-							<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked" : "unchecked") + "'><div class='checkmark'></div>                        </div> \
+							<div class='checkbox-container' style='display:inline !important'> \
+							<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked" : "unchecked") + "'><div class='checkmark'></div>                        </div></div> \
 							Don't send \"Last Seen\" updates \
 							<div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
 						</div> \
@@ -91,15 +93,16 @@ function onMainUIReady()
 			});
 			drop.on("open", function()
 			{
+				// TODO: do FindReact($0).props.style.transformOrigin = "TOP RIGHT"?
 				if (!checkInterception()) return;
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-item active menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-horizontal-item active menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
 			});
 			drop.on("close", function()
 			{
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-item menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-horizontal-item menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);

@@ -103,7 +103,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e) {
 });
 
 document.addEventListener('onDropdownOpened', function(e) {
-	var menuItems = document.getElementsByClassName("dropdown")[0].getElementsByClassName("menu-item");
+	var menuItems = document.getElementsByClassName("dropdown")[0].getElementsByClassName("menu-horizontal-item");
 	var reactMenuItems = FindReact(document.getElementsByClassName("dropdown")[0]).props.children[0].props.children;
 	var markAsReadButton = null;
 	var props = null;
