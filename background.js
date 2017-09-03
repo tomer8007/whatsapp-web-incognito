@@ -13,11 +13,16 @@ function onMessage(messageEvent, sender, callback)
 		{
 			localStorage["readConfirmationsHook"] = messageEvent.readConfirmationsHook;
 		}
+		if ("safetyDelay" in messageEvent)
+		{
+			localStorage["safetyDelay"] = messageEvent.safetyDelay;
+		}
     }
     else if (messageEvent.name == "getOptions")
     {
 		var presenceUpdatesHook = true;
 		var readConfirmationsHook = true;
+		var safetyDelay = 0;
         if (localStorage["presenceUpdatesHook"] == "true" || localStorage["presenceUpdatesHook"] == "false")
         {
             presenceUpdatesHook = localStorage["presenceUpdatesHook"] == "true";
@@ -26,10 +31,15 @@ function onMessage(messageEvent, sender, callback)
         {
             readConfirmationsHook = localStorage["readConfirmationsHook"] == "true";
         }
+		if (localStorage["safetyDelay"] != undefined && localStorage["safetyDelay"] != null)
+		{
+			safetyDelay = localStorage["safetyDelay"];
+		}
         callback(
         {
             presenceUpdatesHook: presenceUpdatesHook,
-            readConfirmationsHook: readConfirmationsHook
+            readConfirmationsHook: readConfirmationsHook,
+			safetyDelay: safetyDelay
         });
     }
 }

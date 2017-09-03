@@ -3,7 +3,7 @@
   "name": "WhatsApp Web Incognito",
   "short_name": "WhatsIncognito",
    "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
-  "version": "1.0.2",
+  "version": "1.1",
   "permissions": [ ],
    "icons": 
    {
@@ -30,5 +30,5 @@
 	  "css": ["styles.css", "lib/drop/css/drop-theme-basic.css", "lib/sweetalert/sweetalert.css"]
 	}
    ],
-	"web_accessible_resources": ["lib/drop/drop.js", "core/*", "images/incognito.png", "images/incognito_gray.png", "lib/sweetalert/sweetalert.min.js"]
+	"web_accessible_resources": ["lib/drop/drop.js", "lib/sweetalert/sweetalert.min.js", "core/*", "images/*" ]
 }

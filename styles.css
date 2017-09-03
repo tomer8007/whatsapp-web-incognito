@@ -8,15 +8,16 @@
 
 .icon-incognito
 {
-    background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.png) !important;
-    background-position: 3px 3px !important;
-    background-size: 18px 18px !important;
+    background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
+    background-position: 2px 2px !important;
+    background-size: 20px 20px !important;
     cursor: pointer !important;
 }
 
 .drop-theme-incognito.drop-element
 {
     z-index: 200 !important;
+	transform-origin: left top 0px;
 }
 
 .checkbox-incognito
@@ -52,7 +53,6 @@
 .incognito-options-item
 {
     padding: 12.5px 24px !important;
-    cursor: pointer !important;
 }
 
 .incognito-options-item:hover
@@ -76,4 +76,158 @@
 .unread-count.incognito
 {
 	background-color: rgba(255,0,0,0.3) !important;
+}
+
+.unread-count.blinking
+{
+	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+}
+
+.incognito-message
+{
+    position: relative;
+	font-size: 12px;
+	transform-origin: left top 0px;
+	text-transform: none !important;
+}
+
+.incognito-message.middle
+{
+	margin-bottom: 12px;
+	margin-top: 12px;
+}
+
+.incognito-cancel-button 
+{
+	display: inline; 
+	cursor: pointer;
+	margin-left: 10px;
+    box-sizing: border-box;
+    height: 19px;
+    min-width: 19px;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255,0,0,0.3);
+    color: rgb(255, 255, 255);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    vertical-align: top;
+    padding: 0px 5px;
+    border-radius: 11px;
+}
+
+.incognito-cancel-button:hover
+{
+	background-color: rgba(255,0,0,1.0);
+}
+
+.incognito-send-button 
+{
+	display: inline; 
+	cursor: pointer;
+	margin-left: 10px;
+    box-sizing: border-box;
+    height: 23px;
+    min-width: 30px;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(0,255,0,0.3);
+    color: rgb(255, 255, 255);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: normal;
+    vertical-align: top;
+    padding: 0px 5px;
+    border-radius: 11px;
+}
+
+.incognito-send-button:hover
+{
+	background-color: rgba(0,255,0,0.6);
+}
+
+@keyframes blink {
+    0% {
+           background-color: rgba(9, 210, 97, 0.3)
+    }
+    50% {
+           background-color: rgba(9, 210, 97, 1.0)
+    }
+    100% {
+           background-color: rgba(9, 210, 97, 0.3)
+    }
+}
+
+@keyframes click-wave {
+  0% {
+    height: 20px;
+    width: 20px;
+    opacity: 0.35;
+    position: relative;
+  }
+  100% {
+    height: 100px;
+    width: 100px;
+    margin-left: -40px;
+    margin-top: -40px;
+    opacity: 0;
+  }
+}
+
+.radio-input {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  height: 15px;
+  width: 15px;
+  transition: all 0.15s ease-out 0s;
+  background: #cbd1d8;
+  top: 3px;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: inline-block;
+  margin-right: 0.5rem;
+  outline: none;
+  position: relative;
+  z-index: 1000;
+  border-radius: 50%;
+}
+.radio-input:hover {
+  background: #9faab7;
+}
+.radio-input:checked {
+  background: #40e0d0;
+}
+.radio-input:checked::before {
+  height: 15px;
+  width: 15px;
+  position: absolute;
+  content: '';
+  display: inline-block;
+  font-size: 26px;
+  text-align: center;
+  line-height: 18px;
+}
+.radio-input:checked::after {
+  -webkit-animation: click-wave 0.65s;
+  -moz-animation: click-wave 0.65s;
+  animation: click-wave 0.65s;
+  background: #40e0d0;
+  content: '';
+  display: block;
+  position: relative;
+  z-index: 100;
+  border-radius: 50%;
+}
+
+input[type=number]::-webkit-inner-spin-button {
+  opacity: 1;
+}
+
+.seconds-incognito-input {
+	width: 40px;
+	margin-left: 7px;
+	margin-right: 7px;
 }
