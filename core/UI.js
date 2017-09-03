@@ -110,9 +110,7 @@ function onMainUIReady()
 							<div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
 						</div> \
 					</div>";
-					
-			$('input[type="range"]').rangeslider();
-	
+						
 			var drop = new Drop(
 			{
 				target: menuItemElem,
