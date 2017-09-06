@@ -193,7 +193,7 @@ function putWarningAndStartCounting()
 			if (seconds > 0)
 			{
 				warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
-				blinkingChats[chat.id] = {timerID: id, time: seconds};
+				blinkingChats[chat.id] = {timerID: id, time: seconds, chat: chat};
 			}
       		else
 			{
@@ -205,7 +205,7 @@ function putWarningAndStartCounting()
 				blockedChat.getElementsByClassName("icon-meta unread-count")[0].className = "icon-meta unread-count";
        		}
     	}, 1000);
-		blinkingChats[chat.id] = {timerID: id, time: seconds};
+		blinkingChats[chat.id] = {timerID: id, time: seconds, chat: chat};
 		
 		cancelButton.onclick = function() 
 		{
@@ -304,13 +304,19 @@ document.addEventListener('sendReadConfirmation', function(e)
 	var index = data.index != undefined ? data.index : data.lastMessageIndex;
 	var t = {id: index, fromMe: false, participant: null};
 	var messageID = data.jid + index;
+	
 	exceptionsList.push(messageID);
-	Store.Wap.sendConversationSeen(data.jid, t, data.count, false);
-	if (data.jid in blinkingChats)
+	Store.Wap.sendConversationSeen(data.jid, t, data.count, false).bind(this).then(function(e) 
 	{
-		clearInterval(blinkingChats[data.jid]["timerID"]);
-		delete blinkingChats[data.jid];
-	}
+		if (data.jid in blinkingChats)
+		{
+			var chat = blinkingChats[data.jid]["chat"]
+			if (chat.markSeen != undefined && e.status == 200)
+				chat.markSeen(data.count);
+			clearInterval(blinkingChats[data.jid]["timerID"]);
+			delete blinkingChats[data.jid];
+		}
+    });
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
 	if (warningMessage != null && warningMessage.messageID == messageID)

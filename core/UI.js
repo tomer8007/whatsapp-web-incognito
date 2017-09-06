@@ -165,7 +165,7 @@ document.addEventListener('onMarkAsReadClick', function(e)
 		{
 			swal({
 			  title: "Mark as read?",
-			  text: data.name + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
+			  text: data.contact.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
 			  type: "warning",
 			  showCancelButton: true,
 			  confirmButtonColor: "#DD6B55",
