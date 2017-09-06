@@ -257,6 +257,7 @@ function onSafetyDelayDisabled()
 function onSafetyDelayEnabled()
 {
 	var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
+	if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
 	document.getElementById("incognito-option-safety-delay").disabled = false;
 	document.getElementById("incognito-radio-disable-safety-delay").checked = false;
 	chrome.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
