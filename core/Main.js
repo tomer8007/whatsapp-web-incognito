@@ -240,7 +240,7 @@ function markChatAsBlocked(chat)
 		{
 			if (chat.unreadCount > 0)
 			{
-				var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, unreadCount: chat.unreadCount, isGroup: chat.isGroup};
+				var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
 				document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 			}
 		};
