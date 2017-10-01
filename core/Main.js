@@ -366,7 +366,7 @@ document.addEventListener('onIncognitoOptionsClosed', function(e)
 		
 		var appElement = document.getElementsByClassName("app-wrapper app-wrapper-web app-wrapper-main")[0];
 		var toast = document.createElement("div");
-		toast.setAttribute("class", "action-toast");
+		toast.setAttribute("class", "_3iZUg");
 		toast.style.transformOrigin = "left top";
 		toast.textContent = "The safety delay must be an integer number in range 1-30 !";
 		appElement.insertBefore(toast, appElement.firstChild);
@@ -449,7 +449,7 @@ handler.handleSentNode = function(node, tag)
 	}
 	catch (exception)
 	{
-		console.error("Allowing WA packet due to exception:");
+		console.error("WhatsAppIncognito: Allowing WA packet due to exception:");
 		console.error(exception);
 		return true;
 	}

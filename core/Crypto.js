@@ -4,21 +4,30 @@ var WACrypto = {};
 (function() {
 WACrypto.decryptWithWebCrypto = function(buffer) 
 {
-	var hmac = buffer.slice(0, 32)
-	  , dataIncludingIV = buffer.slice(32)
-	  , iv = buffer.slice(32, 48)
-	  , data = buffer.slice(48)
-	  , keys = getKeys()
-	  , u = 
-	  {
-		name: "AES-CBC",
-		iv: new Uint8Array(iv)
-	   };
-	return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), u, !1, ["decrypt"]).then(function(key) {
-		return window.crypto.subtle.decrypt(u, key, data).catch(function(e) {
-		  console.log(e.code + ", " + e.toString());
+	try 
+	{
+		var hmac = buffer.slice(0, 32)
+		  , dataIncludingIV = buffer.slice(32)
+		  , iv = buffer.slice(32, 48)
+		  , data = buffer.slice(48)
+		  , keys = getKeys()
+		  , u = 
+		  {
+			name: "AES-CBC",
+			iv: new Uint8Array(iv)
+		   };
+		return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), u, !1, ["decrypt"]).then(function(key) {
+			return window.crypto.subtle.decrypt(u, key, data).catch(function(e) {
+			  console.log(e.code + ", " + e.toString());
+			});
 		});
-	});
+	
+	} catch (exception)
+	{
+		console.error("WhatsAppIncognito: can't decrypt packet due to exception:");
+		console.error(excpetion);
+		return new Promise();
+	}
 }
 
 WACrypto.encryptWithWebCrypto = function(buffer) 
