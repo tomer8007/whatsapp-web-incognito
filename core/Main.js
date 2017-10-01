@@ -84,13 +84,13 @@ document.addEventListener('onOptionsUpdate', function(e)
 	var safetyDelayPanelExpectedHeight = 44; // be careful with this
 	if (readConfirmationsHookEnabled) 
 	{
-		getCSSRule('.unread-count').style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
+		getCSSRule('html[dir] .OUeyt').style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 	}
 	else 
 	{
-		getCSSRule('.unread-count').style.backgroundColor = 'rgba(9, 210, 97, 1)';
+		getCSSRule('html[dir] .OUeyt').style.backgroundColor = 'rgba(9, 210, 97, 1)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 		var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -103,10 +103,10 @@ document.addEventListener('onOptionsUpdate', function(e)
 	
 	if ('readConfirmationsHook' in options)
 	{
-		var unreadCounters = document.getElementsByClassName("icon-meta unread-count");
+		var unreadCounters = document.getElementsByClassName("OUeyt");
 		for (var i=0;i<unreadCounters.length;i++)
 		{
-			unreadCounters[i].className = "icon-meta unread-count";
+			unreadCounters[i].className = "OUeyt";
 		}
 	}
 });
@@ -134,7 +134,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 	}
 	else if (readConfirmationsHookEnabled)
 	{
-		blockedChat.getElementsByClassName("icon-meta unread-count")[0].className += " incognito";
+		blockedChat.querySelector("html[dir] .OUeyt").className += " incognito";
 	}
 });
 
@@ -164,10 +164,10 @@ function putWarningAndStartCounting()
 		cancelButton.innerHTML = "Cancel";
 		warningMessage.appendChild(cancelButton);
 		
-		var parent = document.getElementsByClassName("message-list")[0];
+		var parent = document.getElementsByClassName("_9tCEa")[0];
 		if (previousMessage != null) 
 			parent.removeChild(previousMessage);
-		var unreadMessage = parent.getElementsByClassName("msg-unread-body").length > 0 ? parent.getElementsByClassName("msg-unread-body")[0] : null;
+		var unreadMessage = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
 		if (unreadMessage != null)
 			unreadMessage.parentNode.insertBefore(warningMessage, unreadMessage.nextSibling);
 		else
@@ -181,11 +181,11 @@ function putWarningAndStartCounting()
 		var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
 		if (scrollToBottom < messageVisiabillityDistance) 
 		{
-			FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).scrollToBottom();
+			FindReact(document.getElementsByClassName("_9tCEa")[0]).scrollToBottom();
 		}
 		
 		var blockedChat = findUnreadChatElementForJID(chat.id);
-		blockedChat.getElementsByClassName("icon-meta unread-count")[0].className += " blinking";
+		blockedChat.querySelector("html[dir] .OUeyt").className += " blinking";
 		
     	var id = setInterval(function()
 		{ 
@@ -202,7 +202,7 @@ function putWarningAndStartCounting()
 				var data = {jid: chat.id, index: chat.lastReceivedKey.id, count: chat.unreadCount};
 				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
 				
-				blockedChat.getElementsByClassName("icon-meta unread-count")[0].className = "icon-meta unread-count";
+				blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
        		}
     	}, 1000);
 		blinkingChats[chat.id] = {timerID: id, time: seconds, chat: chat};
@@ -226,7 +226,7 @@ function markChatAsBlocked(chat)
 {
 	var blockedChat = findUnreadChatElementForJID(chat.id);
 	if (blockedChat != null)
-		blockedChat.getElementsByClassName("icon-meta unread-count")[0].className = "icon-meta unread-count incognito";
+		blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
 	var cancelButton = warningMessage.lastChild;

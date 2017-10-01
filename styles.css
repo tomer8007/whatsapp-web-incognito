@@ -9,14 +9,17 @@
 .icon-incognito
 {
     background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
-    background-position: 2px 2px !important;
-    background-size: 20px 20px !important;
+	background-repeat: no-repeat;
+    background-position: 1px 1px !important;
+    background-size: 21px 21px !important;
     cursor: pointer !important;
+	width: 24px;
+	height: 24px;
 }
 
 .drop-theme-incognito.drop-element
 {
-    z-index: 200 !important;
+    z-index: 1100 !important;
 	transform-origin: left top 0px;
 }
 
@@ -78,7 +81,17 @@
 	background-color: rgba(255,0,0,0.3) !important;
 }
 
+.OUeyt.incognito
+{
+	background-color: rgba(255,0,0,0.3) !important;
+}
+
 .unread-count.blinking
+{
+	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+}
+
+.OUeyt.blinking
 {
 	-webkit-animation:blink normal 0.7s infinite ease-in-out;
 }

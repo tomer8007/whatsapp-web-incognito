@@ -74,9 +74,8 @@ function onMainUIReady()
 						<div class='incognito-options-title'>Incognito options</div> \
 						<div class='incognito-options-item'> \
 							<div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
-								<div class='checkbox-container' style='display:inline !important;'> \
-									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked" : "unchecked") + "'> \
-										<div class='checkmark'></div> \
+								<div class='checkbox-container _3I_df' style='display:inline !important;'> \
+									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked me9CP _1VD7W'> <div class='checkmark _1KfC8 _1s8CA'></div>" : "unchecked me9CP'> <div class='checkmark _1KfC8 _2uQfJ'></div>") + "\
 									</div> \
 								</div> \
 								Don't send read confirmations \
@@ -101,9 +100,8 @@ function onMainUIReady()
 							</div> \
 						</div> \
 						<div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
-							<div class='checkbox-container' style='display:inline !important'> \
-								<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked" : "unchecked") + "'> \
-									<div class='checkmark'></div> \
+							<div class='checkbox-container _3I_df' style='display:inline !important'> \
+									<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked me9CP _1VD7W'> <div class='checkmark _1KfC8 _1s8CA'></div>" : "unchecked me9CP'> <div class='checkmark _1KfC8 _2uQfJ'></div>") + "\
 								</div> \
 							</div> \
 							Don't send \"Last Seen\" updates \
@@ -185,14 +183,18 @@ function onReadConfirmaionsTick()
 	var readConfirmationsHook = false;
 	var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
+	var checkmark = checkbox.firstElementChild;
+	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked"));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked").replace("me9CP", "me9CP _1VD7W"));
+		checkmark.setAttribute("class", chekmarkClass.replace("_2uQfJ", "_1s8CA"));
         readConfirmationsHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked"));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").replace("me9CP _1VD7W", "me9CP"));
+		checkmark.setAttribute("class", chekmarkClass.replace("_1s8CA", "_2uQfJ"));
         readConfirmationsHook = false;
 		var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
 		for (var i=0;i<redChats.length;i++)
@@ -212,14 +214,18 @@ function onPresenseUpdatesTick()
 	var presenceUpdatesHook = false;
 	var checkbox = document.querySelector("#incognito-option-presence-updates .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
+	var checkmark = checkbox.firstElementChild;
+	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked"));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked").replace("me9CP", "me9CP _1VD7W"));
+		checkmark.setAttribute("class", chekmarkClass.replace("_2uQfJ", "_1s8CA"));
         presenceUpdatesHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked"));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").replace("me9CP _1VD7W", "me9CP"));
+		checkmark.setAttribute("class", chekmarkClass.replace("_1s8CA", "_2uQfJ"));
         presenceUpdatesHook = false;
     }
     chrome.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
