@@ -51,11 +51,11 @@ else
 function onMainUIReady() 
 {
 	checkInterception();
-	var firstMenuItem = document.getElementsByClassName("menu-horizontal-item")[0];
+	var firstMenuItem = document.getElementsByClassName("rAUz7")[0];
 	if (firstMenuItem != undefined)
 	{
 		var menuItemElem = document.createElement("div");
-		menuItemElem.setAttribute("class", "menu-horizontal-item menu-item-incognito");
+		menuItemElem.setAttribute("class", "rAUz7 menu-item-incognito");
 		var iconElem = document.createElement("button");
 		iconElem.setAttribute("class", "icon icon-incognito");
 		iconElem.setAttribute("title", "Incognito options");
@@ -130,7 +130,7 @@ function onMainUIReady()
 			drop.on("open", function()
 			{
 				if (!checkInterception()) return;
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-horizontal-item active menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "rAUz7 _3TbsN active menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
@@ -143,7 +143,7 @@ function onMainUIReady()
 			});
 			drop.on("close", function()
 			{
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "menu-horizontal-item menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "rAUz7 menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
