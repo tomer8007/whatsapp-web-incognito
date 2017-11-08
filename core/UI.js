@@ -50,7 +50,17 @@ else
 
 function onMainUIReady() 
 {
-	checkInterception();
+	setTimeout(checkInterception, 500);
+	addIconIfNeeded();
+	
+	// if the menu itme is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
+	setTimeout(addIconIfNeeded, 1300);
+}
+
+function addIconIfNeeded() 
+{
+	if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
+	
 	var firstMenuItem = document.getElementsByClassName("rAUz7")[0];
 	if (firstMenuItem != undefined)
 	{

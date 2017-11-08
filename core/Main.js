@@ -27,6 +27,7 @@ wsHook.before = function(originalData, url)
 		{
 			WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
 			{
+				if (decrypted == null) resolve(originalData);
 				if (WAdebugMode) console.log("[Out] Sent binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
 				
 				var nodeParser = new NodeParser();

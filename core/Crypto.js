@@ -25,8 +25,8 @@ WACrypto.decryptWithWebCrypto = function(buffer)
 	} catch (exception)
 	{
 		console.error("WhatsAppIncognito: can't decrypt packet due to exception:");
-		console.error(excpetion);
-		return new Promise();
+		console.error(exception);
+		return new Promise(function(resolve, reject) {resolve(null);});
 	}
 }
 
