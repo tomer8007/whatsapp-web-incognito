@@ -28,7 +28,7 @@ else
 						found = true;
 						break;
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("dropdown"))
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("_2uLFU"))
 					{
 						setTimeout(function() 
 						{
