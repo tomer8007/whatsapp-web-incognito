@@ -8,6 +8,7 @@ var WAdebugMode = false;
 var isInitializing = true;
 var exceptionsList = [];
 var blinkingChats = {};
+var chats = {};
 
 wsHook.before = function(originalData, url) 
 {
@@ -141,7 +142,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 
 function putWarningAndStartCounting()
 {
-	var chatWindow = document.querySelector("#main > div.pane-chat-tile");
+	var chatWindow = document.querySelector("#main > div.pane-body");
 	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -200,7 +201,7 @@ function putWarningAndStartCounting()
 			{
 				// time's up, sending receipt
         		clearInterval(id);
-				var data = {jid: chat.id, index: chat.lastReceivedKey.id, count: chat.unreadCount};
+				var data = {jid: chat.id, index: chat.lastReceivedKey.id, unreadCount: chat.unreadCount};
 				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
 				
 				blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
@@ -220,7 +221,9 @@ function putWarningAndStartCounting()
 
 document.addEventListener('onPaneChatOpened', function(e)
 {
-	
+	var chatWindow = document.querySelector("#main > div.pane-body");
+	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
+	chats[chat.id] = chat;
 });
 
 function markChatAsBlocked(chat)
@@ -307,16 +310,20 @@ document.addEventListener('sendReadConfirmation', function(e)
 	var messageID = data.jid + index;
 	
 	exceptionsList.push(messageID);
-	Store.Wap.sendConversationSeen(data.jid, t, data.count, false).bind(this).then(function(e) 
+	Store.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
 	{
+		var chat = null;
+		if (data.jid in chats)
+			chat = chats[data.jid];
 		if (data.jid in blinkingChats)
 		{
-			var chat = blinkingChats[data.jid]["chat"]
-			if (chat.markSeen != undefined && e.status == 200)
-				chat.markSeen(data.count);
+			chat = blinkingChats[data.jid]["chat"]
 			clearInterval(blinkingChats[data.jid]["timerID"]);
 			delete blinkingChats[data.jid];
 		}
+			
+		if (chat.markSeen != undefined && e.status == 200)
+			chat.markSeen(data.count);
     });
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
