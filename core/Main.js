@@ -424,7 +424,7 @@ handler.handleSentNode = function(node, tag)
 					var action = arr[o][0];
 					var data = arr[o][1];
 					var isException = exceptionsList.includes(data.jid+data.index);
-					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) || (presenceUpdatesHookEnabled && action === "presence");
+					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) || (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available");
 					if (shouldBlock)
 					{
 						console.log("WhatsAppIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
