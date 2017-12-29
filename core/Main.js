@@ -183,7 +183,7 @@ function putWarningAndStartCounting()
 		var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
 		if (scrollToBottom < messageVisiabillityDistance) 
 		{
-			FindReact(document.getElementsByClassName("_9tCEa")[0]).scrollToBottom();
+			FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
 		}
 		
 		var blockedChat = findUnreadChatElementForJID(chat.id);
