@@ -267,6 +267,13 @@ function markChatAsBlocked(chat)
 		}
 	};
 	
+	var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
+		var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
+		if (scrollToBottom < messageVisiabillityDistance) 
+		{
+			FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
+		}
+	
 	blockedChats[chat.id] = chat;
 }
 
