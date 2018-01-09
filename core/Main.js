@@ -9,6 +9,7 @@ var isInitializing = true;
 var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
+var blockedChats = {};
 
 wsHook.before = function(originalData, url) 
 {
@@ -117,18 +118,8 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 {
 	var blockedJid = e.detail;
 	
-	// turn the unread counter of the chat to red
-    var chatsShown = document.getElementsByClassName("unread chat");
-	var blockedChat = null;
-	for (var i=0;i<chatsShown.length;i++)
-	{
-		var id = FindReact(chatsShown[i]).props.children[0].props.children.props.id;
-		if (id == blockedJid)
-		{
-			blockedChat = chatsShown[i];
-			break;
-		}
-	}
+	var chatWindow = document.querySelector("#main > div.pane-body");
+	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
 	{
@@ -136,8 +127,9 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 	}
 	else if (readConfirmationsHookEnabled)
 	{
-		blockedChat.querySelector("html[dir] .OUeyt").className += " incognito";
+		markChatAsBlocked(chat);
 	}
+	
 });
 
 function putWarningAndStartCounting()
@@ -230,25 +222,52 @@ function markChatAsBlocked(chat)
 {
 	var blockedChat = findUnreadChatElementForJID(chat.id);
 	if (blockedChat != null)
-		blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
+	{
+		// turn the unread counter of the chat to red
+		blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt incognito";
+	}
+	var messageID = chat.id + chat.lastReceivedKey.id;
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-	var cancelButton = warningMessage.lastChild;
-	if (warningMessage != null)
+	var warningWasEmpty = warningMessage == null;
+	if (warningMessage == null)
 	{
-		Velocity(warningMessage, {  scaleY: [1,0], opacity: [1, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
-		warningMessage.firstChild.textContent = "Read receipts were blocked.";
-		cancelButton.setAttribute('class', 'incognito-send-button');
-		cancelButton.innerHTML = "Mark as read";
-		cancelButton.onclick = function()
+		warningMessage = document.createElement('div');
+		warningMessage.setAttribute('class', 'incognito-message middle');
+		warningMessage.innerHTML = "Read receipts were blocked.";
+		warningMessage.messageID = messageID;
+		var sendButton = document.createElement('div');
+		sendButton.setAttribute('class', 'incognito-send-button');
+		sendButton.innerHTML = "Mark as read";
+		warningMessage.appendChild(sendButton);
+		
+		var parent = document.getElementsByClassName("_9tCEa")[0];
+		var unreadMessage = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
+		if (unreadMessage != null)
+			unreadMessage.parentNode.insertBefore(warningMessage, unreadMessage.nextSibling);
+		else
 		{
-			if (chat.unreadCount > 0)
-			{
-				var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
-				document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
-			}
-		};
+			warningMessage.setAttribute('class', 'incognito-message msg');
+			parent.appendChild(warningMessage);
+		}
 	}
+	
+	var cancelButton = warningMessage.lastChild;
+	if (blockedChats[chat.id] == undefined || warningWasEmpty)
+		Velocity(warningMessage, {  scaleY: [1,0], opacity: [1, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+	warningMessage.firstChild.textContent = "Read receipts were blocked.";
+	cancelButton.setAttribute('class', 'incognito-send-button');
+	cancelButton.innerHTML = "Mark as read";
+	cancelButton.onclick = function()
+	{
+		if (chat.unreadCount > 0)
+		{
+			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
+			document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
+		}
+	};
+	
+	blockedChats[chat.id] = chat;
 }
 
 function findUnreadChatElementForJID(jid)
@@ -320,6 +339,10 @@ document.addEventListener('sendReadConfirmation', function(e)
 			chat = blinkingChats[data.jid]["chat"]
 			clearInterval(blinkingChats[data.jid]["timerID"]);
 			delete blinkingChats[data.jid];
+		}
+		if (data.jid in blockedChats)
+		{
+			delete blockedChats[data.jid];
 		}
 			
 		if (chat.markSeen != undefined && e.status == 200)
@@ -457,7 +480,7 @@ handler.handleSentNode = function(node, tag)
 	}
 	catch (exception)
 	{
-		console.error("WhatsAppIncognito: Allowing WA packet due to exception:");
+		console.error("WhatsAppInvisible: Allowing WA packet due to exception:");
 		console.error(exception);
 		return true;
 	}
