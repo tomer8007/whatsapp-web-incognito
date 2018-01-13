@@ -171,12 +171,15 @@ function putWarningAndStartCounting()
 		}
 		Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 		
+		// Temporarily removed due to react 16.0 changes
+		/*
 		var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
 		var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
 		if (scrollToBottom < messageVisiabillityDistance) 
 		{
 			FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
 		}
+		*/
 		
 		var blockedChat = findUnreadChatElementForJID(chat.id);
 		blockedChat.querySelector("html[dir] .OUeyt").className += " blinking";
@@ -269,12 +272,15 @@ function markChatAsBlocked(chat)
 	
 	if (!(chat.id in blockedChats)) 
 	{
+		// Temporarily removed due to react 16.0 changes
+		/*
 		var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
 			var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
 			if (scrollToBottom < messageVisiabillityDistance) 
 			{
 				FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
 			}
+			*/
 	}
 	
 	blockedChats[chat.id] = chat;
@@ -286,7 +292,7 @@ function findUnreadChatElementForJID(jid)
 	var blockedChat = null;
 	for (var i=0;i<chatsShown.length;i++)
 	{
-		var id = FindReact(chatsShown[i]).props.children[0].props.children.props.id;
+		var id = FindReact(chatsShown[i])[0].props.children.props.id;
 		if (id == jid)
 		{
 			blockedChat = chatsShown[i];
@@ -581,6 +587,10 @@ window.FindReact = function(dom)
 	{
         if (key.startsWith("__reactInternalInstance$")) 
 		{
+			var reactElement = dom[key];
+			
+			return reactElement.memoizedProps.children;
+			
             var compInternals = dom[key]._currentElement;
             var compWrapper = compInternals._owner;
 			if (compWrapper == null) return compInternals;
