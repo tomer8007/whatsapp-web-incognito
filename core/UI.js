@@ -81,7 +81,7 @@ function addIconIfNeeded()
 	
 			var dropContent = " \
 					<div class='incognito-options-container' dir='ltr'> \
-						<div class='incognito-options-title'>WhatsIncognito options</div> \
+						<div class='incognito-options-title'>Incognito options</div> \
 						<div class='incognito-options-item'> \
 							<div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
 								<div class='checkbox-container _3I_df' style='display:inline !important;'> \
