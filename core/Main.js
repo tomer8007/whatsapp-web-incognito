@@ -38,7 +38,7 @@ wsHook.before = function(originalData, url)
 				if (isInitializing)
 				{
 					isInitializing = false;
-					console.log("WhatsAppInvisible: Interception is working.");
+					console.log("WhatsIncognito: Interception is working.");
 					document.dispatchEvent(new CustomEvent('isInterceptionWorking', {detail: true}));
 				}
 				
@@ -466,7 +466,7 @@ handler.handleSentNode = function(node, tag)
 					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) || (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available");
 					if (shouldBlock)
 					{
-						console.log("WhatsAppInvisible: --- Blocking " + action.toUpperCase() + " action! ---");
+						console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
 						switch (action)
 						{
 							case "read":
@@ -487,7 +487,7 @@ handler.handleSentNode = function(node, tag)
 					if (isException)
 					{
 						// exceptions are one-time operation
-						console.log("WhatsAppInvisible: --- Allowing " + action.toUpperCase() + " action due to exception ---");
+						console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action due to exception ---");
 						exceptionsList.remove(exceptionsList.indexOf(data.jid+data.index));
 					}
 				}
@@ -496,7 +496,7 @@ handler.handleSentNode = function(node, tag)
 	}
 	catch (exception)
 	{
-		console.error("WhatsAppInvisible: Allowing WA packet due to exception:");
+		console.error("WhatsIncognito: Allowing WA packet due to exception:");
 		console.error(exception);
 		return true;
 	}

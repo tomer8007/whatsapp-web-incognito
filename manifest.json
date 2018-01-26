@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
-  "name": "Invisible mode for WhatsApp Web",
-  "short_name": "WhatsInvisible",
+  "name": "WhatsIncognito",
+  "short_name": "WhatsIncognito",
    "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
   "version": "1.3.0",
   "permissions": [ ],

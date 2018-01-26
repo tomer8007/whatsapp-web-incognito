@@ -68,7 +68,7 @@ function addIconIfNeeded()
 		menuItemElem.setAttribute("class", "rAUz7 menu-item-incognito");
 		var iconElem = document.createElement("button");
 		iconElem.setAttribute("class", "icon icon-incognito");
-		iconElem.setAttribute("title", "Invisibility options");
+		iconElem.setAttribute("title", "Incognito options");
 		menuItemElem.appendChild(iconElem);
 		firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 		
@@ -81,7 +81,7 @@ function addIconIfNeeded()
 	
 			var dropContent = " \
 					<div class='incognito-options-container' dir='ltr'> \
-						<div class='incognito-options-title'>Invisibility options</div> \
+						<div class='incognito-options-title'>Incognito options</div> \
 						<div class='incognito-options-item'> \
 							<div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
 								<div class='checkbox-container _3I_df' style='display:inline !important;'> \
