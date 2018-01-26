@@ -118,7 +118,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 {
 	var blockedJid = e.detail;
 	
-	var chatWindow = document.querySelector("#main > div.pane-body");
+	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
 	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
@@ -134,7 +134,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 
 function putWarningAndStartCounting()
 {
-	var chatWindow = document.querySelector("#main > div.pane-body");
+	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
 	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -216,7 +216,7 @@ function putWarningAndStartCounting()
 
 document.addEventListener('onPaneChatOpened', function(e)
 {
-	var chatWindow = document.querySelector("#main > div.pane-body");
+	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
 	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
 	chats[chat.id] = chat;
 });
