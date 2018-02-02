@@ -306,7 +306,7 @@ function findUnreadChatElementForJID(jid)
 document.addEventListener('onDropdownOpened', function(e) 
 {
 	var menuItems = document.getElementsByClassName("_2uLFU")[0].getElementsByClassName("_10anr");
-	var reactMenuItems = FindReact(document.getElementsByClassName("_2uLFU")[0]).props.children[0].props.children;
+	var reactMenuItems = FindReact(document.getElementsByClassName("_2uLFU")[0])[0].props.children;
 	var markAsReadButton = null;
 	var props = null;
 	for (var i=0;i<reactMenuItems.length;i++)
