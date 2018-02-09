@@ -181,8 +181,9 @@ function putWarningAndStartCounting()
 		}
 		*/
 		
-		var blockedChat = findUnreadChatElementForJID(chat.id);
-		blockedChat.querySelector("html[dir] .OUeyt").className += " blinking";
+		var blockedChat = findChatElementForJID(chat.id);
+		if (blockedChat != null)
+			blockedChat.querySelector("html[dir] .OUeyt").className += " blinking";
 		
     	var id = setInterval(function()
 		{ 
@@ -223,7 +224,7 @@ document.addEventListener('onPaneChatOpened', function(e)
 
 function markChatAsBlocked(chat)
 {
-	var blockedChat = findUnreadChatElementForJID(chat.id);
+	var blockedChat = findChatElementForJID(chat.id);
 	if (blockedChat != null)
 	{
 		// turn the unread counter of the chat to red
@@ -286,13 +287,13 @@ function markChatAsBlocked(chat)
 	blockedChats[chat.id] = chat;
 }
 
-function findUnreadChatElementForJID(jid)
+function findChatElementForJID(jid)
 {
-	var chatsShown = document.getElementsByClassName("unread chat");
+    var chatsShown = document.getElementsByClassName("_2wP_Y");
 	var blockedChat = null;
 	for (var i=0;i<chatsShown.length;i++)
 	{
-		var id = FindReact(chatsShown[i])[0].props.children.props.id;
+		var id = FindReact(chatsShown[i]).props.chat.id;
 		if (id == jid)
 		{
 			blockedChat = chatsShown[i];
