@@ -10,7 +10,7 @@
       "128": "images/icon_128.png"
    },
    "browser_action": {
-    "default_icon": "images/icon_128_2.png"
+    "default_icon": "images/icon_128.png"
    },
    "background":
    {
