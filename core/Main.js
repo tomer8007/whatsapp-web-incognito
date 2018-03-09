@@ -119,7 +119,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 	var blockedJid = e.detail;
 	
 	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
-	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
+	var chat = getCurrentChat();
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
 	{
@@ -135,7 +135,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 function putWarningAndStartCounting()
 {
 	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
-	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
+	var chat = getCurrentChat();
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
 	var seconds = safetyDelay;
@@ -218,7 +218,7 @@ function putWarningAndStartCounting()
 document.addEventListener('onPaneChatOpened', function(e)
 {
 	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
-	var chat = chatWindow != undefined ? FindReact(chatWindow).props.chat : null;
+	var chat = getCurrentChat();
 	chats[chat.id] = chat;
 });
 
@@ -302,6 +302,13 @@ function findChatElementForJID(jid)
 	}
 	
 	return blockedChat;
+}
+
+function getCurrentChat() 
+{
+	var elements = document.getElementsByClassName("_3zJZ2");
+	if (elements.length == 0) return null;
+	return FindReact(elements[0])[1].props.chat;
 }
 
 document.addEventListener('onDropdownOpened', function(e) 
@@ -606,9 +613,18 @@ function getCSSRule(ruleName)
 {
   var rules = {}; 
   var styleSheets = document.styleSheets;
+  var styleSheetRules = null;
   for (var i=0;i<styleSheets.length;++i)
   {
-	var styleSheetRules = styleSheets[i].cssRules;
+	try 
+	{
+		styleSheetRules = styleSheets[i].cssRules;
+	}
+	catch (e)
+	{
+		// Assume Chrome 64 doesn't let us access this CSS due to security policies or whatever, just ignore
+		continue;
+	}
 	if (styleSheetRules == null) continue;
 	for (var j=0;j<styleSheetRules.length;++j) 
 		rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
