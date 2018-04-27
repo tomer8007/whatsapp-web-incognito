@@ -329,6 +329,7 @@ document.addEventListener('onDropdownOpened', function(e)
 	if (props != null)
 	{
 		var name = props.chat.name;
+		var formattedName = props.chat.contact.formattedName;
 		var jid = props.chat.id;
 		var lastMessageIndex = props.chat.lastReceivedKey.id;
 		var unreadCount = props.chat.unreadCount;
@@ -338,7 +339,7 @@ document.addEventListener('onDropdownOpened', function(e)
 			// this is mark-as-read button, not mark-as-unread
 			markAsReadButton.addEventListener("mousedown", function(e) 
 			{
-				var data = {name: name, jid: jid, lastMessageIndex: lastMessageIndex, unreadCount: unreadCount, isGroup: isGroup};
+				var data = {name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, unreadCount: unreadCount, isGroup: isGroup};
 				document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 			});
 		}
@@ -495,7 +496,7 @@ handler.handleSentNode = function(node, tag)
 					if (isException)
 					{
 						// exceptions are one-time operation
-						console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action due to exception ---");
+						console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
 						exceptionsList.remove(exceptionsList.indexOf(data.jid+data.index));
 					}
 				}
