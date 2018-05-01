@@ -197,7 +197,7 @@ function putWarningAndStartCounting()
 			{
 				// time's up, sending receipt
         		clearInterval(id);
-				var data = {jid: chat.id, index: chat.lastReceivedKey.id, unreadCount: chat.unreadCount};
+				var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
 				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
 				
 				blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
@@ -266,7 +266,7 @@ function markChatAsBlocked(chat)
 	{
 		if (chat.unreadCount > 0)
 		{
-			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
+			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
 			document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 		}
 	};
@@ -334,12 +334,13 @@ document.addEventListener('onDropdownOpened', function(e)
 		var lastMessageIndex = props.chat.lastReceivedKey.id;
 		var unreadCount = props.chat.unreadCount;
 		var isGroup = props.chat.isGroup;
+		var fromMe = props.char.lastReceivedKey.fromMe;
 		if (unreadCount > 0)
 		{
 			// this is mark-as-read button, not mark-as-unread
 			markAsReadButton.addEventListener("mousedown", function(e) 
 			{
-				var data = {name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, unreadCount: unreadCount, isGroup: isGroup};
+				var data = {name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, fromMe: fromMe, unreadCount: unreadCount, isGroup: isGroup};
 				document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 			});
 		}
@@ -350,7 +351,7 @@ document.addEventListener('sendReadConfirmation', function(e)
 {
 	var data = JSON.parse(e.detail);
 	var index = data.index != undefined ? data.index : data.lastMessageIndex;
-	var t = {id: index, fromMe: false, participant: null};
+	var t = {id: index, fromMe: data.fromMe, participant: null};
 	var messageID = data.jid + index;
 	
 	exceptionsList.push(messageID);
@@ -372,6 +373,10 @@ document.addEventListener('sendReadConfirmation', function(e)
 			
 		if (chat.markSeen != undefined && e.status == 200)
 			chat.markSeen(data.count);
+		else if (e.status != 200)
+		{
+			
+		}
     });
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -420,11 +425,11 @@ document.addEventListener('onIncognitoOptionsClosed', function(e)
 		document.getElementById("incognito-radio-disable-safety-delay").checked = true;
 		document.getElementById("incognito-radio-enable-safety-delay").checked = false;
 		
-		var appElement = document.getElementsByClassName("app-wrapper app-wrapper-web app-wrapper-main")[0];
+		var appElement = document.getElementsByClassName("app-wrapper-web")[0];
 		var toast = document.createElement("div");
-		toast.setAttribute("class", "_3iZUg");
+		toast.setAttribute("class", "f1UZe");
 		toast.style.transformOrigin = "left top";
-		toast.textContent = "The safety delay must be an integer number in range 1-30 !";
+		toast.innerHTML = "<div class=\"hYvJ8\">The safety delay must be an integer number in range 1-30 !</div>";
 		appElement.insertBefore(toast, appElement.firstChild);
 		Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
 		setTimeout(function() { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000); 
