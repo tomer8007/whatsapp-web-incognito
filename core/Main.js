@@ -334,7 +334,7 @@ document.addEventListener('onDropdownOpened', function(e)
 		var lastMessageIndex = props.chat.lastReceivedKey.id;
 		var unreadCount = props.chat.unreadCount;
 		var isGroup = props.chat.isGroup;
-		var fromMe = props.char.lastReceivedKey.fromMe;
+		var fromMe = props.chat.lastReceivedKey.fromMe;
 		if (unreadCount > 0)
 		{
 			// this is mark-as-read button, not mark-as-unread
