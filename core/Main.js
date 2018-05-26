@@ -311,6 +311,21 @@ function getCurrentChat()
 	return FindReact(elements[0])[1].props.chat;
 }
 
+function getChatByJID(jid)
+{
+	var chat = findChatElementForJID(jid);
+	if (chat != null)
+	{
+		chat = FindReact(chat).props.chat;
+	}
+	else
+	{
+		chat = chats[jid];
+	}
+	
+	return chat;
+}
+
 document.addEventListener('onDropdownOpened', function(e) 
 {
 	var menuItems = document.getElementsByClassName("_2uLFU")[0].getElementsByClassName("_10anr");
@@ -353,9 +368,12 @@ document.addEventListener('sendReadConfirmation', function(e)
 	var index = data.index != undefined ? data.index : data.lastMessageIndex;
 	var t = {id: index, fromMe: data.fromMe, participant: null};
 	var messageID = data.jid + index;
+
+    var chat = getChatByJID(data.jid);
 	
 	exceptionsList.push(messageID);
-	Store.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
+	//Store.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
+	chat.sendSeen().bind(this).then(function(e) 
 	{
 		var chat = null;
 		if (data.jid in chats)
