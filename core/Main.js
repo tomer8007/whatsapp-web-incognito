@@ -307,8 +307,16 @@ function findChatElementForJID(jid)
 function getCurrentChat() 
 {
 	var elements = document.getElementsByClassName("_3zJZ2");
-	if (elements.length == 0) return null;
-	return FindReact(elements[0])[1].props.chat;
+    if (elements.length == 0) return null;
+
+    var reactArray = FindReact(elements[0]);
+    for (var i = 0; i < reactArray.length; i++)
+    {
+        var chat = reactArray[i].props.chat
+        if (chat !== undefined)
+            return chat;
+    }
+    return null;
 }
 
 function getChatByJID(jid)
