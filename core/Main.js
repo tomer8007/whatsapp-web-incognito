@@ -309,14 +309,25 @@ function getCurrentChat()
 	var elements = document.getElementsByClassName("_3zJZ2");
     if (elements.length == 0) return null;
 
-    var reactArray = FindReact(elements[0]);
-    for (var i = 0; i < reactArray.length; i++)
-    {
-        var chat = reactArray[i].props.chat
-        if (chat !== undefined)
-            return chat;
-    }
-    return null;
+    var reactResult = FindReact(elements[0]);
+	var chat = null;
+	if (Array.isArray(reactResult))
+	{
+		for (var i = 0; i < reactArray.length; i++)
+		{
+			if (reactArray[i].props.chat !== undefined)
+			{
+				chat = reactArray[i].props.chat;
+				break;
+			}
+		}
+	}
+	else
+	{
+		chat = reactResult.props.chat;
+	}
+    
+    return chat;
 }
 
 function getChatByJID(jid)
