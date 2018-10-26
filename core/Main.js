@@ -161,12 +161,12 @@ function putWarningAndStartCounting()
 		var parent = document.getElementsByClassName("_9tCEa")[0];
 		if (previousMessage != null) 
 			parent.removeChild(previousMessage);
-		var unreadMessage = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
-		if (unreadMessage != null)
-			unreadMessage.parentNode.insertBefore(warningMessage, unreadMessage.nextSibling);
+		var unreadMarker = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
+		if (unreadMarker != null)
+			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
 		{
-			warningMessage.setAttribute('class', 'incognito-message msg');
+            warningMessage.setAttribute('class', 'incognito-message vW7d1');
 			parent.appendChild(warningMessage);
 		}
 		Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
@@ -246,12 +246,12 @@ function markChatAsBlocked(chat)
 		warningMessage.appendChild(sendButton);
 		
 		var parent = document.getElementsByClassName("_9tCEa")[0];
-		var unreadMessage = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
-		if (unreadMessage != null)
-			unreadMessage.parentNode.insertBefore(warningMessage, unreadMessage.nextSibling);
+		var unreadMarker = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
+		if (unreadMarker != null)
+			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
 		{
-			warningMessage.setAttribute('class', 'incognito-message msg');
+            warningMessage.setAttribute('class', 'incognito-message vW7d1');
 			parent.appendChild(warningMessage);
 		}
 	}
@@ -583,6 +583,10 @@ handler.handleReceivedNode = function(e)
 			messages = t.concat(messages)
 			if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
 			//handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
+		}
+		else if (WAdebugMode)
+		{
+			console.log(JSON.parse(JSON.stringify(t)))
 		}
 	}
 }
