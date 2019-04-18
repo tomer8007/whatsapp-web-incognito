@@ -50,11 +50,12 @@ else
 
 function onMainUIReady() 
 {
-	setTimeout(checkInterception, 500);
+	setTimeout(checkInterception, 1000);
 	addIconIfNeeded();
 	
 	// if the menu itme is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
-	setTimeout(addIconIfNeeded, 1300);
+    setTimeout(addIconIfNeeded, 500);
+    setTimeout(addIconIfNeeded, 1000);
 }
 
 function addIconIfNeeded() 
