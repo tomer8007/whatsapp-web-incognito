@@ -514,7 +514,9 @@ handler.handleSentNode = function(node, tag)
 					var action = arr[o][0];
 					var data = arr[o][1];
 					var isException = exceptionsList.includes(data.jid+data.index);
-					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) || (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available");
+					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) ||
+									 (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
+									 (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
 					if (shouldBlock)
 					{
 						console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
