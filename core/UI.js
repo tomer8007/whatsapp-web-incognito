@@ -36,7 +36,7 @@ else
 							
 						},200);
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("NuujD")) // TODO: the next line never hits apparently
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("NuujD"))
 					{
 						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
 					}
