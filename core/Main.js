@@ -87,13 +87,13 @@ document.addEventListener('onOptionsUpdate', function(e)
 	var safetyDelayPanelExpectedHeight = 44; // be careful with this
 	if (readConfirmationsHookEnabled) 
 	{
-		getCSSRule('html[dir] .OUeyt').style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
+		getCSSRule('html[dir] .P6z4j').style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 	}
 	else 
 	{
-		getCSSRule('html[dir] .OUeyt').style.backgroundColor = 'rgba(9, 210, 97, 1)';
+		getCSSRule('html[dir] .P6z4j').style.backgroundColor = 'rgba(9, 210, 97, 1)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 		var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -106,10 +106,10 @@ document.addEventListener('onOptionsUpdate', function(e)
 	
 	if ('readConfirmationsHook' in options)
 	{
-		var unreadCounters = document.getElementsByClassName("OUeyt");
+		var unreadCounters = document.getElementsByClassName("P6z4j");
 		for (var i=0;i<unreadCounters.length;i++)
 		{
-			unreadCounters[i].className = "OUeyt";
+			unreadCounters[i].className = "P6z4j";
 		}
 	}
 });
@@ -118,7 +118,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 {
 	var blockedJid = e.detail;
 	
-	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
+	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
 	var chat = getCurrentChat();
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
@@ -134,7 +134,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 
 function putWarningAndStartCounting()
 {
-	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
+	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
 	var chat = getCurrentChat();
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -158,10 +158,10 @@ function putWarningAndStartCounting()
 		cancelButton.innerHTML = "Cancel";
 		warningMessage.appendChild(cancelButton);
 		
-		var parent = document.getElementsByClassName("_9tCEa")[0];
+		var parent = document.getElementsByClassName("_1ays2")[0];
 		if (previousMessage != null) 
 			parent.removeChild(previousMessage);
-		var unreadMarker = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
+		var unreadMarker = parent.getElementsByClassName("_1lo-H").length > 0 ? parent.getElementsByClassName("_1lo-H")[0] : null;
 		if (unreadMarker != null)
 			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
@@ -183,7 +183,7 @@ function putWarningAndStartCounting()
 		
 		var blockedChat = findChatElementForJID(chat.id);
 		if (blockedChat != null)
-			blockedChat.querySelector("html[dir] .OUeyt").className += " blinking";
+			blockedChat.querySelector("html[dir] .P6z4j").className += " blinking";
 		
     	var id = setInterval(function()
 		{ 
@@ -200,7 +200,7 @@ function putWarningAndStartCounting()
 				var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
 				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
 				
-				blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt";
+				blockedChat.querySelector("html[dir] .P6z4j").className = "P6z4j";
        		}
     	}, 1000);
 		blinkingChats[chat.id] = {timerID: id, time: seconds, chat: chat};
@@ -217,7 +217,7 @@ function putWarningAndStartCounting()
 
 document.addEventListener('onPaneChatOpened', function(e)
 {
-	var chatWindow = document.getElementsByClassName("_3zJZ2")[0];
+	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
 	var chat = getCurrentChat();
 	chats[chat.id] = chat;
 });
@@ -228,7 +228,7 @@ function markChatAsBlocked(chat)
 	if (blockedChat != null)
 	{
 		// turn the unread counter of the chat to red
-		blockedChat.querySelector("html[dir] .OUeyt").className = "OUeyt incognito";
+		blockedChat.querySelector("html[dir] .P6z4j").className = "P6z4j incognito";
 	}
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	
@@ -245,8 +245,8 @@ function markChatAsBlocked(chat)
 		sendButton.innerHTML = "Mark as read";
 		warningMessage.appendChild(sendButton);
 		
-		var parent = document.getElementsByClassName("_9tCEa")[0];
-		var unreadMarker = parent.getElementsByClassName("L89LI").length > 0 ? parent.getElementsByClassName("L89LI")[0] : null;
+		var parent = document.getElementsByClassName("_1ays2")[0];
+		var unreadMarker = parent.getElementsByClassName("_1lo-H").length > 0 ? parent.getElementsByClassName("_1lo-H")[0] : null;
 		if (unreadMarker != null)
 			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
@@ -289,7 +289,7 @@ function markChatAsBlocked(chat)
 
 function findChatElementForJID(jid)
 {
-    var chatsShown = document.getElementsByClassName("_2wP_Y");
+    var chatsShown = document.getElementsByClassName("X7YrQ");
 	var blockedChat = null;
 	for (var i=0;i<chatsShown.length;i++)
 	{
@@ -306,7 +306,7 @@ function findChatElementForJID(jid)
 
 function getCurrentChat() 
 {
-	var elements = document.getElementsByClassName("_3zJZ2");
+	var elements = document.getElementsByClassName("_1_q7u");
     if (elements.length == 0) return null;
 
     var reactResult = FindReact(elements[0]);
@@ -347,12 +347,14 @@ function getChatByJID(jid)
 
 document.addEventListener('onDropdownOpened', function(e) 
 {
-	var menuItems = document.getElementsByClassName("_2uLFU")[0].getElementsByClassName("_10anr");
-	var reactMenuItems = FindReact(document.getElementsByClassName("_2uLFU")[0])[0].props.children;
+	var menuItems = document.getElementsByClassName("_3z3lc")[0].getElementsByClassName("_3cfBY ");
+	var reactMenuItems = FindReact(document.getElementsByClassName("_2hHc6")[0])[0].props.children;
 	var markAsReadButton = null;
 	var props = null;
 	for (var i=0;i<reactMenuItems.length;i++)
 	{
+		if (reactMenuItems[i] == null) continue;
+
 		if (reactMenuItems[i].key == ".$mark_unread")
 		{
 			markAsReadButton = menuItems[i];

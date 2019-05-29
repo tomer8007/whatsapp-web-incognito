@@ -28,7 +28,7 @@ else
 						found = true;
 						break;
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("_2uLFU"))
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("_2hHc6"))
 					{
 						setTimeout(function() 
 						{
@@ -36,7 +36,7 @@ else
 							
 						},200);
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("_1GX8_"))
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("NuujD")) // TODO: the next line never hits apparently
 					{
 						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
 					}
@@ -62,11 +62,11 @@ function addIconIfNeeded()
 {
 	if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
 	
-	var firstMenuItem = document.getElementsByClassName("rAUz7")[0];
+	var firstMenuItem = document.getElementsByClassName("_3j8Pd")[0];
 	if (firstMenuItem != undefined)
 	{
 		var menuItemElem = document.createElement("div");
-		menuItemElem.setAttribute("class", "rAUz7 menu-item-incognito");
+		menuItemElem.setAttribute("class", "_3j8Pd menu-item-incognito");
 		var iconElem = document.createElement("button");
 		iconElem.setAttribute("class", "icon icon-incognito");
 		iconElem.setAttribute("title", "Incognito options");
@@ -85,8 +85,9 @@ function addIconIfNeeded()
 						<div class='incognito-options-title'>Incognito options</div> \
 						<div class='incognito-options-item'> \
 							<div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
-								<div class='checkbox-container _3I_df' style='display:inline !important;'> \
-									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked me9CP _1VD7W'> <div class='checkmark _1KfC8 _1s8CA'></div>" : "unchecked me9CP'> <div class='checkmark _1KfC8 _2uQfJ'></div>") + "\
+								<div class='checkbox-container _3wpnE' style='display:inline !important;'> \
+									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked _1Zo-R _15wNI'> <div class='checkmark _1ygtt _3zTzS'> </div>" :
+									 "unchecked _1Zo-R'> <div class='checkmark _1ygtt _31Di_'> </div>") + "\
 									</div> \
 								</div> \
 								Don't send read confirmations \
@@ -111,8 +112,9 @@ function addIconIfNeeded()
 							</div> \
 						</div> \
 						<div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
-							<div class='checkbox-container _3I_df' style='display:inline !important'> \
-									<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked me9CP _1VD7W'> <div class='checkmark _1KfC8 _1s8CA'></div>" : "unchecked me9CP'> <div class='checkmark _1KfC8 _2uQfJ'></div>") + "\
+							<div class='checkbox-container _3wpnE' style='display:inline !important'> \
+									<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked _1Zo-R _15wNI'> <div class='checkmark _1ygtt _3zTzS'> </div>" : 
+									"unchecked _1Zo-R'> <div class='checkmark _1ygtt _31Di_'> </div>") + "\
 								</div> \
 							</div> \
 							Don't send \"Last Seen\" updates \
@@ -141,7 +143,7 @@ function addIconIfNeeded()
 			drop.on("open", function()
 			{
 				if (!checkInterception()) return;
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "rAUz7 _3TbsN active menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "_3j8Pd GPmgf active menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
@@ -154,7 +156,7 @@ function addIconIfNeeded()
 			});
 			drop.on("close", function()
 			{
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "rAUz7 menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", "_3j8Pd menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
@@ -198,14 +200,14 @@ function onReadConfirmaionsTick()
 	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked").replace("me9CP", "me9CP _1VD7W"));
-		checkmark.setAttribute("class", chekmarkClass.replace("_2uQfJ", "_1s8CA"));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " _15wNI");
+		checkmark.setAttribute("class", chekmarkClass.replace("_31Di_", "_3zTzS"));
         readConfirmationsHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").replace("me9CP _1VD7W", "me9CP"));
-		checkmark.setAttribute("class", chekmarkClass.replace("_1s8CA", "_2uQfJ"));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("_15wNI").join(""));
+		checkmark.setAttribute("class", chekmarkClass.replace("_3zTzS", "_31Di_"));
         readConfirmationsHook = false;
 		var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
 		for (var i=0;i<redChats.length;i++)
@@ -229,14 +231,14 @@ function onPresenseUpdatesTick()
 	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked").replace("me9CP", "me9CP _1VD7W"));
-		checkmark.setAttribute("class", chekmarkClass.replace("_2uQfJ", "_1s8CA"));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " _15wNI");
+		checkmark.setAttribute("class", chekmarkClass.replace("_31Di_", "_3zTzS"));
         presenceUpdatesHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").replace("me9CP _1VD7W", "me9CP"));
-		checkmark.setAttribute("class", chekmarkClass.replace("_1s8CA", "_2uQfJ"));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("_15wNI").join(""));
+		checkmark.setAttribute("class", chekmarkClass.replace("_3zTzS", "_31Di_"));
         presenceUpdatesHook = false;
     }
     chrome.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
