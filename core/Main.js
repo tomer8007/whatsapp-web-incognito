@@ -656,6 +656,33 @@ function fixCSSPositionIfNeeded(drop)
 	}
 }
 
+function getCSSRule(ruleName)
+{
+  var rules = {}; 
+  var styleSheets = document.styleSheets;
+  var styleSheetRules = null;
+  for (var i=0;i<styleSheets.length;++i)
+  {
+	try 
+	{
+		styleSheetRules = styleSheets[i].cssRules;
+	}
+	catch (e)
+	{
+		// Assume Chrome 64+ doesn't let us access this CSS due to security policies or whatever, just ignore
+		continue;
+	}
+	if (styleSheetRules == null) continue;
+	for (var j=0;j<styleSheetRules.length;++j) 
+		rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
+  }
+  return rules[ruleName];
+}
+
+// -------------------
+// Helper functions
+// --------------------
+
 window.FindReact = function(dom) 
 {
     for (var key in dom)
@@ -676,30 +703,7 @@ window.FindReact = function(dom)
     return null;
 };
 
-function getCSSRule(ruleName)
-{
-  var rules = {}; 
-  var styleSheets = document.styleSheets;
-  var styleSheetRules = null;
-  for (var i=0;i<styleSheets.length;++i)
-  {
-	try 
-	{
-		styleSheetRules = styleSheets[i].cssRules;
-	}
-	catch (e)
-	{
-		// Assume Chrome 64 doesn't let us access this CSS due to security policies or whatever, just ignore
-		continue;
-	}
-	if (styleSheetRules == null) continue;
-	for (var j=0;j<styleSheetRules.length;++j) 
-		rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
-  }
-  return rules[ruleName];
-}
-
-function getWhatsAppAPI()
+function exposeWhatsAppAPI()
 {
 	// taken from https://gist.github.com/phpRajat/a6422922efae32914f4dbd1082f3f412
 
@@ -720,18 +724,30 @@ function getWhatsAppAPI()
 	  
 	  WAModules = getAllWebpackModules()._value;
 	  
+	  // find the main API module
 	  for (var key in WAModules) {
 		if (WAModules[key].exports) {
 		  if (WAModules[key].exports.default) {
 			if (WAModules[key].exports.default.Chat) {
-			  console.log(WAModules[key]);
 			  _module = WAModules[key];
 			}
 		  }
 		}
 	  }
+
+	  // find the web module
+	  for (var key in WAModules) {
+		if (WAModules[key].exports) {
+		  if (WAModules[key].exports.VERSION_STR) {
+			  var versionString = WAModules[key].exports.VERSION_STR;
+			  console.log("WhatsIncognito: WhatsApp Web verison is " + versionString);
+			  break;
+		  }
+		}
+	  }
 	  
-	  return _module.exports.default;
+	  window.WhatsAppAPI = _module.exports.default;
 }
 
-window.WhatsAppAPI = getWhatsAppAPI();
+
+setTimeout(exposeWhatsAppAPI, 500);
