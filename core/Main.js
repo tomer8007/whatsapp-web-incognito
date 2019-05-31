@@ -1,6 +1,4 @@
-// Main
-// Actual interception
-
+// global variables
 var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
 var safetyDelay = 0;
@@ -11,6 +9,10 @@ var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
 
+// ---------------------
+// Actual interception
+// ---------------------
+
 wsHook.before = function(originalData, url) 
 {
 	var payload = WACrypto.parseWebSocketPayload(originalData);
@@ -19,22 +21,18 @@ wsHook.before = function(originalData, url)
 	
 	return new Promise(function(resolve, reject)
 	{
-		if (!(data instanceof ArrayBuffer))
+		if (data instanceof ArrayBuffer)
 		{
-			if (WAdebugMode) console.log("[Out] Sent message with tag '" + tag +"':");
-			if (data != "" && WAdebugMode) console.log(data);
-			resolve(originalData);
-		}
-		else
-		{
+			// encrytped binary payload
 			WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
 			{
 				if (decrypted == null) resolve(originalData);
-				if (WAdebugMode) console.log("[Out] Sent binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
+				if (WAdebugMode) console.log("[Out] Sending binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
 				
 				var nodeParser = new NodeParser();
 				var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
 				if (WAdebugMode) console.log(node);
+
 				if (isInitializing)
 				{
 					isInitializing = false;
@@ -42,10 +40,20 @@ wsHook.before = function(originalData, url)
 					document.dispatchEvent(new CustomEvent('isInterceptionWorking', {detail: true}));
 				}
 				
-				var isAllowed = handler.handleSentNode(node, tag);
+				var isAllowed = NodeHandler.handleSentNode(node, tag);
 				if (isAllowed) resolve(originalData);
 				else resolve(null);
 			});
+		}
+		else
+		{
+			// textual payload
+			if (!(data instanceof ArrayBuffer))
+			{
+				if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag +"':");
+				if (data != "" && WAdebugMode) console.log(data);
+				resolve(originalData);
+			}
 		}
 	});
 }
@@ -56,25 +64,185 @@ wsHook.after = function(messageEvent, url)
 	var tag = payload.tag;
 	var data = payload.data;
 	
-    if (!(data instanceof ArrayBuffer))
+	if (data instanceof ArrayBuffer)
 	{
-    	if (WAdebugMode) console.log("[In] Received message with tag '" + tag +"':");
+		WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
+		{		 
+			if (WAdebugMode) console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
+			
+			var nodeParser = new NodeParser();
+			var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
+			if (WAdebugMode) console.log(node);
+			NodeHandler.handleReceivedNode(node);
+		});
+   }
+   else
+	{
+		if (WAdebugMode) console.log("[In] Received message with tag '" + tag +"':");
 		if (data != "" && WAdebugMode)
 			console.log(data);
 	}
-	else
-	{
-		 WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
-		 {		 
-			 if (WAdebugMode) console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
-			 
-			 var nodeParser = new NodeParser();
-			 var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-			 if (WAdebugMode) console.log(node);
-			 handler.handleReceivedNode(node);
-		 });
-	}
+	
 }
+
+var NodeHandler = {};
+
+(function() {
+	
+	var messages = [];
+	var isScrappingMessages = false;
+	var epoch = 8;
+
+	NodeHandler.handleSentNode = function(node, tag)
+	{
+		try
+		{
+			if (nodeReader.tag(node) == "action")
+			{
+				var children = node[2];
+				if (Array.isArray(children))
+				{
+					for (var n = children.length, o = 0; o < n; o++) 
+					{
+						var action = children[o][0];
+						var data = children[o][1];
+						var isException = exceptionsList.includes(data.jid+data.index);
+						var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) ||
+										(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
+										(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
+
+						if (shouldBlock)
+						{
+							console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+							switch (action)
+							{
+								case "read":
+									document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
+										detail: data["jid"]
+									}));
+									var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
+									wsHook.onMessage(messageEvent);
+								break;
+								case "presence":
+									var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
+									wsHook.onMessage(messageEvent);
+								break;
+							}
+
+							return false;
+						}
+						if (isException)
+						{
+							// exceptions are one-time operation
+							console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
+							exceptionsList.remove(exceptionsList.indexOf(data.jid+data.index));
+						}
+					}
+				}
+			}
+		}
+		catch (exception)
+		{
+			console.error("WhatsIncognito: Allowing WA packet due to exception:");
+			console.error(exception);
+			return true;
+		}
+		
+		return true;
+	}
+
+	NodeHandler.handleReceivedNode = function(e)
+	{
+		var t = [], o = nodeReader.children(e);
+		if ("response" === nodeReader.tag(e) && ("message" === nodeReader.attr("type", e) || "star" === nodeReader.attr("type", e) 
+			|| "search" === nodeReader.attr("type", e) || "media_message" === nodeReader.attr("type", e))) 
+		{
+			if (Array.isArray(o)) 
+			{
+				var a, i = o.length;
+				for (a = 0; a < i; a++) 
+				{
+					var d = handleMessage(o[a], "response");
+					d && t.push(d)
+				}
+			}
+			"search" === nodeReader.attr("type", e) && (t = 
+			{
+				eof: "true" === nodeReader.attr("last", e),
+				messages: t
+			})
+			
+			if (WAdebugMode) console.log("Got messages! (count: " +t.length+" )");
+			if (isScrappingMessages)
+			{
+				isScrappingMessages = false;
+				messages = t.concat(messages)
+				if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
+				//handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
+			}
+			else if (WAdebugMode)
+			{
+				console.log(JSON.parse(JSON.stringify(t)))
+			}
+		}
+	}
+
+	NodeHandler.scrapMessages = function(jid, index, count)
+	{
+		messages = [];
+		var startNode = ["query",{"type":"message","kind":"before","jid":jid,"count":count.toString(),"index":index,"owner":"true","epoch":(epoch++).toString()},null];
+		WACrypto.sendNode(startNode);
+		isScrappingMessages = true;
+	}
+
+	function handleMessage(e, t)
+	{
+		switch (nodeReader.tag(e)) 
+		{
+			case "message":
+				return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
+			case "groups_v2":
+			case "broadcast":
+			case "notification":
+			case "call_log":
+			case "security":
+				return e;
+			default:
+				return null;
+		}
+	}
+
+	var nodeReader = 
+	{
+		tag: function(e) { return e && e[0] },
+		attr: function(e, t) { return t && t[1] ? t[1][e] : void 0},
+		attrs: function(e) { return e[1]},
+		child: function s(e, t) {
+			var r = t[2];
+			if (Array.isArray(r))
+				for (var n = r.length, o = 0; o < n; o++) {
+					var s = r[o];
+					if (Array.isArray(s) && s[0] === e)
+						return s
+				}
+		},
+		children: function(e) 
+		{
+			return e && e[2]
+		},
+		dataStr: function(e) 
+		{
+			if (!e) return "";
+			var t = e[2];
+			return "string" == typeof t ? t : t instanceof ArrayBuffer ? new BinaryReader(t).readString(t.byteLength) : void 0
+		}
+	}
+
+})();
+
+// ---------------------
+// UI Event handlers
+// ---------------------
 
 document.addEventListener('onOptionsUpdate', function(e) 
 {
@@ -173,12 +341,12 @@ function putWarningAndStartCounting()
 		
 		// Temporarily removed due to react 16.0 changes
 		/*
-		var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
-		var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
-		if (scrollToBottom < messageVisiabillityDistance) 
-		{
-			FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
-		}
+			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
+			var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
+			if (scrollToBottom < messageVisiabillityDistance) 
+			{
+				FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
+			}
 		*/
 		
 		var blockedChat = findChatElementForJID(chat.id);
@@ -275,13 +443,13 @@ function markChatAsBlocked(chat)
 	{
 		// Temporarily removed due to react 16.0 changes
 		/*
-		var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
-			var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
-			if (scrollToBottom < messageVisiabillityDistance) 
-			{
-				FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
-			}
-			*/
+			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
+				var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
+				if (scrollToBottom < messageVisiabillityDistance) 
+				{
+					FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
+				}
+		*/
 	}
 	
 	blockedChats[chat.id] = chat;
@@ -393,8 +561,8 @@ document.addEventListener('sendReadConfirmation', function(e)
     var chat = getChatByJID(data.jid);
 	
 	exceptionsList.push(messageID);
-	//Store.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
-	chat.sendSeen().bind(this).then(function(e) 
+	//chat.sendSeen().bind(this).then(function(e) 
+	WhatsAppAPI.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
 	{
 		var chat = null;
 		if (data.jid in chats)
@@ -410,8 +578,10 @@ document.addEventListener('sendReadConfirmation', function(e)
 			delete blockedChats[data.jid];
 		}
 			
-		if (chat.markSeen != undefined && e.status == 200)
-			chat.markSeen(data.count);
+		if (e.status == 200)
+		{
+			chat.unreadCount -= data.unreadCount;
+		}
 		else if (e.status != 200)
 		{
 			
@@ -486,160 +656,6 @@ function fixCSSPositionIfNeeded(drop)
 	}
 }
 
-var handler = {};
-
-(function() {
-	
-var messages = [];
-var isScrappingMessages = false;
-var epoch = 8;
-
-handler.scrapMessages = function(jid, index, count)
-{
-	messages = [];
-	var startNode = ["query",{"type":"message","kind":"before","jid":jid,"count":count.toString(),"index":index,"owner":"true","epoch":(epoch++).toString()},null];
-	WACrypto.sendNode(startNode);
-	isScrappingMessages = true;
-}
-
-handler.handleSentNode = function(node, tag)
-{
-	try
-	{
-		if (nodeReader.tag(node) == "action")
-		{
-			var arr = node[2];
-			if (Array.isArray(arr))
-			{
-				for (var n = arr.length, o = 0; o < n; o++) 
-				{
-					var action = arr[o][0];
-					var data = arr[o][1];
-					var isException = exceptionsList.includes(data.jid+data.index);
-					var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) ||
-									 (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
-									 (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
-					if (shouldBlock)
-					{
-						console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-						switch (action)
-						{
-							case "read":
-								document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-									detail: data["jid"]
-								}));
-								var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
-								wsHook.onMessage(messageEvent);
-							break;
-							case "presence":
-								var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
-								wsHook.onMessage(messageEvent);
-							break;
-						}
-
-						return false;
-					}
-					if (isException)
-					{
-						// exceptions are one-time operation
-						console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
-						exceptionsList.remove(exceptionsList.indexOf(data.jid+data.index));
-					}
-				}
-			}
-		}
-	}
-	catch (exception)
-	{
-		console.error("WhatsIncognito: Allowing WA packet due to exception:");
-		console.error(exception);
-		return true;
-	}
-	
-	return true;
-}
-
-handler.handleReceivedNode = function(e)
-{
-	var t = [], o = nodeReader.children(e);
-	if ("response" === nodeReader.tag(e) && ("message" === nodeReader.attr("type", e) || "star" === nodeReader.attr("type", e) 
-	    || "search" === nodeReader.attr("type", e) || "media_message" === nodeReader.attr("type", e))) 
-	{
-		if (Array.isArray(o)) 
-		{
-			var a, i = o.length;
-			for (a = 0; a < i; a++) 
-			{
-				var d = handleMessage(o[a], "response");
-				d && t.push(d)
-			}
-		}
-		"search" === nodeReader.attr("type", e) && (t = 
-		{
-			eof: "true" === nodeReader.attr("last", e),
-			messages: t
-		})
-		
-		if (WAdebugMode) console.log("Got messages! (count: " +t.length+" )");
-		if (isScrappingMessages)
-		{
-			isScrappingMessages = false;
-			messages = t.concat(messages)
-			if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
-			//handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
-		}
-		else if (WAdebugMode)
-		{
-			console.log(JSON.parse(JSON.stringify(t)))
-		}
-	}
-}
-
-function handleMessage(e, t)
-{
-	switch (nodeReader.tag(e)) 
-	{
-		case "message":
-			return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
-		case "groups_v2":
-		case "broadcast":
-		case "notification":
-		case "call_log":
-		case "security":
-			return e;
-		default:
-			return null;
-	}
-}
-
-var nodeReader = 
-{
-	tag: function(e) { return e && e[0] },
-	attr: function(e, t) { return t && t[1] ? t[1][e] : void 0},
-	attrs: function(e) { return e[1]},
-	child: function s(e, t) {
-		var r = t[2];
-		if (Array.isArray(r))
-			for (var n = r.length, o = 0; o < n; o++) {
-				var s = r[o];
-				if (Array.isArray(s) && s[0] === e)
-					return s
-			}
-	},
-	children: function(e) 
-	{
-		return e && e[2]
-	},
-	dataStr: function(e) 
-	{
-		if (!e) return "";
-		var t = e[2];
-		return "string" == typeof t ? t : t instanceof ArrayBuffer ? new BinaryReader(t).readString(t.byteLength) : void 0
-	}
-}
-
-})();
-
 window.FindReact = function(dom) 
 {
     for (var key in dom)
@@ -682,3 +698,40 @@ function getCSSRule(ruleName)
   }
   return rules[ruleName];
 }
+
+function getWhatsAppAPI()
+{
+	// taken from https://gist.github.com/phpRajat/a6422922efae32914f4dbd1082f3f412
+
+	function getAllWebpackModules() {
+		return new Promise((resolve) => {
+			const id = _.uniqueId("fakeModule_");
+			window["webpackJsonp"](
+				[],
+				{
+					[id]: function(module, exports, __webpack_require__) {
+						resolve(__webpack_require__.c);
+					}
+				},
+				[id]
+			);
+		});
+	  }
+	  
+	  WAModules = getAllWebpackModules()._value;
+	  
+	  for (var key in WAModules) {
+		if (WAModules[key].exports) {
+		  if (WAModules[key].exports.default) {
+			if (WAModules[key].exports.default.Chat) {
+			  console.log(WAModules[key]);
+			  _module = WAModules[key];
+			}
+		  }
+		}
+	  }
+	  
+	  return _module.exports.default;
+}
+
+window.WhatsAppAPI = getWhatsAppAPI();
