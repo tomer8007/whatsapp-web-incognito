@@ -2,7 +2,7 @@ inject();
 
 async function inject() 
 {
-	await addScript('core/WebScoketInterception.js');
+	await addScriptInstantly('core/WebScoketInterception.js');
 	await addScript('core/BinaryReader.js');
 	await addScript('core/WAPacket.js');
 	await addScript('core/Crypto.js');
@@ -13,6 +13,21 @@ async function inject()
 	await addScript('core/MessageTypes.js');
 	await addScript('core/Main.js');
 }
+
+async function addScriptInstantly(scriptName)
+{
+	fetch(chrome.extension.getURL(scriptName))
+	.then((response) => 
+	{
+		response.body.getReader().read().then((text) => 
+		{
+			var s = document.createElement('script');
+			s.textContent = new TextDecoder("utf-8").decode(text.value);
+			(document.head||document.documentElement).appendChild(s);
+		});
+	});
+}
+
 
 function addScript(scriptName) {
 	return new Promise(function(resolve, reject) {
