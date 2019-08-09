@@ -645,39 +645,10 @@ document.addEventListener('onIncognitoOptionsClosed', function(e)
 	}
 });
 
-function fixCSSPositionIfNeeded(drop)
+document.addEventListener('onMainUIReady', function(e)
 {
-	if (drop.style.transform.includes("translateX") && drop.style.transform.includes("translateY"))
-	{
-		var matrix = drop.style.transform.replace(/[^0-9\-.,\s]/g, '').split(' ');
- 		drop.style.left = matrix[0] + "px"; 
- 		drop.style.top = matrix[1] + "px"; 
-		drop.style.transform = "";
-	}
-}
-
-function getCSSRule(ruleName)
-{
-  var rules = {}; 
-  var styleSheets = document.styleSheets;
-  var styleSheetRules = null;
-  for (var i=0;i<styleSheets.length;++i)
-  {
-	try 
-	{
-		styleSheetRules = styleSheets[i].cssRules;
-	}
-	catch (e)
-	{
-		// Assume Chrome 64+ doesn't let us access this CSS due to security policies or whatever, just ignore
-		continue;
-	}
-	if (styleSheetRules == null) continue;
-	for (var j=0;j<styleSheetRules.length;++j) 
-		rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
-  }
-  return rules[ruleName];
-}
+	exposeWhatsAppAPI();
+});
 
 // -------------------
 // Helper functions
@@ -749,5 +720,36 @@ function exposeWhatsAppAPI()
 	  window.WhatsAppAPI = _module.exports.default;
 }
 
+function fixCSSPositionIfNeeded(drop)
+{
+	if (drop.style.transform.includes("translateX") && drop.style.transform.includes("translateY"))
+	{
+		var matrix = drop.style.transform.replace(/[^0-9\-.,\s]/g, '').split(' ');
+ 		drop.style.left = matrix[0] + "px"; 
+ 		drop.style.top = matrix[1] + "px"; 
+		drop.style.transform = "";
+	}
+}
 
-setTimeout(exposeWhatsAppAPI, 500);
+function getCSSRule(ruleName)
+{
+  var rules = {}; 
+  var styleSheets = document.styleSheets;
+  var styleSheetRules = null;
+  for (var i=0;i<styleSheets.length;++i)
+  {
+	try 
+	{
+		styleSheetRules = styleSheets[i].cssRules;
+	}
+	catch (e)
+	{
+		// Assume Chrome 64+ doesn't let us access this CSS due to security policies or whatever, just ignore
+		continue;
+	}
+	if (styleSheetRules == null) continue;
+	for (var j=0;j<styleSheetRules.length;++j) 
+		rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
+  }
+  return rules[ruleName];
+}

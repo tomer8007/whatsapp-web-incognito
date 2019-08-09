@@ -50,6 +50,8 @@ else
 
 function onMainUIReady() 
 {
+	document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
+
 	setTimeout(checkInterception, 1000);
 	addIconIfNeeded();
 	
