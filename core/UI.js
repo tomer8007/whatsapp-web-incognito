@@ -93,7 +93,7 @@ function addIconIfNeeded()
 									</div> \
 								</div> \
 								Don't send read confirmations \
-								<div class='incognito-options-description'>Messages that their read confirmation was blocked will be marked in red instead of green.</div> \
+								<div class='incognito-options-description'>Messages that their read confirmation was blocked will be<p> marked in red instead of green.</div> \
 							</div> \
 							<div id='incognito-safety-delay-option-panel' style='margin-left: 25px !important; margin-top: 15px; font-size: 12px;'> \
 								Send after safety delay: <br> \
