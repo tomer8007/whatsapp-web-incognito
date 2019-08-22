@@ -562,7 +562,7 @@ document.addEventListener('sendReadConfirmation', function(e)
 	
 	exceptionsList.push(messageID);
 	//chat.sendSeen().bind(this).then(function(e) 
-	WhatsAppAPI.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).bind(this).then(function(e) 
+	WhatsAppAPI.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).then(function(e) 
 	{
 		var chat = null;
 		if (data.jid in chats)
