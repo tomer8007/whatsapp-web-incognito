@@ -676,48 +676,85 @@ window.FindReact = function(dom)
 
 function exposeWhatsAppAPI()
 {
-	// taken from https://gist.github.com/phpRajat/a6422922efae32914f4dbd1082f3f412
 
-	function getAllWebpackModules() {
-		return new Promise((resolve) => {
-			const id = _.uniqueId("fakeModule_");
-			window["webpackJsonp"](
-				[],
-				{
-					[id]: function(module, exports, __webpack_require__) {
-						resolve(__webpack_require__.c);
-					}
-				},
-				[id]
-			);
+	if (window._)
+	{
+		// taken from https://gist.github.com/phpRajat/a6422922efae32914f4dbd1082f3f412
+
+		function getAllWebpackModules() {
+			return new Promise((resolve) => {
+				const id = _.uniqueId("fakeModule_");
+				window["webpackJsonp"](
+					[],
+					{
+						[id]: function(module, exports, __webpack_require__) {
+							resolve(__webpack_require__.c);
+						}
+					},
+					[id]
+				);
 		});
 	  }
 	  
 	  WAModules = getAllWebpackModules()._value;
 	  
-	  // find the main API module
 	  for (var key in WAModules) {
 		if (WAModules[key].exports) {
+
+		  // find the Store module
 		  if (WAModules[key].exports.default) {
 			if (WAModules[key].exports.default.Chat) {
-			  _module = WAModules[key];
+				window.WhatsAppAPI = WAModules[key].exports.default;
 			}
 		  }
-		}
-	  }
 
-	  // find the web module
-	  for (var key in WAModules) {
-		if (WAModules[key].exports) {
+		// find the web module
 		  if (WAModules[key].exports.VERSION_STR) {
-			  var versionString = WAModules[key].exports.VERSION_STR;
-			  console.log("WhatsIncognito: WhatsApp Web verison is " + versionString);
-			  break;
-		  }
+			var versionString = WAModules[key].exports.VERSION_STR;
+			console.log("WhatsIncognito: WhatsApp Web verison is " + versionString);
+			break;
+		}
 		}
 	  }
-	  
-	  window.WhatsAppAPI = _module.exports.default;
+	}
+	else
+	{
+		// iterate the modules in a different way
+		// taken from https://github.com/danielcardeenas/sulla/blob/master/src/lib/wapi.js
+		
+		var foundModules = [];
+
+		function iterateModules(modules) {
+			for (let idx in modules) {
+				if ((typeof modules[idx] === "object") && (modules[idx] !== null)) {
+					let first = Object.values(modules[idx])[0];
+					if ((typeof first === "object") && (first.exports)) {
+						for (let idx2 in modules[idx]) {
+							let module = modules(idx2);
+							if (!module) continue;
+							foundModules.push(module);
+
+							// find the Store module
+							if (module.Chat && module.Msg)
+							{
+								window.WhatsAppAPI = module;
+							}
+
+							// find the web module
+							if (module.VERSION_STR)
+							{
+								console.log("WhatsIncognito: WhatsApp Web verison is " + module.VERSION_STR);
+							}
+						}
+					}
+				}
+			}
+		}
+
+		webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
+	}
+
+	
 }
 
 function fixCSSPositionIfNeeded(drop)
