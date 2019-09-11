@@ -106,8 +106,7 @@ var NodeHandler = {};
 					{
 						var action = children[o][0];
 						var data = children[o][1];
-						var isException = exceptionsList.includes(data.jid+data.index);
-						var shouldBlock = (readConfirmationsHookEnabled && action === "read" && !isException) ||
+						var shouldBlock = (readConfirmationsHookEnabled && action === "read") ||
 										(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
 										(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
 
@@ -117,12 +116,25 @@ var NodeHandler = {};
 							switch (action)
 							{
 								case "read":
-									document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-										detail: data["jid"]
-									}));
-									var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
-									wsHook.onMessage(messageEvent);
+									var isReadReceiptAllowed = exceptionsList.includes(data.jid+data.index);
+									if (isReadReceiptAllowed)
+									{
+										// this is the user trying to send out a read receipt.
+										return true;
+									}
+									else
+									{
+										// We do not allow sending this read receipt.
+										// invoke the callback and fake a failure response from server
+										document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
+											detail: data["jid"]
+										}));
+
+										var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
+										wsHook.onMessage(messageEvent);
+									}
 								break;
+								
 								case "presence":
 									var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
 									wsHook.onMessage(messageEvent);
@@ -131,11 +143,11 @@ var NodeHandler = {};
 
 							return false;
 						}
-						if (isException)
+						if (isReadReceiptAllowed)
 						{
 							// exceptions are one-time operation
 							console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
-							exceptionsList.remove(exceptionsList.indexOf(data.jid+data.index));
+							exceptionsList.splice(exceptionsList.indexOf(data.jid+data.index), 1);
 						}
 					}
 				}
@@ -145,7 +157,8 @@ var NodeHandler = {};
 		{
 			console.error("WhatsIncognito: Allowing WA packet due to exception:");
 			console.error(exception);
-			return true;
+			debugger;
+			return false;
 		}
 		
 		return true;
