@@ -157,7 +157,7 @@ var NodeHandler = {};
 		{
 			console.error("WhatsIncognito: Allowing WA packet due to exception:");
 			console.error(exception);
-			return false;
+			return true;
 		}
 		
 		return true;
