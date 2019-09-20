@@ -473,12 +473,16 @@ function findChatElementForJID(jid)
 	var blockedChat = null;
 	for (var i=0;i<chatsShown.length;i++)
 	{
-		var id = FindReact(chatsShown[i]).props.chat.id;
+		var reactElement = FindReact(chatsShown[i]);
+		if (reactElement.props.chat == undefined) continue;
+		
+		var id = reactElement.props.chat.id;
 		if (id == jid)
 		{
 			blockedChat = chatsShown[i];
 			break;
 		}
+
 	}
 	
 	return blockedChat;
