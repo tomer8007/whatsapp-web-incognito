@@ -571,14 +571,15 @@ document.addEventListener('sendReadConfirmation', function(e)
 {
 	var data = JSON.parse(e.detail);
 	var index = data.index != undefined ? data.index : data.lastMessageIndex;
-	var t = {id: index, fromMe: data.fromMe, participant: null};
+	var wid = getWidObjectFromCache(data.jid);
+	var t = {id: index, fromMe: data.fromMe, remote: wid};
 	var messageID = data.jid + index;
+
 
     var chat = getChatByJID(data.jid);
 	
 	exceptionsList.push(messageID);
-	//chat.sendSeen().bind(this).then(function(e) 
-	WhatsAppAPI.Wap.sendConversationSeen(data.jid, t, data.unreadCount, false).then(function(e) 
+	WhatsAppChatAPI.sendConversationSeen(wid, t, data.unreadCount, false).then(function(e) 
 	{
 		var chat = null;
 		if (data.jid in chats)
@@ -602,7 +603,9 @@ document.addEventListener('sendReadConfirmation', function(e)
 		{
 			
 		}
-    });
+    }).catch((reason) => {
+		console.error('Could not send read receipt (reason: '+reason+').');
+	});;
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
 	if (warningMessage != null && warningMessage.messageID == messageID)
@@ -692,85 +695,55 @@ window.FindReact = function(dom)
 
 function exposeWhatsAppAPI()
 {
+	// iterate the modules using webpackJsonp and find the functions we are looking for
+	// taken from https://github.com/danielcardeenas/sulla/blob/master/src/lib/wapi.js
+	
+	var foundModules = [];
 
-	if (window._)
-	{
-		// taken from https://gist.github.com/phpRajat/a6422922efae32914f4dbd1082f3f412
+	function iterateModules(modules) {
+		for (let idx in modules) {
+			if ((typeof modules[idx] === "object") && (modules[idx] !== null)) {
+				let first = Object.values(modules[idx])[0];
+				if ((typeof first === "object") && (first.exports)) {
+					for (let idx2 in modules[idx]) {
+						let module = modules(idx2);
+						if (!module) continue;
+						foundModules.push(module);
 
-		function getAllWebpackModules() {
-			return new Promise((resolve) => {
-				const id = _.uniqueId("fakeModule_");
-				window["webpackJsonp"](
-					[],
-					{
-						[id]: function(module, exports, __webpack_require__) {
-							resolve(__webpack_require__.c);
+						// find the Store module
+						if (module.Chat && module.Msg)
+						{
+							window.WhatsAppAPI = module;
 						}
-					},
-					[id]
-				);
-		});
-	  }
-	  
-	  WAModules = getAllWebpackModules()._value;
-	  
-	  for (var key in WAModules) {
-		if (WAModules[key].exports) {
 
-		  // find the Store module
-		  if (WAModules[key].exports.default) {
-			if (WAModules[key].exports.default.Chat) {
-				window.WhatsAppAPI = WAModules[key].exports.default;
-			}
-		  }
+						// find the module that lets us send read receipts
+						if (module.sendConversationSeen)
+						{
+							WhatsAppChatAPI = module;
+						}
 
-		// find the web module
-		  if (WAModules[key].exports.VERSION_STR) {
-			var versionString = WAModules[key].exports.VERSION_STR;
-			console.log("WhatsIncognito: WhatsApp Web verison is " + versionString);
-			break;
-		}
-		}
-	  }
-	}
-	else
-	{
-		// iterate the modules in a different way
-		// taken from https://github.com/danielcardeenas/sulla/blob/master/src/lib/wapi.js
-		
-		var foundModules = [];
-
-		function iterateModules(modules) {
-			for (let idx in modules) {
-				if ((typeof modules[idx] === "object") && (modules[idx] !== null)) {
-					let first = Object.values(modules[idx])[0];
-					if ((typeof first === "object") && (first.exports)) {
-						for (let idx2 in modules[idx]) {
-							let module = modules(idx2);
-							if (!module) continue;
-							foundModules.push(module);
-
-							// find the Store module
-							if (module.Chat && module.Msg)
-							{
-								window.WhatsAppAPI = module;
-							}
-
-							// find the web module
-							if (module.VERSION_STR)
-							{
-								console.log("WhatsIncognito: WhatsApp Web verison is " + module.VERSION_STR);
-							}
+						// find the web module
+						if (module.VERSION_STR)
+						{
+							console.log("WhatsIncognito: WhatsApp Web verison is " + module.VERSION_STR);
 						}
 					}
 				}
 			}
 		}
-
-		webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
 	}
 
+	webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
 	
+	if (window.WhatsAppChatAPI == undefined || window.WhatsAppAPI == undefined)
+	{
+		console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Sending read receipts might not work.");
+	}
+}
+
+function getWidObjectFromCache(jid)
+{
+	return WhatsAppAPI.Wid.cache[jid];
 }
 
 function fixCSSPositionIfNeeded(drop)
