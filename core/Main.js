@@ -112,7 +112,6 @@ var NodeHandler = {};
 
 						if (shouldBlock)
 						{
-							console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
 							switch (action)
 							{
 								case "read":
@@ -120,6 +119,7 @@ var NodeHandler = {};
 									if (isReadReceiptAllowed)
 									{
 										// this is the user trying to send out a read receipt.
+										console.log("WhatsIncongito: Allowing read receipt to " + data.jid)
 										return true;
 									}
 									else
@@ -140,6 +140,8 @@ var NodeHandler = {};
 									wsHook.onMessage(messageEvent);
 								break;
 							}
+
+							console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
 
 							return false;
 						}
@@ -571,22 +573,15 @@ document.addEventListener('sendReadConfirmation', function(e)
 {
 	var data = JSON.parse(e.detail);
 	var index = data.index != undefined ? data.index : data.lastMessageIndex;
-	var wid = getWidObjectFromCache(data.jid);
-	var t = {id: index, fromMe: data.fromMe, remote: wid};
 	var messageID = data.jid + index;
-
 
     var chat = getChatByJID(data.jid);
 	
 	exceptionsList.push(messageID);
-	WhatsAppChatAPI.sendConversationSeen(wid, t, data.unreadCount, false).then(function(e) 
+	WhatsAppSeenAPI.sendSeen(chat).then(function(e) 
 	{
-		var chat = null;
-		if (data.jid in chats)
-			chat = chats[data.jid];
 		if (data.jid in blinkingChats)
 		{
-			chat = blinkingChats[data.jid]["chat"]
 			clearInterval(blinkingChats[data.jid]["timerID"]);
 			delete blinkingChats[data.jid];
 		}
@@ -595,16 +590,9 @@ document.addEventListener('sendReadConfirmation', function(e)
 			delete blockedChats[data.jid];
 		}
 			
-		if (e.status == 200)
-		{
-			chat.unreadCount -= data.unreadCount;
-		}
-		else if (e.status != 200)
-		{
-			
-		}
-    }).catch((reason) => {
-		console.error('Could not send read receipt (reason: '+reason+').');
+    }).catch((error) => {
+		console.error('Could not send read receipt');
+		console.error(error.stack);
 	});;
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -653,14 +641,7 @@ document.addEventListener('onIncognitoOptionsClosed', function(e)
 		document.getElementById("incognito-radio-disable-safety-delay").checked = true;
 		document.getElementById("incognito-radio-enable-safety-delay").checked = false;
 		
-		var appElement = document.getElementsByClassName("app-wrapper-web")[0];
-		var toast = document.createElement("div");
-		toast.setAttribute("class", "f1UZe");
-		toast.style.transformOrigin = "left top";
-		toast.innerHTML = "<div class=\"hYvJ8\">The safety delay must be an integer number in range 1-30 !</div>";
-		appElement.insertBefore(toast, appElement.firstChild);
-		Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-		setTimeout(function() { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000); 
+		showToast("The safety delay must be an integer number in range 1-30 !");
 	}
 });
 
@@ -672,6 +653,18 @@ document.addEventListener('onMainUIReady', function(e)
 // -------------------
 // Helper functions
 // --------------------
+
+function showToast(message)
+{
+	var appElement = document.getElementsByClassName("app-wrapper-web")[0];
+	var toast = document.createElement("div");
+	toast.setAttribute("class", "f1UZe");
+	toast.style.transformOrigin = "left top";
+	toast.innerHTML = "<div class=\"hYvJ8\">" + message +"</div>";
+	appElement.insertBefore(toast, appElement.firstChild);
+	Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+	setTimeout(function() { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000); 
+}
 
 window.FindReact = function(dom) 
 {
@@ -713,13 +706,18 @@ function exposeWhatsAppAPI()
 						// find the Store module
 						if (module.Chat && module.Msg)
 						{
-							window.WhatsAppAPI = module;
+							window.WhatsAppAPI_1 = module;
+						}
+
+						if (module.sendConversationSeen && module.binSend)
+						{
+							window.WhatsAppAPI_2 = module;
 						}
 
 						// find the module that lets us send read receipts
-						if (module.sendConversationSeen)
+						if (module.sendSeen)
 						{
-							WhatsAppChatAPI = module;
+							window.WhatsAppSeenAPI = module;
 						}
 
 						// find the web module
@@ -735,15 +733,10 @@ function exposeWhatsAppAPI()
 
 	webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
 	
-	if (window.WhatsAppChatAPI == undefined || window.WhatsAppAPI == undefined)
+	if (window.WhatsAppSeenAPI == undefined)
 	{
 		console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Sending read receipts might not work.");
 	}
-}
-
-function getWidObjectFromCache(jid)
-{
-	return WhatsAppAPI.Wid.cache[jid];
 }
 
 function fixCSSPositionIfNeeded(drop)
