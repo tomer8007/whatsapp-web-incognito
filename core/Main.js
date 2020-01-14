@@ -52,9 +52,6 @@ wsHook.before = function(originalData, url)
 					if (isAllowed) resolve(manipulatedData);
 					else resolve(null);
 				});
-
-				//if (isAllowed) resolve(originalData);
-				//else resolve(null);
 			});
 		}
 		else
