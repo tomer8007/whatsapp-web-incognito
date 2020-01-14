@@ -182,7 +182,7 @@ function NodePacker() {
                     e.pushByte(n)),
                     e.pushBytes(t)
                 } else {
-                    if (!_.isArray(t))
+                    if (!Array.isArray(t))
                         throw new Error("invalid children");
                     n = t.length,
                     this.writeListStart(e, n);

@@ -27,12 +27,10 @@ wsHook.before = function(originalData, url)
 			WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
 			{
 				if (decrypted == null) resolve(originalData);
-				if (WAdebugMode) console.log("[Out] Sending binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
 				
 				var nodeParser = new NodeParser();
 				var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-				if (WAdebugMode) console.log(node);
-
+				
 				if (isInitializing)
 				{
 					isInitializing = false;
@@ -40,9 +38,23 @@ wsHook.before = function(originalData, url)
 					document.dispatchEvent(new CustomEvent('isInterceptionWorking', {detail: true}));
 				}
 				
-				var isAllowed = NodeHandler.handleSentNode(node, tag);
-				if (isAllowed) resolve(originalData);
-				else resolve(null);
+				var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
+				var manipulatedNode = NodeHandler.manipulateSentNode(node, tag);
+				WACrypto.packNodeForSending(manipulatedNode, tag).then(function(packet)
+				{
+					if (WAdebugMode)
+					{
+						console.log("[Out] Sending binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
+						console.log(node);
+					}
+
+					var manipulatedData = packet.serialize();
+					if (isAllowed) resolve(manipulatedData);
+					else resolve(null);
+				});
+
+				//if (isAllowed) resolve(originalData);
+				//else resolve(null);
 			});
 		}
 		else
@@ -67,12 +79,16 @@ wsHook.after = function(messageEvent, url)
 	if (data instanceof ArrayBuffer)
 	{
 		WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
-		{		 
-			if (WAdebugMode) console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
-			
+		{
 			var nodeParser = new NodeParser();
 			var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-			if (WAdebugMode) console.log(node);
+			
+			if (WAdebugMode)
+			{
+				console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
+				console.log(node);
+			}
+
 			NodeHandler.handleReceivedNode(node);
 		});
    }
@@ -93,65 +109,64 @@ var NodeHandler = {};
 	var isScrappingMessages = false;
 	var epoch = 8;
 
-	NodeHandler.handleSentNode = function(node, tag)
+	NodeHandler.isSentNodeAllowed = function(node, tag)
 	{
 		try
 		{
-			if (nodeReader.tag(node) == "action")
+			if (nodeReader.tag(node) != "action") return true;
+			if (!Array.isArray(nodeReader.children(node))) return true;
+
+			var children = nodeReader.children(node);
+			for (var i = 0; i < children.length; i++) 
 			{
-				var children = node[2];
-				if (Array.isArray(children))
+				var child = children[i];
+
+				var action = child[0];
+				var data = child[1];
+				var shouldBlock = (readConfirmationsHookEnabled && action === "read") ||
+								(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
+								(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
+
+				if (shouldBlock)
 				{
-					for (var i = 0; i < children.length; i++) 
+					switch (action)
 					{
-						var action = children[i][0];
-						var data = children[i][1];
-						var shouldBlock = (readConfirmationsHookEnabled && action === "read") ||
-										(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
-										(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
-
-						if (shouldBlock)
-						{
-							switch (action)
+						case "read":
+							var isReadReceiptAllowed = exceptionsList.includes(data.jid+data.index);
+							if (isReadReceiptAllowed)
 							{
-								case "read":
-									var isReadReceiptAllowed = exceptionsList.includes(data.jid+data.index);
-									if (isReadReceiptAllowed)
-									{
-										// this is the user trying to send out a read receipt.
-										console.log("WhatsIncongito: Allowing read receipt to " + data.jid)
-										return true;
-									}
-									else
-									{
-										// We do not allow sending this read receipt.
-										// invoke the callback and fake a failure response from server
-										document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-											detail: data["jid"]
-										}));
-
-										var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
-										wsHook.onMessage(messageEvent);
-									}
-								break;
-								
-								case "presence":
-									var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
-									wsHook.onMessage(messageEvent);
-								break;
+								// this is the user trying to send out a read receipt.
+								console.log("WhatsIncongito: Allowing read receipt to " + data.jid)
+								return true;
 							}
+							else
+							{
+								// We do not allow sending this read receipt.
+								// invoke the callback and fake a failure response from server
+								document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
+									detail: data["jid"]
+								}));
 
-							console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-
-							return false;
-						}
-						if (isReadReceiptAllowed)
-						{
-							// exceptions are one-time operation
-							console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
-							exceptionsList.splice(exceptionsList.indexOf(data.jid+data.index), 1);
-						}
+								var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
+								wsHook.onMessage(messageEvent);
+							}
+							break;
+						
+						case "presence":
+							var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
+							wsHook.onMessage(messageEvent);
+							break;
 					}
+
+					console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+
+					return false;
+				}
+				if (isReadReceiptAllowed)
+				{
+					// exceptions are one-time operation
+					console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
+					exceptionsList.splice(exceptionsList.indexOf(data.jid+data.index), 1);
 				}
 			}
 		}
@@ -163,6 +178,48 @@ var NodeHandler = {};
 		}
 		
 		return true;
+	}
+
+	NodeHandler.manipulateSentNode = function(node, tag)
+	{
+		try
+		{
+			if (nodeReader.tag(node) != "action") return node;
+			if (!Array.isArray(nodeReader.children(node))) return node;
+
+			var children = nodeReader.children(node);
+			for (var i = 0; i < children.length; i++) 
+			{
+				var child = children[i];
+
+				var action = child[0];
+				var data = child[1];
+				
+				if (action == "message")
+				{
+					var messageBuffer = child[2];
+					var message = messageTypes.WebMessageInfo.parse(nodeReader.children(child));
+
+					// do the magic
+					// 		...
+					var putBreakpointHere = 1;
+
+					// re-assmble everything
+					messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
+					child[2] = messageBuffer; children[i] = child; node[2] = children;
+
+					return node;
+				}
+			}
+		}
+		catch (exception)
+		{
+			console.error("WhatsIncognito: Allowing WA packet due to exception:");
+			console.error(exception);
+			return node;
+		}
+		
+		return node;
 	}
 
 	NodeHandler.handleReceivedNode = function(e)

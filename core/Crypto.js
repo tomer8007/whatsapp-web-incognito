@@ -141,7 +141,7 @@ WACrypto.sendNode = function(node)
 	});
 }
 
-WACrypto.packNodeForSending = function(node)
+WACrypto.packNodeForSending = function(node, tag=undefined)
 {
 	// convert to binary protocol
 	var binaryWriter = new BinaryWriter();
@@ -152,7 +152,7 @@ WACrypto.packNodeForSending = function(node)
 	// encrypt
 	return WACrypto.encryptWithWebCrypto(nodeBuffer).then(function(data)
 	{
-		return new WAPacket({"data": data, "binaryOpts": {}});
+		return new WAPacket({"tag": tag, "data": data, "binaryOpts": {}});
 	});
 }
 
