@@ -129,11 +129,15 @@ var NodeHandler = {};
 					switch (action)
 					{
 						case "read":
-							var isReadReceiptAllowed = exceptionsList.includes(data.jid+data.index);
+							var isReadReceiptAllowed = exceptionsList.includes(data.jid);
 							if (isReadReceiptAllowed)
 							{
 								// this is the user trying to send out a read receipt.
-								console.log("WhatsIncongito: Allowing read receipt to " + data.jid)
+								console.log("WhatsIncongito: Allowing read receipt to " + data.jid + " at index " + data.index);
+
+								// exceptions are one-time operation, so remove it from the list
+								exceptionsList = exceptionsList.filter(i => i !== data.jid)
+
 								return true;
 							}
 							else
@@ -158,12 +162,6 @@ var NodeHandler = {};
 					console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
 
 					return false;
-				}
-				if (isReadReceiptAllowed)
-				{
-					// exceptions are one-time operation
-					console.log("WhatsIncognito: --- Allowing " + action.toUpperCase() + " action ---");
-					exceptionsList.splice(exceptionsList.indexOf(data.jid+data.index), 1);
 				}
 			}
 		}
@@ -197,10 +195,8 @@ var NodeHandler = {};
 					var messageBuffer = child[2];
 					var message = messageTypes.WebMessageInfo.parse(nodeReader.children(child));
 
-					// do the magic
-					// 		...
-					var putBreakpointHere = 1;
-
+					message = this.handleSentMessage(message);
+					
 					// re-assmble everything
 					messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
 					child[2] = messageBuffer; children[i] = child; node[2] = children;
@@ -219,6 +215,25 @@ var NodeHandler = {};
 		return node;
 	}
 
+	NodeHandler.handleSentMessage = function(message)
+	{
+		if (message.key && message.key.remoteJid && isChatBlocked(message.key.remoteJid))
+		{
+			// If the user replyed to a message from this JID,
+			// It probably means we can send read receipts for it.
+
+			var chat = getChatByJID(message.key.remoteJid);
+			var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
+			setTimeout(function() {document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)})); }, 600);
+		}
+
+		// do message manipulation if needed
+		// 		...
+		var putBreakpointHere = 1;
+
+		return message;
+	}
+
 	NodeHandler.handleReceivedNode = function(e)
 	{
 		var messages = [], o = nodeReader.children(e);
@@ -230,7 +245,7 @@ var NodeHandler = {};
 				var a, i = o.length;
 				for (a = 0; a < i; a++) 
 				{
-					var message = handleMessage(o[a], "response");
+					var message = parseMessage(o[a], "response");
 					message && messages.push(message);
 				}
 			}
@@ -263,7 +278,7 @@ var NodeHandler = {};
 		isScrappingMessages = true;
 	}
 
-	function handleMessage(e, t)
+	function parseMessage(e, t)
 	{
 		switch (nodeReader.tag(e)) 
 		{
@@ -365,6 +380,23 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 	{
 		markChatAsBlocked(chat);
 	}
+
+	if (!(chat.id in blockedChats)) 
+	{
+		// Temporarily removed due to react 16.0 changes
+		/*
+			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
+				var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
+				if (scrollToBottom < messageVisiabillityDistance) 
+				{
+					FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
+				}
+		*/
+
+		// window.WhatsAppAPI.UI.scrollChatToBottom(chat);
+	}
+
+	blockedChats[chat.id] = chat;
 	
 });
 
@@ -452,16 +484,6 @@ function markChatAsPendingReciptsSending()
 			
 			markChatAsBlocked(chat);
 		};
-
-		// Temporarily removed due to react 16.0 changes
-		/*
-			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
-			var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
-			if (scrollToBottom < messageVisiabillityDistance) 
-			{
-				FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
-			}
-		*/
 	}
 }
 
@@ -479,7 +501,7 @@ function markChatAsBlocked(chat)
 	var messageID = chat.id + chat.lastReceivedKey.id;
 
 	//
-	// Now put a "receipts blocked" warning in the chat panel
+	// Create a "receipts blocked" warning if needed
 	//
 	
 	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -501,9 +523,24 @@ function markChatAsBlocked(chat)
 		warningMessage.remove();
 	}
 
+	var sendButton = warningMessage.lastChild;
+	sendButton.setAttribute('class', 'incognito-send-button');
+	sendButton.innerHTML = "Mark as read";
+	sendButton.onclick = function()
+	{
+		if (chat.unreadCount > 0)
+		{
+			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
+			document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
+		}
+	};
+
 	warningMessage.messageID = messageID;
 
-	// put that warning under the unread counter, or at the end of the chat panel
+	//
+	// Put that warning under in the chat panel, under the unread counter or at the bottom
+	//
+
 	var parent = document.getElementsByClassName("_1ays2")[0];
 	var unreadMarker = parent.getElementsByClassName("_1lo-H").length > 0 ? parent.getElementsByClassName("_1lo-H")[0] : null;
 	if (unreadMarker != null)
@@ -519,33 +556,6 @@ function markChatAsBlocked(chat)
 	if (blockedChats[chat.id] == undefined || warningWasEmpty)
 		Velocity(warningMessage, {  scaleY: [1,0], opacity: [1, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 	warningMessage.firstChild.textContent = "Read receipts were blocked.";
-
-	var cancelButton = warningMessage.lastChild;
-	cancelButton.setAttribute('class', 'incognito-send-button');
-	cancelButton.innerHTML = "Mark as read";
-	cancelButton.onclick = function()
-	{
-		if (chat.unreadCount > 0)
-		{
-			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
-			document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
-		}
-	};
-	
-	if (!(chat.id in blockedChats)) 
-	{
-		// Temporarily removed due to react 16.0 changes
-		/*
-			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
-				var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
-				if (scrollToBottom < messageVisiabillityDistance) 
-				{
-					FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
-				}
-		*/
-	}
-	
-	blockedChats[chat.id] = chat;
 }
 
 function findChatElementForJID(jid)
@@ -558,7 +568,18 @@ function findChatElementForJID(jid)
 		if (reactElement.props.chat == undefined) continue;
 		
 		var id = reactElement.props.chat.id;
-		if (id == jid)
+
+		var matches = false;
+		if (typeof(jid) == "object" && id == jid)
+		{
+			matches = true;
+		}
+		else if (typeof(jid) == "string" && id.user == jid.split("@")[0])
+		{
+			matches = true;
+		}
+
+		if (matches)
 		{
 			blockedChat = chatsShown[i];
 			break;
@@ -593,6 +614,19 @@ function getCurrentChat()
 	}
     
     return chat;
+}
+
+function isChatBlocked(jid)
+{
+	var user = jid.split("@")[0]
+
+	for (jid in blockedChats)
+	{
+		if (jid.split("@")[0] == user)
+			return true;
+	}
+
+	return false;
 }
 
 function getChatByJID(jid)
@@ -651,13 +685,13 @@ document.addEventListener('onDropdownOpened', function(e)
 document.addEventListener('sendReadConfirmation', function(e)
 {
 	var data = JSON.parse(e.detail);
-	var index = data.index != undefined ? data.index : data.lastMessageIndex;
-	var messageID = data.jid + index;
+	var messageIndex = data.index != undefined ? data.index : data.lastMessageIndex;
+	var messageID = data.jid + messageIndex;
 
-    var chat = getChatByJID(data.jid);
-	
-	exceptionsList.push(messageID);
-	WhatsAppSeenAPI.sendSeen(chat).then(function(e) 
+	var chat = getChatByJID(data.jid);
+		
+	exceptionsList.push(data.jid);
+	WhatsAppAPI.Seen.sendSeen(chat).then(function(e) 
 	{
 		if (data.jid in blinkingChats)
 		{
@@ -774,6 +808,8 @@ function exposeWhatsAppAPI()
 	
 	var foundModules = [];
 
+	window.WhatsAppAPI = {}
+
 	function iterateModules(modules) {
 		for (let idx in modules) {
 			if ((typeof modules[idx] === "object") && (modules[idx] !== null)) {
@@ -787,18 +823,19 @@ function exposeWhatsAppAPI()
 						// find the Store module
 						if (module.Chat && module.Msg)
 						{
-							window.WhatsAppAPI_1 = module;
+							window.WhatsAppAPI.Store = module;
 						}
-
-						if (module.sendConversationSeen && module.binSend)
+						
+						// find a UI module that lets us how toasts, etc.
+						if (module.default && module.default.scrollChatToBottom)
 						{
-							window.WhatsAppAPI_2 = module;
+							window.WhatsAppAPI.UI = module.default;
 						}
 
 						// find the module that lets us send read receipts
 						if (module.sendSeen)
 						{
-							window.WhatsAppSeenAPI = module;
+							window.WhatsAppAPI.Seen = module;
 						}
 
 						// find the web module
@@ -814,7 +851,7 @@ function exposeWhatsAppAPI()
 
 	webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
 	
-	if (window.WhatsAppSeenAPI == undefined)
+	if (window.WhatsAppAPI.Seen == undefined)
 	{
 		console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Sending read receipts might not work.");
 	}
