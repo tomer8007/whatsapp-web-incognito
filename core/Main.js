@@ -177,6 +177,7 @@ var NodeHandler = {};
 
 	NodeHandler.manipulateSentNode = function(node, tag)
 	{
+
 		try
 		{
 			if (nodeReader.tag(node) != "action") return node;
@@ -193,13 +194,20 @@ var NodeHandler = {};
 				if (action == "message")
 				{
 					var messageBuffer = child[2];
-					var message = messageTypes.WebMessageInfo.parse(nodeReader.children(child));
+					var message = parseMessage(child);
 
-					message = this.handleSentMessage(message);
-					
-					// re-assmble everything
-					messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-					child[2] = messageBuffer; children[i] = child; node[2] = children;
+					if (message != null)
+					{
+						message = this.handleSentMessage(message);
+						
+						// TODO: following lines are commented out because apperently the parsing above is not complete,
+						// so the message is not always restored identically
+
+						// re-assmble everything
+						// messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
+						// child[2] = messageBuffer; children[i] = child; node[2] = children;
+					}
+
 
 					return node;
 				}
@@ -278,7 +286,7 @@ var NodeHandler = {};
 		isScrappingMessages = true;
 	}
 
-	function parseMessage(e, t)
+	function parseMessage(e)
 	{
 		switch (nodeReader.tag(e)) 
 		{
@@ -289,7 +297,7 @@ var NodeHandler = {};
 			case "notification":
 			case "call_log":
 			case "security":
-				return e;
+				return null;
 			default:
 				return null;
 		}
