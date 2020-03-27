@@ -25,6 +25,8 @@ async function injectOtherScripts()
 	await injectScript('core/NodePacker.js');
 	await injectScript('core/MessageParser.js');
 	await injectScript('core/MessageTypes.js');
+	await injectScript('core/UIClassNames.js');
+	await injectScript('lib/moduleraid.js');
 	await injectScript('core/Main.js');
 }
 

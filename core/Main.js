@@ -346,13 +346,13 @@ document.addEventListener('onOptionsUpdate', function(e)
 	var safetyDelayPanelExpectedHeight = 44; // be careful with this
 	if (readConfirmationsHookEnabled) 
 	{
-		getCSSRule('html[dir] .P6z4j').style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
+		getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 	}
 	else 
 	{
-		getCSSRule('html[dir] .P6z4j').style.backgroundColor = 'rgba(9, 210, 97, 1)';
+		getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 1)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
 		var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -365,10 +365,10 @@ document.addEventListener('onOptionsUpdate', function(e)
 	
 	if ('readConfirmationsHook' in options)
 	{
-		var unreadCounters = document.getElementsByClassName("P6z4j");
+		var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
 		for (var i=0;i<unreadCounters.length;i++)
 		{
-			unreadCounters[i].className = "P6z4j";
+			unreadCounters[i].className =  UIClassNames.UNREAD_COUNTER_CLASS;
 		}
 	}
 });
@@ -377,7 +377,6 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 {
 	var blockedJid = e.detail;
 	
-	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
 	var chat = getCurrentChat();
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
@@ -412,14 +411,13 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 
 document.addEventListener('onPaneChatOpened', function(e)
 {
-	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
 	var chat = getCurrentChat();
 	chats[chat.id] = chat;
 });
 
 function markChatAsPendingReciptsSending()
 {
-	var chatWindow = document.getElementsByClassName("_1_q7u")[0];
+	var chatWindow = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
 	var chat = getCurrentChat();
 	var messageID = chat.id + chat.lastReceivedKey.id;
 	var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -445,10 +443,10 @@ function markChatAsPendingReciptsSending()
 		warningMessage.appendChild(cancelButton);
 		
 		// insert it under the unread counter, or at the end of the chat panel
-		var parent = document.getElementsByClassName("_1ays2")[0];
+		var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
 		if (previousMessage != null) 
 			parent.removeChild(previousMessage);
-		var unreadMarker = parent.getElementsByClassName("_1lo-H").length > 0 ? parent.getElementsByClassName("_1lo-H")[0] : null;
+		var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
 		if (unreadMarker != null)
 			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
@@ -462,7 +460,7 @@ function markChatAsPendingReciptsSending()
 		// make the unread counter blink
 		var blockedChat = findChatElementForJID(chat.id);
 		if (blockedChat != null)
-			blockedChat.querySelector("html[dir] .P6z4j").className += " blinking";
+			blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className += " blinking";
 		
     	var id = setInterval(function()
 		{ 
@@ -479,7 +477,7 @@ function markChatAsPendingReciptsSending()
 				var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
 				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
 				
-				blockedChat.querySelector("html[dir] .P6z4j").className = "P6z4j";
+				blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className =  UIClassNames.UNREAD_COUNTER_CLASS;
        		}
 		}, 1000);
 		
@@ -504,7 +502,7 @@ function markChatAsBlocked(chat)
 	var blockedChat = findChatElementForJID(chat.id);
 	if (blockedChat != null)
 	{
-		blockedChat.querySelector("html[dir] .P6z4j").className = "P6z4j incognito";
+		blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className = UIClassNames.UNREAD_COUNTER_CLASS + " incognito";
 	}
 	var messageID = chat.id + chat.lastReceivedKey.id;
 
@@ -549,13 +547,13 @@ function markChatAsBlocked(chat)
 	// Put that warning under in the chat panel, under the unread counter or at the bottom
 	//
 
-	var parent = document.getElementsByClassName("_1ays2")[0];
-	var unreadMarker = parent.getElementsByClassName("_1lo-H").length > 0 ? parent.getElementsByClassName("_1lo-H")[0] : null;
+	var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+	var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
 	if (unreadMarker != null)
 		unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 	else
 	{
-		warningMessage.setAttribute('class', 'incognito-message vW7d1');
+		warningMessage.setAttribute('class', 'incognito-message');
 		warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
 		parent.appendChild(warningMessage);
 	}
@@ -568,7 +566,7 @@ function markChatAsBlocked(chat)
 
 function findChatElementForJID(jid)
 {
-    var chatsShown = document.getElementsByClassName("X7YrQ");
+    var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
 	var blockedChat = null;
 	for (var i=0;i<chatsShown.length;i++)
 	{
@@ -600,18 +598,18 @@ function findChatElementForJID(jid)
 
 function getCurrentChat() 
 {
-	var elements = document.getElementsByClassName("_1_q7u");
+	var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
     if (elements.length == 0) return null;
 
     var reactResult = FindReact(elements[0]);
 	var chat = null;
 	if (Array.isArray(reactResult))
 	{
-		for (var i = 0; i < reactArray.length; i++)
+		for (var i = 0; i < reactResult.length; i++)
 		{
-			if (reactArray[i].props.chat !== undefined)
+			if (reactResult[i].props.chat !== undefined)
 			{
-				chat = reactArray[i].props.chat;
+				chat = reactResult[i].props.chat;
 				break;
 			}
 		}
@@ -654,8 +652,8 @@ function getChatByJID(jid)
 
 document.addEventListener('onDropdownOpened', function(e) 
 {
-	var menuItems = document.getElementsByClassName("_3z3lc")[0].getElementsByClassName("_3cfBY ");
-	var reactMenuItems = FindReact(document.getElementsByClassName("_2hHc6")[0])[0].props.children;
+	var menuItems = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0].getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
+	var reactMenuItems = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0])[0].props.children;
 	var markAsReadButton = null;
 	var props = null;
 	for (var i=0;i<reactMenuItems.length;i++)
@@ -724,7 +722,6 @@ document.addEventListener('sendReadConfirmation', function(e)
 		Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0} , { defaultDuration: 300, easing: [.1, .82, .25, 1] });
 	}
 	
-	
 	//var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
 	//WACrypto.sendNode(node);
 });
@@ -789,6 +786,8 @@ function showToast(message)
 	setTimeout(function() { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000); 
 }
 
+// Based on https://stackoverflow.com/a/39165137/1806873
+// TODO: Update the function to support Reat 16+ in a good way
 window.FindReact = function(dom) 
 {
     for (var key in dom)
@@ -810,54 +809,14 @@ window.FindReact = function(dom)
 };
 
 function exposeWhatsAppAPI()
-{
-	// iterate the modules using webpackJsonp and find the functions we are looking for
-	// taken from https://github.com/danielcardeenas/sulla/blob/master/src/lib/wapi.js
-	
+{	
 	var foundModules = [];
 
 	window.WhatsAppAPI = {}
 
-	function iterateModules(modules) {
-		for (let idx in modules) {
-			if ((typeof modules[idx] === "object") && (modules[idx] !== null)) {
-				let first = Object.values(modules[idx])[0];
-				if ((typeof first === "object") && (first.exports)) {
-					for (let idx2 in modules[idx]) {
-						let module = modules(idx2);
-						if (!module) continue;
-						foundModules.push(module);
-
-						// find the Store module
-						if (module.Chat && module.Msg)
-						{
-							window.WhatsAppAPI.Store = module;
-						}
-						
-						// find a UI module that lets us how toasts, etc.
-						if (module.default && module.default.scrollChatToBottom)
-						{
-							window.WhatsAppAPI.UI = module.default;
-						}
-
-						// find the module that lets us send read receipts
-						if (module.sendSeen)
-						{
-							window.WhatsAppAPI.Seen = module;
-						}
-
-						// find the web module
-						if (module.VERSION_STR)
-						{
-							console.log("WhatsIncognito: WhatsApp Web verison is " + module.VERSION_STR);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	webpackJsonp([], { 'parasite': (x, y, z) => iterateModules(z) }, ['parasite']);
+	var moduleFinder = moduleRaid();
+	window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
+	window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 	
 	if (window.WhatsAppAPI.Seen == undefined)
 	{
