@@ -1,6 +1,6 @@
 # Invisible mode for WhatsApp Web
 This is the source code of a chrome extension that disables read receipts and presence updates on WhatsApp Web.
-You can find the original extension in [Chrome Web Store](https://chrome.google.com/webstore/detail/waincognito/alhmbbnlcggfcjjfihglopfopcbigmil) [Updated link to new item].
+You can find the original extension in [Chrome Web Store](https://chrome.google.com/webstore/detail/waincognito/alhmbbnlcggfcjjfihglopfopcbigmil).
 
 <img src="https://raw.githubusercontent.com/tomer8007/whatsapp-web-incognito/master/promotion-transperent.png" >
 
