@@ -810,8 +810,6 @@ window.FindReact = function(dom)
 
 function exposeWhatsAppAPI()
 {	
-	var foundModules = [];
-
 	window.WhatsAppAPI = {}
 
 	var moduleFinder = moduleRaid();
