@@ -22,3 +22,6 @@ Other files inside the `core` folder deal with the infrastructure that makes the
 
 ## Internals
 If you want to see what kind of messages WhatsApp is sending and receiving over WebSocket in real-time, you can type `WADebugMode = true` in the javascript console. Incoming and outgoing payloads (after decryption) will be printed out.
+
+## Privacy
+No data is ever transmitted to anywhere. Privacy policy [here](https://github.com/tomer8007/whatsapp-web-incognito/wiki/Chrome-Extension-Privacy-Policy).
