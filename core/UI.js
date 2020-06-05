@@ -1,4 +1,5 @@
 ﻿var isInterceptionWorking = false;
+var isUIReady = false;
 
 document.addEventListener('isInterceptionWorking', function(e) {
    isInterceptionWorking = e.detail;
@@ -11,9 +12,6 @@ if (document.querySelector(".app-wrapper > .app") != undefined)
 else
 {
 	var appElem = document.getElementById("app");
-	var DROPDOWN_CLASS = "_2imug";
-	var OUTER_DROPDOWN_CLASS = "_1RQfk";
-	var CHAT_PANEL_CLASS = "_1GX8_";
 	
 	if (appElem != undefined)
 	{
@@ -26,13 +24,14 @@ else
 				for (var j = 0; j < addedNodes.length; j++)
 				{
 					var addedNode = addedNodes[j];
-					if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains("app"))
+					if (document.getElementById("startup") == null && !isUIReady)
 					{
+						isUIReady = true;
 						setTimeout(function () { onMainUIReady(); }, 100);
 						found = true;
 						break;
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(OUTER_DROPDOWN_CLASS))
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
 					{
 						setTimeout(function() 
 						{
@@ -40,7 +39,7 @@ else
 							
 						},200);
 					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(CHAT_PANEL_CLASS))
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
 					{
 						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
 					}
@@ -64,25 +63,15 @@ function onMainUIReady()
     setTimeout(addIconIfNeeded, 1000);
 }
 
-var MENU_ITEM_CLASS = "rAUz7";
-var CHEKBOX_PADDIG_CLASS = "_1YO_g";
-var CHECKBOX_CONTAINER_CLASS = "";
-var RECTANGLE_CLASS = "_3I_df";
-var GREEN_BACKGROUND_CLASS = "_1VD7W";
-var CHECKBOX_CHECKED_CLASS = "me9CP "  + GREEN_BACKGROUND_CLASS;
-var CHECKBOX_UNCHECKED_CLASS = "me9CP";
-var TICKED_CLASS = "_1KfC8 _1s8CA";
-var UNTICKED_CLASS = "_1KfC8 _2uQfJ";
-
 function addIconIfNeeded() 
 {
 	if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
 	
-	var firstMenuItem = document.getElementsByClassName(MENU_ITEM_CLASS)[0];
+	var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
 	if (firstMenuItem != undefined)
 	{
 		var menuItemElem = document.createElement("div");
-		menuItemElem.setAttribute("class", MENU_ITEM_CLASS + " menu-item-incognito");
+		menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 		var iconElem = document.createElement("button");
 		iconElem.setAttribute("class", "icon icon-incognito");
 		iconElem.setAttribute("title", "Incognito options");
@@ -103,9 +92,9 @@ function addIconIfNeeded()
 																					\
 						<div class='incognito-options-item'> \
 							<div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
-								<div class='checkbox-container " + CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important;'> \
-									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + RECTANGLE_CLASS +  " " + CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + TICKED_CLASS + "'> </div>" :
-									 "unchecked " + RECTANGLE_CLASS + " " + CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UNTICKED_CLASS + "'> </div>") + "\
+								<div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important;'> \
+									<div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.RECTANGLE_CLASS +  " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+									 "unchecked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
 									</div> \
 								</div> \
 								Don't send read confirmations \
@@ -134,9 +123,9 @@ function addIconIfNeeded()
 								\
 								\
 						<div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
-							<div class='checkbox-container " + CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
-									<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + RECTANGLE_CLASS + " "  + CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + TICKED_CLASS + "'> </div>" : 
-									"unchecked " + RECTANGLE_CLASS + "'> <div class='checkmark " + UNTICKED_CLASS + "'> </div>") + "\
+							<div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
+									<div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " "  + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" : 
+									"unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
 								</div> \
 							</div> \
 							Don't send \"Last Seen\" updates \
@@ -165,7 +154,7 @@ function addIconIfNeeded()
 			drop.on("open", function()
 			{
 				if (!checkInterception()) return;
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", MENU_ITEM_CLASS + " GPmgf active menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " GPmgf active menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
@@ -178,7 +167,7 @@ function addIconIfNeeded()
 			});
 			drop.on("close", function()
 			{
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", MENU_ITEM_CLASS + " menu-item-incognito");
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
 				document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
@@ -222,14 +211,14 @@ function onReadConfirmaionsTick()
 	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + GREEN_BACKGROUND_CLASS);
-		checkmark.setAttribute("class", chekmarkClass.replace(UNTICKED_CLASS, TICKED_CLASS));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + UIClassNames.GREEN_BACKGROUND_CLASS);
+		checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         readConfirmationsHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(GREEN_BACKGROUND_CLASS).join(""));
-		checkmark.setAttribute("class", chekmarkClass.replace(TICKED_CLASS, UNTICKED_CLASS));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(""));
+		checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         readConfirmationsHook = false;
 		var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
 		for (var i=0;i<redChats.length;i++)
@@ -253,14 +242,14 @@ function onPresenseUpdatesTick()
 	var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + GREEN_BACKGROUND_CLASS);
-		checkmark.setAttribute("class", chekmarkClass.replace(UNTICKED_CLASS, TICKED_CLASS));
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + UIClassNames.GREEN_BACKGROUND_CLASS);
+		checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         presenceUpdatesHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(GREEN_BACKGROUND_CLASS).join(""));
-		checkmark.setAttribute("class", chekmarkClass.replace(TICKED_CLASS, UNTICKED_CLASS));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(""));
+		checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         presenceUpdatesHook = false;
     }
     chrome.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });

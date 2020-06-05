@@ -381,7 +381,7 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 	
 	if (readConfirmationsHookEnabled && safetyDelay > 0)
 	{
-		markChatAsPendingReciptsSending();
+		setTimeout(markChatAsPendingReciptsSending, 250);
 	}
 	else if (readConfirmationsHookEnabled && chat.id == blockedJid)
 	{
@@ -460,7 +460,13 @@ function markChatAsPendingReciptsSending()
 		// make the unread counter blink
 		var blockedChat = findChatElementForJID(chat.id);
 		if (blockedChat != null)
-			blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className += " blinking";
+		{
+			var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
+			if (unreadCounter != null)
+			{
+				unreadCounter.className += " blinking";
+			}
+		}
 		
     	var id = setInterval(function()
 		{ 
