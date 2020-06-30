@@ -1,5 +1,4 @@
 ﻿var isInterceptionWorking = false;
-var isUIReady = false;
 
 document.addEventListener('isInterceptionWorking', function(e) {
    isInterceptionWorking = e.detail;
@@ -21,13 +20,17 @@ else
 			for (var i = 0; i < mutations.length; i++)
 			{
 				var addedNodes = mutations[i].addedNodes;
+				var removedNodes = mutations[i].removedNodes;
 				for (var j = 0; j < addedNodes.length; j++)
 				{
 					var addedNode = addedNodes[j];
-					if (document.getElementById("startup") == null && !isUIReady)
+					if (addedNode.classList == undefined) continue;
+
+					if (addedNode.classList.contains("two"))
 					{
-						isUIReady = true;
+						// main app was added, UI is ready
 						setTimeout(function () { onMainUIReady(); }, 100);
+
 						found = true;
 						break;
 					}
@@ -43,6 +46,23 @@ else
 					{
 						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
 					}
+				}
+				for (var j = 0; j < removedNodes.length; j++)
+				{
+					var removedNode = removedNodes[j];
+					if (removedNode.classList == undefined) continue;
+					if (removedNode.classList.contains("two"))
+					{
+						// main app was removed, remove our artifacts
+						var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
+						var dropItem = document.getElementsByClassName("drop")[0];
+						if (menuItem != undefined) menuItem.remove();
+						if (dropItem != undefined) dropItem.remove();
+						
+						found = true;
+						break;
+					}
+
 				}
 				if (found) break;
 			}
