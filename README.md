@@ -20,7 +20,7 @@ The main code of the extension is located in `core/Main.js` and `core/UI.js`.
 Other files inside the `core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
 `background.js` mainly keeps track of the saved prefrences using `localStorage`.
 
-If you want to see what kind of messages WhatsApp is sending and receiving over WebSocket in real-time, you can type `WADebugMode = true` in the javascript console. Incoming and outgoing payloads (after decryption) will be printed out.
+If you want to see what kind of messages WhatsApp is sending and receiving over WebSocket in real-time, you can type `WAdebugMode = true` in the javascript console. Incoming and outgoing payloads (after decryption) will be printed out.
 
 ## Privacy
 No data is ever transmitted to anywhere. Privacy policy [here](https://github.com/tomer8007/whatsapp-web-incognito/wiki/Chrome-Extension-Privacy-Policy).
