@@ -80,7 +80,7 @@ function onMainUIReady()
 	
 	// if the menu itme is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     setTimeout(addIconIfNeeded, 500);
-    setTimeout(addIconIfNeeded, 1000);
+	setTimeout(addIconIfNeeded, 1000);
 }
 
 function addIconIfNeeded() 
@@ -205,19 +205,36 @@ document.addEventListener('onMarkAsReadClick', function(e)
 	{
 		if (options.readConfirmationsHook)
 		{
-			swal({
-			  title: "Mark as read?",
-			  text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
-			  type: "warning",
-			  showCancelButton: true,
-			  confirmButtonColor: "#DD6B55",
-			  confirmButtonText: "Yes, send receipt",
-			  closeOnConfirm: true
-			},
-			function(){
-			  document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
-			  //swal("Sent!", "Messages were marked as read", "success");
-			});
+			if (options.showReadWarning)
+			{
+				Swal.fire({
+					title: "Mark as read?",
+					text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
+					input: 'checkbox',
+					inputValue: options.showReadWarning,
+					inputPlaceholder: "Don't show this warning again",
+					icon: "warning",
+					showCancelButton: true,
+					confirmButtonColor: "#DD6B55",
+					confirmButtonText: "Yes, send receipt",
+					}).then(result =>
+					{
+						if (result.isConfirmed)
+						{
+							document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
+							//swal("Sent!", "Messages were marked as read", "success");
+			
+							var shouldShowReadWarning =  result.value == 1;
+							chrome.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
+							document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({showReadWarning: shouldShowReadWarning}) }));
+						}
+					});
+			}
+			else
+			{
+				// just send it withoung warning
+				document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
+			}
 		}
 	});
 });

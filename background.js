@@ -1,4 +1,6 @@
-﻿// this is the background page!
+﻿// This is the background page.
+// it keeps track of prefrences/settings in localStorage
+
 chrome.runtime.onMessage.addListener(onMessage);
 
 function onMessage(messageEvent, sender, callback)
@@ -16,12 +18,17 @@ function onMessage(messageEvent, sender, callback)
 		if ("safetyDelay" in messageEvent)
 		{
 			localStorage["safetyDelay"] = messageEvent.safetyDelay;
-		}
+        }
+        if ("showReadWarning" in messageEvent)
+        {
+            localStorage["showReadWarning"] = messageEvent.showReadWarning;
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
 		var presenceUpdatesHook = true;
-		var readConfirmationsHook = true;
+        var readConfirmationsHook = true;
+        var showReadWarning = false;
 		var safetyDelay = 0;
         if (localStorage["presenceUpdatesHook"] == "true" || localStorage["presenceUpdatesHook"] == "false")
         {
@@ -31,6 +38,10 @@ function onMessage(messageEvent, sender, callback)
         {
             readConfirmationsHook = localStorage["readConfirmationsHook"] == "true";
         }
+        if (localStorage["showReadWarning"] == "true" || localStorage["showReadWarning"] == "false")
+        {
+            showReadWarning = localStorage["showReadWarning"] == "true";
+        }
 		if (localStorage["safetyDelay"] != undefined && localStorage["safetyDelay"] != null)
 		{
 			safetyDelay = localStorage["safetyDelay"];
@@ -39,6 +50,7 @@ function onMessage(messageEvent, sender, callback)
         {
             presenceUpdatesHook: presenceUpdatesHook,
             readConfirmationsHook: readConfirmationsHook,
+            showReadWarning: showReadWarning,
 			safetyDelay: safetyDelay
         });
     }
