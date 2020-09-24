@@ -211,7 +211,7 @@ document.addEventListener('onMarkAsReadClick', function(e)
 					title: "Mark as read?",
 					text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
 					input: 'checkbox',
-					inputValue: options.showReadWarning,
+					inputValue: 0,
 					inputPlaceholder: "Don't show this warning again",
 					icon: "warning",
 					showCancelButton: true,

@@ -21,7 +21,7 @@ UIClassNames.UNTICKED_CLASS = "_2w5bxJ";
 
 UIClassNames.UNREAD_COUNTER_CLASS = "_31gEB";
 
-UIClassNames.CHAT_PANEL_CLASS = "_2WG1s";
+UIClassNames.CHAT_PANEL_CLASS = "_2BuJM";
 UIClassNames.INNER_CHAT_PANEL_CLASS = "z_tTQ";
 
 UIClassNames.CHAT_ENTRY_CLASS = "_210SC";
