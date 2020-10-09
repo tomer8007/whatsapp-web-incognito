@@ -98,6 +98,10 @@ wsHook.after = function(messageEvent, url)
 	
 }
 
+//
+// Handling nodes
+//
+
 var NodeHandler = {};
 
 (function() {
@@ -120,9 +124,11 @@ var NodeHandler = {};
 
 				var action = child[0];
 				var data = child[1];
-				var shouldBlock = (readConfirmationsHookEnabled && action === "read") ||
-								(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
-								(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
+				var shouldBlock = (readConfirmationsHookEnabled && action === "read" || 
+								   readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+
+								  (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
+								  (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
 
 				if (shouldBlock)
 				{
@@ -446,7 +452,8 @@ function markChatAsPendingReciptsSending()
 		var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
 		if (previousMessage != null) 
 			parent.removeChild(previousMessage);
-		var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+		var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? 
+						   parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
 		if (unreadMarker != null)
 			unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
 		else
@@ -455,7 +462,8 @@ function markChatAsPendingReciptsSending()
 			warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
 			parent.appendChild(warningMessage);
 		}
-		Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0]} , { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+		Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0]} , 
+								 { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 		
 		// make the unread counter blink
 		var blockedChat = findChatElementForJID(chat.id);
