@@ -15,6 +15,8 @@ var blockedChats = {};
 
 wsHook.before = function(originalData, url) 
 {
+	// a WebSocket frame is about to be sent out.
+
 	var payload = WACrypto.parseWebSocketPayload(originalData);
 	var tag = payload.tag;
 	var data = payload.data;
@@ -354,17 +356,20 @@ document.addEventListener('onOptionsUpdate', function(e)
 	{
 		getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
 		if (safetyDelayPanel != null)
-			Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
+			Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15} , 
+										{ defaultDuration: 200, easing: [.1, .82, .25, 1] });
 	}
 	else 
 	{
 		getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 1)';
 		if (safetyDelayPanel != null)
 			Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10} , { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-		var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
+		var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
+							document.getElementsByClassName("incognito-message")[0] : null;
 		if (warningMessage != null)
 		{
-			Velocity(warningMessage, { scaleY: [0,1], opacity: [0, 1]} , { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+			Velocity(warningMessage, { scaleY: [0,1], opacity: [0, 1]} , 
+					{ defaultDuration: 300, easing: [.1, .82, .25, 1] });
 			setTimeout(function() {warningMessage.parentNode.removeChild(warningMessage);}, 300);
 		}
 	}
@@ -548,11 +553,8 @@ function markChatAsBlocked(chat)
 	sendButton.innerHTML = "Mark as read";
 	sendButton.onclick = function()
 	{
-		if (chat.unreadCount > 0)
-		{
-			var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
-			document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
-		}
+		var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
+		document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 	};
 
 	warningMessage.messageID = messageID;
