@@ -174,7 +174,8 @@ function addIconIfNeeded()
 			drop.on("open", function()
 			{
 				if (!checkInterception()) return;
-				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " GPmgf active menu-item-incognito");
+				var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
+				document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
 
 				document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
 				document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);

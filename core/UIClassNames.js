@@ -5,6 +5,7 @@ var UIClassNames = {};
 (function() {
 
 UIClassNames.MENU_ITEM_CLASS = "PVMjB";
+UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_4QpsN";
 
 UIClassNames.OUTER_DROPDOWN_CLASS = "_2s_eZ";
 UIClassNames.DROPDOWN_CLASS = "I4jbF";

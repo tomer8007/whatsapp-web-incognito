@@ -404,7 +404,8 @@ document.addEventListener('onReadConfirmationBlocked', function(e)
 		// Temporarily removed due to react 16.0 changes
 		/*
 			var scrollToBottom = FindReact(document.getElementsByClassName("pane-chat-msgs")[0]).getScrollBottom();
-				var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
+				var messageVisiabillityDistance = warningMessage.clientHeight + parseFloat(getComputedStyle(warningMessage).marginBottom) + 
+												parseFloat(getComputedStyle(warningMessage).marginTop) + parseFloat(getComputedStyle(warningMessage.parentNode).paddingBottom);
 				if (scrollToBottom < messageVisiabillityDistance) 
 				{
 					FindReact(document.getElementsByClassName("_9tCEa")[0].parentNode).scrollToBottom();
@@ -529,7 +530,8 @@ function markChatAsBlocked(chat)
 	// Create a "receipts blocked" warning if needed
 	//
 	
-	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
+	var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
+						document.getElementsByClassName("incognito-message")[0] : null;
 	var warningWasEmpty = warningMessage == null;
 	if (warningMessage == null)
 	{
@@ -553,7 +555,9 @@ function markChatAsBlocked(chat)
 	sendButton.innerHTML = "Mark as read";
 	sendButton.onclick = function()
 	{
-		var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, formattedName: chat.contact.formattedName};
+		var data = {name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id, 
+					fromMe: chat.lastReceivedKey.fromMe,unreadCount: chat.unreadCount, isGroup: chat.isGroup, 
+					formattedName: chat.contact.formattedName};
 		document.dispatchEvent(new CustomEvent('onMarkAsReadClick', {detail: JSON.stringify(data)}));
 	};
 
