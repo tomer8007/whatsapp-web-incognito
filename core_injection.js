@@ -1,3 +1,7 @@
+if (typeof chrome !== "undefined") {
+	var browser = chrome;
+}
+
 // addScriptInstantly('core/WebScoketInterception.js');
 injectFunctionInstantly(webScoketInterception);
 injectOtherScripts();
