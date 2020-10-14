@@ -17,6 +17,12 @@
 	height: 24px;
 }
 
+@supports (-moz-appearance:none) {
+    .icon-incognito {
+        background-image: url(moz-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
+    }
+}
+
 .drop-theme-incognito.drop-element
 {
     z-index: 1100 !important;

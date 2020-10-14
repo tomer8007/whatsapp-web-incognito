@@ -1,7 +1,11 @@
 ﻿// This is the background page.
 // it keeps track of prefrences/settings in localStorage
 
-chrome.runtime.onMessage.addListener(onMessage);
+if (typeof chrome !== "undefined") {
+  var browser = chrome;
+}
+
+browser.runtime.onMessage.addListener(onMessage);
 
 function onMessage(messageEvent, sender, callback)
 {
@@ -56,8 +60,8 @@ function onMessage(messageEvent, sender, callback)
     }
 }
 
-chrome.browserAction.onClicked.addListener(function(activeTab)
+browser.browserAction.onClicked.addListener(function(activeTab)
 {
     var newURL = "https://web.whatsapp.com";
-    chrome.tabs.create({ url: newURL });
+    browser.tabs.create({ url: newURL });
 });

@@ -98,7 +98,7 @@ function addIconIfNeeded()
 		menuItemElem.appendChild(iconElem);
 		firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 		
-		chrome.runtime.sendMessage({ name: "getOptions" }, function (options) 
+		browser.runtime.sendMessage({ name: "getOptions" }, function (options)
 		{
 			document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 			{
@@ -199,10 +199,10 @@ function addIconIfNeeded()
 	}
 }
 
-document.addEventListener('onMarkAsReadClick', function(e) 
+document.addEventListener('onMarkAsReadClick', function(e)
 {
 	var data = JSON.parse(e.detail);
-	chrome.runtime.sendMessage({ name: "getOptions" }, function (options) 
+	browser.runtime.sendMessage({ name: "getOptions" }, function (options) 
 	{
 		if (options.readConfirmationsHook)
 		{
@@ -226,7 +226,7 @@ document.addEventListener('onMarkAsReadClick', function(e)
 							//swal("Sent!", "Messages were marked as read", "success");
 			
 							var shouldShowReadWarning =  result.value == 1;
-							chrome.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
+							browser.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
 							document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({showReadWarning: shouldShowReadWarning}) }));
 						}
 					});
@@ -264,7 +264,7 @@ function onReadConfirmaionsTick()
 			redChats[i].className = 'icon-meta unread-count';
 		}
     }
-    chrome.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
+    browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
 	document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 	{
         detail: JSON.stringify({readConfirmationsHook: readConfirmationsHook})
@@ -290,7 +290,7 @@ function onPresenseUpdatesTick()
 		checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         presenceUpdatesHook = false;
     }
-    chrome.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
+    browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
 	document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 	{
         detail: JSON.stringify({presenceUpdatesHook: presenceUpdatesHook})
@@ -303,7 +303,7 @@ function onSafetyDelayChanged(event)
 	{
 		var delay = parseInt(event.srcElement.value);
 		document.getElementById("incognito-option-safety-delay").disabled = false;
-		chrome.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
+		browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
 		document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 		{
 			detail: JSON.stringify({safetyDelay: delay})
@@ -315,7 +315,7 @@ function onSafetyDelayDisabled()
 {
 	document.getElementById("incognito-option-safety-delay").disabled = true;
 	document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-	chrome.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
+	browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
 	document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 	{
         detail: JSON.stringify({safetyDelay: 0})
@@ -328,7 +328,7 @@ function onSafetyDelayEnabled()
 	if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
 	document.getElementById("incognito-option-safety-delay").disabled = false;
 	document.getElementById("incognito-radio-disable-safety-delay").checked = false;
-	chrome.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
+	browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
 	document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
 	{
         detail: JSON.stringify({safetyDelay: delay})
