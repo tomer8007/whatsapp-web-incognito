@@ -71,6 +71,8 @@ wsHook.before = function(originalData, url)
 
 wsHook.after = function(messageEvent, url) 
 {
+	// a WebScoket frame was received from network.
+
 	var payload = WACrypto.parseWebSocketPayload(messageEvent.data);
 	var tag = payload.tag;
 	var data = payload.data;

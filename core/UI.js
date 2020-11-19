@@ -1,73 +1,74 @@
-﻿var isInterceptionWorking = false;
+﻿initialize();
 
-document.addEventListener('isInterceptionWorking', function(e) {
-   isInterceptionWorking = e.detail;
-});
+var isInterceptionWorking = false;
 
-if (document.querySelector(".app-wrapper > .app") != undefined)
+function initialize()
 {
-	setTimeout(function () { onMainUIReady(); }, 100);
-}
-else
-{
-	var appElem = document.getElementById("app");
-	
-	if (appElem != undefined)
+	if (document.querySelector(".app-wrapper > .app") != undefined)
 	{
-		var mutationObserver = new MutationObserver(function (mutations)
+		setTimeout(function () { onMainUIReady(); }, 100);
+	}
+	else
+	{
+		var appElem = document.getElementById("app");
+		
+		if (appElem != undefined)
 		{
-			var found = false;
-			for (var i = 0; i < mutations.length; i++)
+			var mutationObserver = new MutationObserver(function (mutations)
 			{
-				var addedNodes = mutations[i].addedNodes;
-				var removedNodes = mutations[i].removedNodes;
-				for (var j = 0; j < addedNodes.length; j++)
+				var found = false;
+				for (var i = 0; i < mutations.length; i++)
 				{
-					var addedNode = addedNodes[j];
-					if (addedNode.classList == undefined) continue;
-
-					if (addedNode.classList.contains("two"))
+					var addedNodes = mutations[i].addedNodes;
+					var removedNodes = mutations[i].removedNodes;
+					for (var j = 0; j < addedNodes.length; j++)
 					{
-						// main app was added, UI is ready
-						setTimeout(function () { onMainUIReady(); }, 100);
+						var addedNode = addedNodes[j];
+						if (addedNode.classList == undefined) continue;
 
-						found = true;
-						break;
-					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
-					{
-						setTimeout(function() 
+						if (addedNode.classList.contains("two"))
 						{
-							document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
-							
-						},200);
-					}
-					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
-					{
-						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
-					}
-				}
-				for (var j = 0; j < removedNodes.length; j++)
-				{
-					var removedNode = removedNodes[j];
-					if (removedNode.classList == undefined) continue;
-					if (removedNode.classList.contains("two"))
-					{
-						// main app was removed, remove our artifacts
-						var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
-						var dropItem = document.getElementsByClassName("drop")[0];
-						if (menuItem != undefined) menuItem.remove();
-						if (dropItem != undefined) dropItem.remove();
-						
-						found = true;
-						break;
-					}
+							// main app was added, UI is ready
+							setTimeout(function () { onMainUIReady(); }, 100);
 
+							found = true;
+							break;
+						}
+						else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
+						{
+							setTimeout(function() 
+							{
+								document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
+								
+							},200);
+						}
+						else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
+						{
+							document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
+						}
+					}
+					for (var j = 0; j < removedNodes.length; j++)
+					{
+						var removedNode = removedNodes[j];
+						if (removedNode.classList == undefined) continue;
+						if (removedNode.classList.contains("two"))
+						{
+							// main app was removed, remove our artifacts
+							var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
+							var dropItem = document.getElementsByClassName("drop")[0];
+							if (menuItem != undefined) menuItem.remove();
+							if (dropItem != undefined) dropItem.remove();
+							
+							found = true;
+							break;
+						}
+
+					}
+					if (found) break;
 				}
-				if (found) break;
-			}
-		});
-		mutationObserver.observe(appElem, { childList: true, subtree: true });
+			});
+			mutationObserver.observe(appElem, { childList: true, subtree: true });
+		}
 	}
 }
 
@@ -238,6 +239,10 @@ document.addEventListener('onMarkAsReadClick', function(e)
 			}
 		}
 	});
+});
+
+document.addEventListener('isInterceptionWorking', function(e) {
+	isInterceptionWorking = e.detail;
 });
 
 function onReadConfirmaionsTick()
