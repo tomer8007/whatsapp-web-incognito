@@ -21,17 +21,20 @@ function injectFunctionInstantly(injectedFunction)
 
 async function injectOtherScripts() 
 {
-	await injectScript('core/BinaryReader.js');
-	await injectScript('core/WAPacket.js');
-	await injectScript('core/Crypto.js');
-	await injectScript('core/NodeParser.js');
-	await injectScript('core/BinaryWriter.js');
-	await injectScript('core/NodePacker.js');
-	await injectScript('core/MessageParser.js');
-	await injectScript('core/MessageTypes.js');
-	await injectScript('core/UIClassNames.js');
+	await injectScript('core/parsing/binary_reader.js');
+	await injectScript('core/parsing/node_parser.js');
+	await injectScript('core/parsing/binary_writer.js');
+	await injectScript('core/parsing/node_packer.js');
+	await injectScript('core/parsing/message_parser.js');
+	await injectScript('core/parsing/message_types.js');
+
+	await injectScript('core/wa_packet.js');
+	await injectScript('core/crypto.js');
+	await injectScript('core/ui_class_names.js');
+
 	await injectScript('lib/moduleraid.js');
-	await injectScript('core/Main.js');
+	
+	await injectScript('core/interception.js');
 }
 
 function injectScript(scriptName) {
