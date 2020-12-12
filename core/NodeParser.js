@@ -1,3 +1,6 @@
+// Following code was copied from WhatsApp implementation.
+
+
 (function() {
 
 function NodeBinaryReader(e) 

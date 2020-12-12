@@ -72,34 +72,50 @@ wsHook.before = function(originalData, url)
 wsHook.after = function(messageEvent, url) 
 {
 	// a WebScoket frame was received from network.
-
-	var payload = WACrypto.parseWebSocketPayload(messageEvent.data);
-	var tag = payload.tag;
-	var data = payload.data;
 	
-	if (data instanceof ArrayBuffer)
+	return new Promise(function(resolve, reject) 
 	{
-		WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
+		var manipulatedMessageEvent = messageEvent;
+		var payload = WACrypto.parseWebSocketPayload(messageEvent.data);
+		var tag = payload.tag;
+		var data = payload.data;
+		
+		if (data instanceof ArrayBuffer)
 		{
-			var nodeParser = new NodeParser();
-			var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-			
-			if (WAdebugMode)
+			WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
 			{
-				console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
-				console.log(node);
-			}
+				var nodeParser = new NodeParser();
+				var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
+				
+				if (WAdebugMode)
+				{
+					console.log("[In] Received binary with tag '" + tag + "' (" +  decrypted.byteLength + " bytes, decrypted)): ");
+					console.log(node);
+				}
 
-			NodeHandler.handleReceivedNode(node);
-		});
-   }
-   else
-	{
-		if (WAdebugMode) console.log("[In] Received message with tag '" + tag +"':");
-		if (data != "" && WAdebugMode)
-			console.log(data);
-	}
-	
+				var isAllowed = NodeHandler.isReceivedNodeAllowed(node, tag);
+				var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
+				WACrypto.packNodeForSending(manipulatedNode, tag).then(function(packet)
+				{
+					var manipulatedData = packet.serializeWithoutBinaryOpts();
+
+					manipulatedMessageEvent.data = manipulatedData;
+					if (isAllowed) resolve(manipulatedMessageEvent);
+					else resolve(null);
+				});
+			});
+		}
+		else
+		{
+			// textual payload
+			if (WAdebugMode) console.log("[In] Received message with tag '" + tag +"':");
+			if (data != "" && WAdebugMode)
+				console.log(data);
+
+			resolve(messageEvent);
+		}
+
+	});
 }
 
 //
@@ -109,235 +125,285 @@ wsHook.after = function(messageEvent, url)
 var NodeHandler = {};
 
 (function() {
-	
-	var messages = [];
-	var isScrappingMessages = false;
-	var epoch = 8;
 
-	NodeHandler.isSentNodeAllowed = function(node, tag)
+NodeHandler.isSentNodeAllowed = function(node, tag)
+{
+	try
 	{
-		try
+		if (nodeReader.tag(node) != "action") return true;
+		if (!Array.isArray(nodeReader.children(node))) return true;
+
+		var children = nodeReader.children(node);
+		for (var i = 0; i < children.length; i++) 
 		{
-			if (nodeReader.tag(node) != "action") return true;
-			if (!Array.isArray(nodeReader.children(node))) return true;
+			var child = children[i];
 
-			var children = nodeReader.children(node);
-			for (var i = 0; i < children.length; i++) 
+			var action = child[0];
+			var data = child[1];
+			var shouldBlock = (readConfirmationsHookEnabled && action === "read" || 
+								readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+
+								(presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
+								(presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
+
+			if (shouldBlock)
 			{
-				var child = children[i];
-
-				var action = child[0];
-				var data = child[1];
-				var shouldBlock = (readConfirmationsHookEnabled && action === "read" || 
-								   readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
-
-								  (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") || 
-								  (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
-
-				if (shouldBlock)
+				switch (action)
 				{
-					switch (action)
-					{
-						case "read":
-							var isReadReceiptAllowed = exceptionsList.includes(data.jid);
-							if (isReadReceiptAllowed)
-							{
-								// this is the user trying to send out a read receipt.
-								console.log("WhatsIncongito: Allowing read receipt to " + data.jid + " at index " + data.index);
+					case "read":
+						var isReadReceiptAllowed = exceptionsList.includes(data.jid);
+						if (isReadReceiptAllowed)
+						{
+							// this is the user trying to send out a read receipt.
+							console.log("WhatsIncongito: Allowing read receipt to " + data.jid + " at index " + data.index);
 
-								// exceptions are one-time operation, so remove it from the list
-								exceptionsList = exceptionsList.filter(i => i !== data.jid)
+							// exceptions are one-time operation, so remove it from the list
+							exceptionsList = exceptionsList.filter(i => i !== data.jid)
 
-								return true;
-							}
-							else
-							{
-								// We do not allow sending this read receipt.
-								// invoke the callback and fake a failure response from server
-								document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-									detail: data["jid"]
-								}));
+							return true;
+						}
+						else
+						{
+							// We do not allow sending this read receipt.
+							// invoke the callback and fake a failure response from server
+							document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
+								detail: data["jid"]
+							}));
 
-								var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
-								wsHook.onMessage(messageEvent);
-							}
-							break;
-						
-						case "presence":
-							var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
+							var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 403}"});
 							wsHook.onMessage(messageEvent);
-							break;
-					}
-
-					console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-
-					return false;
+						}
+						break;
+					
+					case "presence":
+						var messageEvent = new MutableMessageEvent({data: tag + ",{\"status\": 200}"});
+						wsHook.onMessage(messageEvent);
+						break;
 				}
+
+				console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+
+				return false;
 			}
 		}
-		catch (exception)
-		{
-			console.error("WhatsIncognito: Allowing WA packet due to exception:");
-			console.error(exception);
-			return true;
-		}
-		
+	}
+	catch (exception)
+	{
+		console.error("WhatsIncognito: Allowing WA packet due to exception:");
+		console.error(exception);
 		return true;
 	}
+	
+	return true;
+}
 
-	NodeHandler.manipulateSentNode = function(node, tag)
+NodeHandler.manipulateSentNode = function(node, tag)
+{
+	try
 	{
+		if (nodeReader.tag(node) != "action") return node;
+		if (!Array.isArray(nodeReader.children(node))) return node;
 
-		try
+		var children = nodeReader.children(node);
+		for (var i = 0; i < children.length; i++) 
 		{
-			if (nodeReader.tag(node) != "action") return node;
-			if (!Array.isArray(nodeReader.children(node))) return node;
+			var child = children[i];
 
-			var children = nodeReader.children(node);
-			for (var i = 0; i < children.length; i++) 
+			var action = child[0];
+			var data = child[1];
+			
+			if (action == "message")
 			{
-				var child = children[i];
+				var messageBuffer = child[2];
+				var message = parseMessage(child);
 
-				var action = child[0];
-				var data = child[1];
-				
-				if (action == "message")
+				if (message != null)
 				{
-					var messageBuffer = child[2];
-					var message = parseMessage(child);
+					message = this.handleSentMessage(message);
+					
+					// TODO: following lines are commented out because apperently the parsing above is not complete,
+					// so the message is not always restored identically
 
-					if (message != null)
-					{
-						message = this.handleSentMessage(message);
-						
-						// TODO: following lines are commented out because apperently the parsing above is not complete,
-						// so the message is not always restored identically
-
-						// re-assmble everything
-						// messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-						// child[2] = messageBuffer; children[i] = child; node[2] = children;
-					}
-
-
-					return node;
+					// re-assmble everything
+					// messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
+					// child[2] = messageBuffer; children[i] = child; node[2] = children;
 				}
+
+
+				return node;
 			}
 		}
-		catch (exception)
-		{
-			console.error("WhatsIncognito: Allowing WA packet due to exception:");
-			console.error(exception);
-			return node;
-		}
-		
+	}
+	catch (exception)
+	{
+		console.error("WhatsIncognito: Allowing WA packet due to exception:");
+		console.error(exception);
 		return node;
 	}
+	
+	return node;
+}
 
-	NodeHandler.handleSentMessage = function(message)
+NodeHandler.handleSentMessage = function(message)
+{
+	if (message.key && message.key.remoteJid && isChatBlocked(message.key.remoteJid))
 	{
-		if (message.key && message.key.remoteJid && isChatBlocked(message.key.remoteJid))
-		{
-			// If the user replyed to a message from this JID,
-			// It probably means we can send read receipts for it.
+		// If the user replyed to a message from this JID,
+		// It probably means we can send read receipts for it.
 
-			var chat = getChatByJID(message.key.remoteJid);
-			var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
-			setTimeout(function() {document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)})); }, 600);
-		}
-
-		// do message manipulation if needed
-		// 		...
-		var putBreakpointHere = 1;
-
-		return message;
+		var chat = getChatByJID(message.key.remoteJid);
+		var data = {jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount};
+		setTimeout(function() {document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)})); }, 600);
 	}
 
-	NodeHandler.handleReceivedNode = function(e)
+	// do message manipulation if needed
+	// 		...
+	var putBreakpointHere = 1;
+
+	return message;
+}
+
+
+NodeHandler.isReceivedNodeAllowed = function(node, tag)
+{
+	try
 	{
-		var messages = [], o = nodeReader.children(e);
-		if ("response" === nodeReader.tag(e) && ("message" === nodeReader.attr("type", e) || "star" === nodeReader.attr("type", e) 
-			|| "search" === nodeReader.attr("type", e) || "media_message" === nodeReader.attr("type", e))) 
+		var children = nodeReader.children(node);
+		var tag = nodeReader.tag(node);
+		var type = nodeReader.attr("type", node);
+		
+		if (tag != "action") return true;
+		if (!Array.isArray(children)) return true;
+
+		for (var i = 0; i < children.length; i++) 
 		{
-			if (Array.isArray(o)) 
+			var child = children[i];
+
+			var action = child[0];
+			var data = child[1];
+
+			var message = parseMessage(children[i]);
+
+			var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
+			if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue)
 			{
-				var a, i = o.length;
-				for (a = 0; a < i; a++) 
-				{
-					var message = parseMessage(o[a], "response");
-					message && messages.push(message);
-				}
+				// someone deleted a message, block
+				console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+				return false;
+			}			
+		}
+	}
+	catch (exception)
+	{
+		console.error("WhatsIncognito: Allowing WA packet due to exception:");
+		console.error(exception);
+		return true;
+	}
+	
+	return true;
+}
+
+NodeHandler.manipulateReceivedNode = function(node)
+{
+	var messages = [];
+	var children = nodeReader.children(node);
+	var tag = nodeReader.tag(node);
+	var type = nodeReader.attr("type", node);
+
+	if (Array.isArray(children)) 
+	{
+		for (var i = 0; i < children.length; i++) 
+		{
+			var child = children[i];
+			var action = child[0];
+			var data = child[1];
+
+			var message = parseMessage(children[i]);
+			if (message) messages.push(message);
+		}
+	}
+
+	if ("search" === type)
+	{
+		messages = {eof: "true" === nodeReader.attr("last", node), messages: messages};
+	}
+		
+	if (messages.length > 0)
+	{
+		if (WAdebugMode) console.log("Got messages! (count: " + messages.length +" )");
+	
+		if (isScrappingMessages)
+		{
+			isScrappingMessages = false;
+			messages = messages.concat(messages);
+
+			if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
+			//handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
+		}
+		else if (WAdebugMode)
+		{
+			console.log(JSON.parse(JSON.stringify(messages)))
+		}
+	}
+
+	return node;
+}
+
+var messages = [];
+var isScrappingMessages = false;
+var epoch = 8;
+
+NodeHandler.scrapMessages = function(jid, index, count)
+{
+	messages = [];
+	var startNode = ["query", {"type": "message", "kind": "before", "jid": jid,"count": count.toString(), 
+								"index": index, "owner": "true","epoch": (epoch++).toString()}, null];
+	WACrypto.sendNode(startNode);
+	isScrappingMessages = true;
+}
+
+function parseMessage(e)
+{
+	switch (nodeReader.tag(e)) 
+	{
+		case "message":
+			return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
+		case "groups_v2":
+		case "broadcast":
+		case "notification":
+		case "call_log":
+		case "security":
+			return null;
+		default:
+			return null;
+	}
+}
+
+var nodeReader = 
+{
+	tag: function(e) { return e && e[0] },
+	attr: function(e, t) { return t && t[1] ? t[1][e] : void 0},
+	attrs: function(e) { return e[1]},
+	child: function s(e, t) {
+		var r = t[2];
+		if (Array.isArray(r))
+			for (var n = r.length, o = 0; o < n; o++) {
+				var s = r[o];
+				if (Array.isArray(s) && s[0] === e)
+					return s
 			}
-			"search" === nodeReader.attr("type", e) && (messages = 
-			{
-				eof: "true" === nodeReader.attr("last", e),
-				messages: messages
-			})
-			
-			if (WAdebugMode) console.log("Got messages! (count: " +messages.length+" )");
-			if (isScrappingMessages)
-			{
-				isScrappingMessages = false;
-				messages = messages.concat(messages)
-				if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
-				//handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
-			}
-			else if (WAdebugMode)
-			{
-				console.log(JSON.parse(JSON.stringify(messages)))
-			}
-		}
-	}
-
-	NodeHandler.scrapMessages = function(jid, index, count)
+	},
+	children: function(e) 
 	{
-		messages = [];
-		var startNode = ["query",{"type":"message","kind":"before","jid":jid,"count":count.toString(),"index":index,"owner":"true","epoch":(epoch++).toString()},null];
-		WACrypto.sendNode(startNode);
-		isScrappingMessages = true;
-	}
-
-	function parseMessage(e)
+		return e && e[2]
+	},
+	dataStr: function(e) 
 	{
-		switch (nodeReader.tag(e)) 
-		{
-			case "message":
-				return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
-			case "groups_v2":
-			case "broadcast":
-			case "notification":
-			case "call_log":
-			case "security":
-				return null;
-			default:
-				return null;
-		}
+		if (!e) return "";
+		var t = e[2];
+		return "string" == typeof t ? t : t instanceof ArrayBuffer ? new BinaryReader(t).readString(t.byteLength) : void 0
 	}
-
-	var nodeReader = 
-	{
-		tag: function(e) { return e && e[0] },
-		attr: function(e, t) { return t && t[1] ? t[1][e] : void 0},
-		attrs: function(e) { return e[1]},
-		child: function s(e, t) {
-			var r = t[2];
-			if (Array.isArray(r))
-				for (var n = r.length, o = 0; o < n; o++) {
-					var s = r[o];
-					if (Array.isArray(s) && s[0] === e)
-						return s
-				}
-		},
-		children: function(e) 
-		{
-			return e && e[2]
-		},
-		dataStr: function(e) 
-		{
-			if (!e) return "";
-			var t = e[2];
-			return "string" == typeof t ? t : t instanceof ArrayBuffer ? new BinaryReader(t).readString(t.byteLength) : void 0
-		}
-	}
+}
 
 })();
 

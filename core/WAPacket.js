@@ -38,9 +38,21 @@ function WAPacket() {
                 var t = this.binaryOpts
                   , n = t.metric ? t.metric : 0
                   , r = (this.ignore ? 0 : 1) << 7 | (!this.ignore && t.ackRequest ? 1 : 0) << 6 | (t.available === !0 ? 1 : 0) << 5 | (t.available === !1 ? 1 : 0) << 4 | (t.expires ? 1 : 0) << 3 | (t.skipOffline ? 1 : 0) << 2;
-                return BinaryReader.build(e, ",", n, r, this.data).readBuffer()
+                return BinaryReader.build(e, ",", n, r, this.data).readBuffer();
             }
             var a = this.data;
             return e + ",," + a;
         },
+        serializeWithoutBinaryOpts: function() {
+          var e = this.tag;
+          if (this.binaryOpts) {
+              var t = this.binaryOpts
+                , n = t.metric ? t.metric : 0
+                , r = (this.ignore ? 0 : 1) << 7 | (!this.ignore && t.ackRequest ? 1 : 0) << 6 | (t.available === !0 ? 1 : 0) << 5 | (t.available === !1 ? 1 : 0) << 4 | (t.expires ? 1 : 0) << 3 | (t.skipOffline ? 1 : 0) << 2;
+                
+                return BinaryReader.build(e, ",", this.data).readBuffer();
+          }
+          var a = this.data;
+          return e + ",," + a;
+      },
     }

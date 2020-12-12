@@ -6,18 +6,15 @@ WACrypto.decryptWithWebCrypto = function(buffer)
 {
 	try 
 	{
-		var hmac = buffer.slice(0, 32)
-		  , dataIncludingIV = buffer.slice(32)
-		  , iv = buffer.slice(32, 48)
-		  , data = buffer.slice(48)
-		  , keys = getKeys()
-		  , u = 
-		  {
-			name: "AES-CBC",
-			iv: new Uint8Array(iv)
-		   };
-		return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), u, !1, ["decrypt"]).then(function(key) {
-			return window.crypto.subtle.decrypt(u, key, data).catch(function(e) {
+		var hmac = buffer.slice(0, 32);
+		var dataIncludingIV = buffer.slice(32);
+		var iv = buffer.slice(32, 48);
+		var data = buffer.slice(48);
+		var keys = getKeys();
+		var algorithmInfo = {name: "AES-CBC",iv: new Uint8Array(iv)};
+
+		return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, !1, ["decrypt"]).then(function(key) {
+			return window.crypto.subtle.decrypt(algorithmInfo, key, data).catch(function(e) {
 			  console.log(e.code + ", " + e.toString());
 			});
 		});
@@ -34,49 +31,46 @@ WACrypto.encryptWithWebCrypto = function(buffer)
 {
 	var hmac = new Uint8Array(16), iv = new Uint8Array(16);
 	window.crypto.getRandomValues(iv);
-	var data = new Uint8Array(buffer)
-	, keys = getKeys()
-	, u = 
-	{
-		name: "AES-CBC",
-		iv: new Uint8Array(iv)
-	};
+	var data = new Uint8Array(buffer);
+	var keys = keys = getKeys();
+	var algorithmInfo =  {name: "AES-CBC", iv: new Uint8Array(iv)};
 		
-	return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), u, !1, ["encrypt"]).then(function(key) {
-		return window.crypto.subtle.encrypt(u, key, data.buffer).then(function(encryptedData)
+	return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, !1, ["encrypt"]).then(function(key) 
+	{
+		return window.crypto.subtle.encrypt(algorithmInfo, key, data.buffer).then(function(encryptedData)
 		{
-			var t = new Uint8Array(encryptedData), n = new Uint8Array(iv.length + t.length);
+			var t = new Uint8Array(encryptedData);
+			var n = new Uint8Array(iv.length + t.length);
             n.set(iv, 0);
             n.set(t, iv.length);
-			l = 
+			var algorithmInfo = {name: "HMAC", hash: { name: "SHA-256" } };
+            return window.crypto.subtle.importKey("raw", new Uint8Array(keys.mac), algorithmInfo, !1, ["sign"]).then(function(key)
 			{
-				name: "HMAC",
-				hash: { name: "SHA-256" }
-    		};
-            return window.crypto.subtle.importKey("raw", new Uint8Array(keys.mac), l, !1, ["sign"]).then(function(key)
-			{
-				return window.crypto.subtle.sign(l, key, n).then(function(hmac)
+				return window.crypto.subtle.sign(algorithmInfo, key, n).then(function(hmac)
 				{
 					return BinaryReader.build(hmac, n).readBuffer();
 				});
 			});
 			
-		}).catch(function(e) {
+		}).catch(function(e) 
+		{
 		  console.log(e.code + ", " + e.toString());
 		});
-	   });
+
+	});
 }
 
 WACrypto.parseWebSocketPayload = function(payload)
 {
 	var t, r, n = payload;
-	if (n instanceof ArrayBuffer) 
+	if (payload instanceof ArrayBuffer) 
 	{
-		var array = new Uint8Array(n);
+		var array = new Uint8Array(payload);
 		for (var o, i=0, a = [];(o=array[i]) != 44;i++)
 			a.push(o);
+
 		t = String.fromCharCode.apply(String, a);
-		r = n.slice(i+1);
+		r = payload.slice(i+1);
 		
 		if (r.byteLength % 16 != 0)
 		{
@@ -99,9 +93,9 @@ WACrypto.parseWebSocketPayload = function(payload)
 	} 
 	else 
 	{
-		var d = n.indexOf(",");
-		t = n.slice(0, d);
-		r = n.slice(d + 1);
+		var d = payload.indexOf(",");
+		t = payload.slice(0, d);
+		r = payload.slice(d + 1);
 		if (r[0] == ",") r = r.slice(1);
 		
 		try

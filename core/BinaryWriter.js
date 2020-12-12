@@ -1,3 +1,5 @@
+// Following code was copied from WhatsApp implementation.
+
 function BinaryWriter() {
         function e(e) {
             t++,

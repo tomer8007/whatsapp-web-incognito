@@ -88,10 +88,11 @@ function webScoketInterception()
 				new wsHook.before(data, WSObject.url).then(function (newData)
 				{
 					if (newData != null)
-					_send.apply(WSObject, [newData]);
+						_send.apply(WSObject, [newData]);
 					
 				}).catch(function(e)
 				{
+					console.error(e);
 					_send.apply(WSObject, [newData]);  
 				});
 			}
@@ -102,7 +103,7 @@ function webScoketInterception()
 			{
 				onmessageFunction = wsHook.onMessage = func;
 			});
-			WSObject.addEventListener('message', function(e) 
+			WSObject.addEventListener('message', function(event) 
 			{
 				if (!onmessageFunction)
 				{
@@ -110,8 +111,17 @@ function webScoketInterception()
 					return;
 				}
 			
-				wsHook.after(new MutableMessageEvent(e), this.url) || e;
-				onmessageFunction.apply(this, [e]);
+				wsHook.after(new MutableMessageEvent(event), this.url).then(function(modifiedEvent)
+				{
+					if (modifiedEvent != null)
+						onmessageFunction.apply(this, [modifiedEvent]);
+					
+				}).catch(function(e)
+				{
+					console.error(e);
+					onmessageFunction.apply(this, [event]);
+				});
+				
 				//e = new MessageEvent(e.type, e);
 			});
 

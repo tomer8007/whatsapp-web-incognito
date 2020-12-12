@@ -5,72 +5,66 @@ var isUIClassesWorking = true;
 
 function initialize()
 {
-	if (document.querySelector(".app-wrapper > .app") != undefined)
+	var appElem = document.getElementById("app");
+	
+	if (appElem != undefined)
 	{
-		setTimeout(function () { onMainUIReady(); }, 100);
-	}
-	else
-	{
-		var appElem = document.getElementById("app");
-		
-		if (appElem != undefined)
+		var mutationObserver = new MutationObserver(function (mutations)
 		{
-			var mutationObserver = new MutationObserver(function (mutations)
+			var found = false;
+			for (var i = 0; i < mutations.length; i++)
 			{
-				var found = false;
-				for (var i = 0; i < mutations.length; i++)
+				var addedNodes = mutations[i].addedNodes;
+				var removedNodes = mutations[i].removedNodes;
+				for (var j = 0; j < addedNodes.length; j++)
 				{
-					var addedNodes = mutations[i].addedNodes;
-					var removedNodes = mutations[i].removedNodes;
-					for (var j = 0; j < addedNodes.length; j++)
+					var addedNode = addedNodes[j];
+					if (addedNode.classList == undefined) continue;
+
+					if (addedNode.classList.contains("two"))
 					{
-						var addedNode = addedNodes[j];
-						if (addedNode.classList == undefined) continue;
+						// main app was added, UI is ready
+						setTimeout(function () { onMainUIReady(); }, 100);
 
-						if (addedNode.classList.contains("two"))
-						{
-							// main app was added, UI is ready
-							setTimeout(function () { onMainUIReady(); }, 100);
-
-							found = true;
-							break;
-						}
-						else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
-						{
-							setTimeout(function() 
-							{
-								document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
-								
-							},200);
-						}
-						else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
-						{
-							document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
-						}
+						found = true;
+						break;
 					}
-					for (var j = 0; j < removedNodes.length; j++)
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
 					{
-						var removedNode = removedNodes[j];
-						if (removedNode.classList == undefined) continue;
-						if (removedNode.classList.contains("two"))
+						setTimeout(function() 
 						{
-							// main app was removed, remove our artifacts
-							var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
-							var dropItem = document.getElementsByClassName("drop")[0];
-							if (menuItem != undefined) menuItem.remove();
-							if (dropItem != undefined) dropItem.remove();
+							document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
 							
-							found = true;
-							break;
-						}
-
+						},200);
 					}
-					if (found) break;
+					else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
+					{
+						document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
+					}
 				}
-			});
-			mutationObserver.observe(appElem, { childList: true, subtree: true });
-		}
+				for (var j = 0; j < removedNodes.length; j++)
+				{
+					var removedNode = removedNodes[j];
+					if (removedNode.classList == undefined) continue;
+					if (removedNode.classList.contains("two"))
+					{
+						// main app was removed, remove our artifacts
+						var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
+						var dropItem = document.getElementsByClassName("drop")[0];
+						if (menuItem != undefined) menuItem.remove();
+						if (dropItem != undefined) dropItem.remove();
+						
+						found = true;
+						break;
+					}
+
+				}
+				if (found) break;
+			}
+		});
+		mutationObserver.observe(appElem, { childList: true, subtree: true });
 	}
+	
 }
 
 function onMainUIReady() 
