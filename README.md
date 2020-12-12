@@ -15,9 +15,9 @@ Those frames are then decrypted if needed using the local encryption keys (store
 
 The resulting "nodes" are then simply checked to see if WhatsApp tries to send out a `read`  or `presence` action, and if so, the extension blocks it and fakes a failure response from the server.
 ## Organization & Internals
-The main code of the extension is located in `core/Main.js` and `core/UI.js`. 
+The main code of the extension is located in `core/interception.js` and in `core/ui.js`. 
 
-Other files inside the `core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional code for parsing messeges (such as `MessageTypes.js`) that is not used in the extension.
+Other files inside the `core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional `parsing/` code for parsing messeges (such as `message_types.js`) that is rarely used in the extension.
 `background.js` mainly keeps track of the saved prefrences using `localStorage`.
 
 If you want to see what kind of messages WhatsApp is sending and receiving over WebSocket in real-time, you can type `WAdebugMode = true` in the javascript console. Incoming and outgoing payloads (after decryption) will be printed out.
