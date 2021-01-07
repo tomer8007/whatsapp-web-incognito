@@ -94,6 +94,12 @@ wsHook.after = function(messageEvent, url)
                 }
 
                 var isAllowed = NodeHandler.isReceivedNodeAllowed(node, tag);
+                if (isAllowed) resolve(messageEvent);
+                else resolve(null);
+
+                /* 
+                commented out due to a possible "Maximum call stack size exceeds" exception
+
                 var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
                 WACrypto.packNodeForSending(manipulatedNode, tag).then(function(packet)
                 {
@@ -103,6 +109,7 @@ wsHook.after = function(messageEvent, url)
                     if (isAllowed) resolve(manipulatedMessageEvent);
                     else resolve(null);
                 });
+                */
             });
         }
         else
