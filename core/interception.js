@@ -762,6 +762,7 @@ document.addEventListener('onDropdownOpened', function(e)
             break;
         }
     }
+
     if (props != null)
     {
         var name = props.chat.name;

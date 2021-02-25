@@ -261,13 +261,13 @@ function onReadConfirmaionsTick()
     var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + UIClassNames.GREEN_BACKGROUND_CLASS);
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         readConfirmationsHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(""));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         readConfirmationsHook = false;
         var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
@@ -292,13 +292,13 @@ function onPresenseUpdatesTick()
     var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
-        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + UIClassNames.GREEN_BACKGROUND_CLASS);
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         presenceUpdatesHook = true;
     }
     else
     {
-        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(""));
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         presenceUpdatesHook = false;
     }
