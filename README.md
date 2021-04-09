@@ -24,3 +24,6 @@ If you want to see what kind of messages WhatsApp is sending and receiving over 
 
 ## Privacy
 No data is ever transmitted to anywhere. Privacy policy [here](https://github.com/tomer8007/whatsapp-web-incognito/wiki/Chrome-Extension-Privacy-Policy).
+
+## Firefox support
+If you want to use this extension in Firefox, you can load it using the devloper page as explained in issue [#38](https://github.com/tomer8007/whatsapp-web-incognito/issues/38)
