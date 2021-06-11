@@ -9,9 +9,9 @@ var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
 
-// ---------------------
+// 
 // Actual interception
-// ---------------------
+// 
 
 wsHook.before = function(originalData, url) 
 {

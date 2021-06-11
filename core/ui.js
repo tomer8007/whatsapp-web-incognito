@@ -1,4 +1,8 @@
-﻿initialize();
+﻿/*
+This is a content script responsible for some UI.
+*/
+
+initialize();
 
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
@@ -88,10 +92,16 @@ function addIconIfNeeded()
     {
         var menuItemElem = document.createElement("div");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
+
+        var paddingItem = document.createElement("div");
+        paddingItem.setAttribute("style", "padding: 8px;");
+        menuItemElem.appendChild(paddingItem);
+
         var iconElem = document.createElement("button");
         iconElem.setAttribute("class", "icon icon-incognito");
         iconElem.setAttribute("title", "Incognito options");
-        menuItemElem.appendChild(iconElem);
+        paddingItem.appendChild(iconElem);
+        
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
         
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
@@ -357,7 +367,14 @@ function checkInterception()
 {
     if (!isInterceptionWorking)
     {
-        sweetAlert("Oops...", "WhatsApp Web Incognito has detected that interception is not working. Please try refreshing this page, or, if the problem presists, writing back to the developer.", "error");
+        Swal.fire({
+            title: "Oops...",
+            html: "WhatsApp Web Incognito has detected that interception is not working. Please try refreshing this page, or, if the problem presists, writing back to the developer.",
+            icon: "error",
+            width: 600,
+            confirmButtonColor: "#DD6B55",
+            confirmButtonText: "OK",
+        });
         return false;
     }
     
