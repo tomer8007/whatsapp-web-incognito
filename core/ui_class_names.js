@@ -4,28 +4,28 @@ var UIClassNames = {};
 
 (function() {
 
-UIClassNames.MENU_ITEM_CLASS = "_2n-zq";
-UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_3zHcq";
+UIClassNames.MENU_ITEM_CLASS = "_2cNrC";
+UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_1CTfw";
 
-UIClassNames.OUTER_DROPDOWN_CLASS = "_1qAEq"; // outside class of dropdown with "mark as unread"
-UIClassNames.DROPDOWN_CLASS = "_19rjv";
-UIClassNames.DROPDOWN_ENTRY_CLASS = "_2iavx _2CDB7 _3UHfW";
+UIClassNames.OUTER_DROPDOWN_CLASS = "o--vV"; // outside class of dropdown with "mark as unread"
+UIClassNames.DROPDOWN_CLASS = "_1HnQz";
+UIClassNames.DROPDOWN_ENTRY_CLASS = "_2qR8G _1wMaz _18oo2";
 
-UIClassNames.CHEKBOX_PADDIG_CLASS = "._1PhzV";
+UIClassNames.CHEKBOX_PADDIG_CLASS = "_3yThi"; // _1iSYt
 UIClassNames.CHECKBOX_CONTAINER_CLASS = "";
-UIClassNames.RECTANGLE_CLASS = "_11nSm";
-UIClassNames.GREEN_BACKGROUND_CLASS = "_3OPbH";
-UIClassNames.CHECKBOX_CHECKED_CLASS = "_1PhzV "  + UIClassNames.GREEN_BACKGROUND_CLASS;
-UIClassNames.CHECKBOX_UNCHECKED_CLASS = "_1PhzV"; // rectangle borders
-UIClassNames.TICKED_CLASS = "_1o8v1 _7cIil";
-UIClassNames.UNTICKED_CLASS = "_1o8v1 _2bXoJ";
+UIClassNames.RECTANGLE_CLASS = "_2MZaO";
+UIClassNames.GREEN_BACKGROUND_CLASS = "UF5Li";
+UIClassNames.CHECKBOX_CHECKED_CLASS = "_3yThi "  + UIClassNames.GREEN_BACKGROUND_CLASS;
+UIClassNames.CHECKBOX_UNCHECKED_CLASS = "_2MZaO"; // rectangle borders
+UIClassNames.TICKED_CLASS = "_2IweK _2PGX8";
+UIClassNames.UNTICKED_CLASS = "_2IweK _1NdIy";
 
-UIClassNames.UNREAD_COUNTER_CLASS = "_38M1B";
+UIClassNames.UNREAD_COUNTER_CLASS = "_23LrM";
 
-UIClassNames.CHAT_PANEL_CLASS = "_2wjK5"; // the outermost chat panel class
-UIClassNames.INNER_CHAT_PANEL_CLASS = "_11liR"; // the innermost chat panel class
+UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
+UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
 
-UIClassNames.CHAT_ENTRY_CLASS = "_2aBzC"; // the chat entry in the chats list
-UIClassNames.UNREAD_MARKER_CLASS = "_1sPn5" // the class inside the top-level item;
+UIClassNames.CHAT_ENTRY_CLASS = "_3m_Xw"; // the chat entry in the chats list
+UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM" // the class inside the top-level item;
 
 })();
