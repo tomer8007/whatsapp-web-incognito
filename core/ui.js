@@ -5,6 +5,7 @@ This is a content script responsible for some UI.
 initialize();
 
 var isInterceptionWorking = false;
+var isBadProtocol = false;
 var isUIClassesWorking = true;
 
 function initialize()
@@ -365,7 +366,18 @@ function isSafetyDelayValid(string)
 
 function checkInterception()
 {
-    if (!isInterceptionWorking)
+    if (isBadProtocol)
+    {
+        Swal.fire({
+            title: "Bad Protocol",
+            html: "Apparently you are using WhatsApp's new multi-device feature. This does not work with WAIncognito yet.",
+            icon: "error",
+            width: 600,
+            confirmButtonColor: "#DD6B55",
+            confirmButtonText: "OK",
+        });
+    }  
+    else if (!isInterceptionWorking)
     {
         Swal.fire({
             title: "Oops...",
@@ -380,6 +392,10 @@ function checkInterception()
     
     return true;
 }
+
+document.addEventListener('onBadProtocolDetected', function(e) {
+    isBadProtocol = true;
+});
 
 function isNumberKey(evt)
 {

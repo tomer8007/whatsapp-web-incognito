@@ -21,6 +21,8 @@ WACrypto.decryptWithWebCrypto = function(buffer)
     
     } catch (exception)
     {
+        // getKeys might fail due to WASecretBundle not being set yet, or this is a multi-device
+        // (if this is the case, we can ignore it)
         console.error("WhatsAppInvisible: can't decrypt packet due to exception:");
         console.error(exception);
         return new Promise(function(resolve, reject) {resolve(null);});
@@ -60,13 +62,27 @@ WACrypto.encryptWithWebCrypto = function(buffer)
     });
 }
 
+WACrypto.isWebSocketPayloadSupported = function(payload)
+{
+    if (payload instanceof ArrayBuffer) 
+    {
+        var array = new Uint8Array(payload);
+        return array.includes(44);
+    }
+
+    return true;
+}
+
 WACrypto.parseWebSocketPayload = function(payload)
 {
+    if (!WACrypto.isWebSocketPayloadSupported(payload))
+        return null;
+
     var t, r, n = payload;
     if (payload instanceof ArrayBuffer) 
     {
         var array = new Uint8Array(payload);
-        for (var o, i=0, a = [];(o=array[i]) != 44;i++)
+        for (var o, i=0, a = [];(o=array[i]) != 44;i++) // 44 == ','
             a.push(o);
 
         t = String.fromCharCode.apply(String, a);
@@ -152,7 +168,8 @@ WACrypto.packNodeForSending = function(node, tag=undefined)
 
 function getKeys()
 {
-    var storage = window.localStorage;
+    var useLocalStorage = window.localStorage.getItem("WASecretBundle") != undefined;
+    var storage = useLocalStorage ? window.localStorage : window.sessionStorage;
     var result = {};
     var secretBundle = JSON.parse(storage.getItem("WASecretBundle"));
     result.enc = base64ToArrayBuffer(secretBundle["encKey"]);

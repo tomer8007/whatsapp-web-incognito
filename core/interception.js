@@ -17,6 +17,12 @@ wsHook.before = function(originalData, url)
 {
     // a WebSocket frame is about to be sent out.
 
+    if (!WACrypto.isWebSocketPayloadSupported(originalData))
+    {
+        document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
+        return resolve(messageEvent);
+    }
+
     var payload = WACrypto.parseWebSocketPayload(originalData);
     var tag = payload.tag;
     var data = payload.data;
@@ -76,6 +82,12 @@ wsHook.after = function(messageEvent, url)
     return new Promise(function(resolve, reject) 
     {
         var manipulatedMessageEvent = messageEvent;
+        if (!WACrypto.isWebSocketPayloadSupported(messageEvent.data))
+        {
+            document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
+            return resolve(messageEvent);
+        }
+
         var payload = WACrypto.parseWebSocketPayload(messageEvent.data);
         var tag = payload.tag;
         var data = payload.data;
@@ -84,6 +96,8 @@ wsHook.after = function(messageEvent, url)
         {
             WACrypto.decryptWithWebCrypto(data).then(function(decrypted)
             {
+                if (decrypted == null) resolve(messageEvent);
+
                 var nodeParser = new NodeParser();
                 var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
                 
