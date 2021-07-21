@@ -21,12 +21,13 @@ function initialize()
             {
                 var addedNodes = mutations[i].addedNodes;
                 var removedNodes = mutations[i].removedNodes;
+
                 for (var j = 0; j < addedNodes.length; j++)
                 {
                     var addedNode = addedNodes[j];
                     if (addedNode.classList == undefined) continue;
-
-                    if (addedNode.classList.contains("two"))
+                    
+                    if (addedNode.classList.contains("two") || addedNode.getElementsByClassName("two").length > 0)
                     {
                         // main app was added, UI is ready
                         setTimeout(function () { onMainUIReady(); }, 100);
@@ -67,6 +68,7 @@ function initialize()
                 if (found) break;
             }
         });
+        
         mutationObserver.observe(appElem, { childList: true, subtree: true });
     }
     
