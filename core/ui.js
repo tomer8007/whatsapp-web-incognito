@@ -160,6 +160,15 @@ function addIconIfNeeded()
                             Don't send \"Last Seen\" updates \
                             <div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
                         </div> \
+                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
+                        <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
+                                <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.RECTANGLE_CLASS + " "  + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" : 
+                                "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                            </div> \
+                        </div> \
+                        Save Deleted Messages \
+                        <div class='incognito-options-description'>Saves deleted messages into IndexedDB.</div> \
+                    </div> \
                     </div>";
                         
             var drop = new Drop(
@@ -188,6 +197,7 @@ function addIconIfNeeded()
 
                 document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
+                document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
                 document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
                 document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
                 document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
@@ -319,6 +329,32 @@ function onPresenseUpdatesTick()
     document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
     {
         detail: JSON.stringify({presenceUpdatesHook: presenceUpdatesHook})
+    }));
+}
+
+function onSaveDeletedMsgsTick()
+{
+    var saveDeletedMsgsHook = false;
+    var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
+    var checkboxClass = checkbox.getAttribute("class");
+    var checkmark = checkbox.firstElementChild;
+    var chekmarkClass = checkmark.getAttribute("class");
+    if (checkboxClass.indexOf("unchecked") > -1)
+    {
+        checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
+        checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
+        saveDeletedMsgsHook = true;
+    }
+    else
+    {
+        checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
+        checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
+        saveDeletedMsgsHook = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgsHook: saveDeletedMsgsHook });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
+    {
+        detail: JSON.stringify({saveDeletedMsgsHook: saveDeletedMsgsHook})
     }));
 }
 
