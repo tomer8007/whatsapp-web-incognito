@@ -8,58 +8,64 @@ var isInterceptionWorking = false;
 var isBadProtocol = false;
 var isUIClassesWorking = true;
 
-function initialize()
-{
+function initialize() {
     var appElem = document.getElementById("app");
-    
-    if (appElem != undefined)
-    {
-        var mutationObserver = new MutationObserver(function (mutations)
-        {
+
+    if (appElem != undefined) {
+        var mutationObserver = new MutationObserver(function (mutations) {
             var found = false;
-            for (var i = 0; i < mutations.length; i++)
-            {
+            for (var i = 0; i < mutations.length; i++) {
                 var addedNodes = mutations[i].addedNodes;
                 var removedNodes = mutations[i].removedNodes;
 
-                for (var j = 0; j < addedNodes.length; j++)
-                {
+                for (var j = 0; j < addedNodes.length; j++) {
                     var addedNode = addedNodes[j];
                     if (addedNode.classList == undefined) continue;
-                    
-                    if (addedNode.classList.contains("two") || addedNode.getElementsByClassName("two").length > 0)
-                    {
+
+                    if (addedNode.classList.contains("two") || addedNode.getElementsByClassName("two").length > 0) {
                         // main app was added, UI is ready
                         setTimeout(function () { onMainUIReady(); }, 100);
 
                         found = true;
                         break;
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
-                    {
-                        setTimeout(function() 
-                        {
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS)) {
+                        setTimeout(function () {
                             document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
-                            
-                        },200);
+
+                        }, 200);
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
-                    {
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS)) {
                         document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
                     }
+                    //Scan for deleted msgs and replace the text
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main") {
+                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + "." + UIClassNames.CHAT_MESSAGE2)
+                        for (let i = 0; i < msgNodes.length; i++) {
+                            const currentNode = msgNodes[i]
+                            const data_id = currentNode.getAttribute("data-id")
+                            const msgID = data_id.split("_")[2]
+
+                            console.log(document.deletedDB)
+                            const transcation = document.deletedDB.result.transaction('msgs', "readwrite")
+                            let request = transcation.objectStore("msgs").get(msgID)
+                            const messageText = currentNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
+                            if (messageText) {
+                                messageText.innerText = "Restored Message: "
+                            }
+                        }
+                    }
                 }
-                for (var j = 0; j < removedNodes.length; j++)
-                {
+                for (var j = 0; j < removedNodes.length; j++) {
                     var removedNode = removedNodes[j];
                     if (removedNode.classList == undefined) continue;
-                    if (removedNode.classList.contains("two"))
-                    {
+                    if (removedNode.classList.contains("two")) {
                         // main app was removed, remove our artifacts
                         var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
                         var dropItem = document.getElementsByClassName("drop")[0];
                         if (menuItem != undefined) menuItem.remove();
                         if (dropItem != undefined) dropItem.remove();
-                        
+
                         found = true;
                         break;
                     }
@@ -68,31 +74,28 @@ function initialize()
                 if (found) break;
             }
         });
-        
+
         mutationObserver.observe(appElem, { childList: true, subtree: true });
     }
-    
+
 }
 
-function onMainUIReady() 
-{
+function onMainUIReady() {
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
 
     setTimeout(checkInterception, 1000);
     addIconIfNeeded();
-    
+
     // if the menu itme is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     setTimeout(addIconIfNeeded, 500);
     setTimeout(addIconIfNeeded, 1000);
 }
 
-function addIconIfNeeded() 
-{
+function addIconIfNeeded() {
     if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
-    
+
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
-    if (firstMenuItem != undefined)
-    {
+    if (firstMenuItem != undefined) {
         var menuItemElem = document.createElement("div");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
@@ -104,16 +107,15 @@ function addIconIfNeeded()
         iconElem.setAttribute("class", "icon icon-incognito");
         iconElem.setAttribute("title", "Incognito options");
         paddingItem.appendChild(iconElem);
-        
+
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
-        
-        browser.runtime.sendMessage({ name: "getOptions" }, function (options)
-        {
-            document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-            {
-                detail: JSON.stringify(options)
-            }));
-    
+
+        browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+            document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+                {
+                    detail: JSON.stringify(options)
+                }));
+
             var dropContent = " \
                     <div class='incognito-options-container' dir='ltr'> \
                         <div class='incognito-options-title'>Incognito options</div> \
@@ -122,8 +124,8 @@ function addIconIfNeeded()
                         <div class='incognito-options-item'> \
                             <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
                                 <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important;'> \
-                                    <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.RECTANGLE_CLASS +  " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-                                     "unchecked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                                    <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+                    "unchecked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                                     </div> \
                                 </div> \
                                 Don't send read confirmations \
@@ -136,15 +138,15 @@ function addIconIfNeeded()
                                 <div style='margin-top: 10px'> \
                                     <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
                                         <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
-                                         + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
+                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
                                         Never \
                                     </div> \
                                     <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
-                                        <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' " 
-                                        + (options.safetyDelay > 0 ? "checked" : "") + "/> \
+                                        <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
+                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
                                         After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
-                                        step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " " 
-                                        + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") +"/> seconds \
+                                        step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
+                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
                                     </div> \
                                 </div> \
                             </div> \
@@ -153,8 +155,8 @@ function addIconIfNeeded()
                                 \
                         <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
                             <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
-                                    <div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " "  + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" : 
-                                    "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                                    <div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+                    "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                                 </div> \
                             </div> \
                             Don't send \"Last Seen\" updates \
@@ -162,35 +164,33 @@ function addIconIfNeeded()
                         </div> \
                         <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
                         <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
-                                <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.RECTANGLE_CLASS + " "  + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" : 
-                                "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                                <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+                    "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                             </div> \
                         </div> \
                         Save Deleted Messages \
                         <div class='incognito-options-description'>Saves deleted messages into IndexedDB.</div> \
                     </div> \
                     </div>";
-                        
+
             var drop = new Drop(
-            {
-                target: menuItemElem,
-                content: dropContent,
-                position: "bottom left",
-                classes: "drop-theme-incognito",
-                openOn: "click",
-                tetherOptions: 
                 {
-                    offset: "-4px -4px 0 0"
-                },
-            });
+                    target: menuItemElem,
+                    content: dropContent,
+                    position: "bottom left",
+                    classes: "drop-theme-incognito",
+                    openOn: "click",
+                    tetherOptions:
+                    {
+                        offset: "-4px -4px 0 0"
+                    },
+                });
             var originalCloseFunction = drop.close;
-            drop.close = function()
-            {
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', {detail: null}));
-                setTimeout(function() {originalCloseFunction.apply(drop, arguments); }, 100);
+            drop.close = function () {
+                document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
+                setTimeout(function () { originalCloseFunction.apply(drop, arguments); }, 100);
             }
-            drop.on("open", function()
-            {
+            drop.on("open", function () {
                 if (!checkInterception()) return;
                 var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
@@ -202,11 +202,10 @@ function addIconIfNeeded()
                 document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
                 document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
                 document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
-                
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', {detail: null}));
+
+                document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
             });
-            drop.on("close", function()
-            {
+            drop.on("close", function () {
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
@@ -216,8 +215,7 @@ function addIconIfNeeded()
             });
         });
     }
-    else if (isUIClassesWorking)
-    {
+    else if (isUIClassesWorking) {
         isUIClassesWorking = false;
         Swal.fire({
             title: "WAIncognito is temporarily broken",
@@ -230,18 +228,14 @@ function addIconIfNeeded()
     }
 }
 
-document.addEventListener('onMarkAsReadClick', function(e)
-{
+document.addEventListener('onMarkAsReadClick', function (e) {
     var data = JSON.parse(e.detail);
-    browser.runtime.sendMessage({ name: "getOptions" }, function (options) 
-    {
-        if (options.readConfirmationsHook)
-        {
-            if (options.showReadWarning)
-            {
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+        if (options.readConfirmationsHook) {
+            if (options.showReadWarning) {
                 Swal.fire({
                     title: "Mark as read?",
-                    text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ?  data.unreadCount + " messages." : " message."),
+                    text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
                     input: 'checkbox',
                     inputValue: 0,
                     inputPlaceholder: "Don't show this warning again",
@@ -249,163 +243,143 @@ document.addEventListener('onMarkAsReadClick', function(e)
                     showCancelButton: true,
                     confirmButtonColor: "#DD6B55",
                     confirmButtonText: "Yes, send receipt",
-                    }).then(result =>
-                    {
-                        if (result.isConfirmed)
-                        {
-                            document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
-                            //swal("Sent!", "Messages were marked as read", "success");
-            
-                            var shouldShowReadWarning =  result.value == 1;
-                            browser.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
-                            document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({showReadWarning: shouldShowReadWarning}) }));
-                        }
-                    });
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
+                        //swal("Sent!", "Messages were marked as read", "success");
+
+                        var shouldShowReadWarning = result.value == 1;
+                        browser.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
+                        document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({ showReadWarning: shouldShowReadWarning }) }));
+                    }
+                });
             }
-            else
-            {
+            else {
                 // just send it withoung warning
-                document.dispatchEvent(new CustomEvent('sendReadConfirmation', {detail: JSON.stringify(data)}));
+                document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
             }
         }
     });
 });
 
-document.addEventListener('isInterceptionWorking', function(e) {
+document.addEventListener('isInterceptionWorking', function (e) {
     isInterceptionWorking = e.detail;
 });
 
-function onReadConfirmaionsTick()
-{
+function onReadConfirmaionsTick() {
     var readConfirmationsHook = false;
     var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
+    if (checkboxClass.indexOf("unchecked") > -1) {
         checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         readConfirmationsHook = true;
     }
-    else
-    {
+    else {
         checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         readConfirmationsHook = false;
         var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
-        for (var i=0;i<redChats.length;i++)
-        {
+        for (var i = 0; i < redChats.length; i++) {
             redChats[i].className = 'icon-meta unread-count';
         }
     }
     browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-    {
-        detail: JSON.stringify({readConfirmationsHook: readConfirmationsHook})
-    }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
+        }));
 }
 
-function onPresenseUpdatesTick()
-{
+function onPresenseUpdatesTick() {
     var presenceUpdatesHook = false;
     var checkbox = document.querySelector("#incognito-option-presence-updates .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
+    if (checkboxClass.indexOf("unchecked") > -1) {
         checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         presenceUpdatesHook = true;
     }
-    else
-    {
+    else {
         checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         presenceUpdatesHook = false;
     }
     browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-    {
-        detail: JSON.stringify({presenceUpdatesHook: presenceUpdatesHook})
-    }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify({ presenceUpdatesHook: presenceUpdatesHook })
+        }));
 }
 
-function onSaveDeletedMsgsTick()
-{
+function onSaveDeletedMsgsTick() {
     var saveDeletedMsgsHook = false;
     var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
+    if (checkboxClass.indexOf("unchecked") > -1) {
         checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " " + UIClassNames.GREEN_BACKGROUND_CLASS);
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.UNTICKED_CLASS, UIClassNames.TICKED_CLASS));
         saveDeletedMsgsHook = true;
     }
-    else
-    {
+    else {
         checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split(UIClassNames.GREEN_BACKGROUND_CLASS).join(" "));
         checkmark.setAttribute("class", chekmarkClass.replace(UIClassNames.TICKED_CLASS, UIClassNames.UNTICKED_CLASS));
         saveDeletedMsgsHook = false;
     }
-    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgsHook: saveDeletedMsgsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-    {
-        detail: JSON.stringify({saveDeletedMsgsHook: saveDeletedMsgsHook})
-    }));
+    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify({ saveDeletedMsgsHook: saveDeletedMsgsHook })
+        }));
 }
 
-function onSafetyDelayChanged(event)
-{
-    if (isSafetyDelayValid(event.srcElement.value))
-    {
+function onSafetyDelayChanged(event) {
+    if (isSafetyDelayValid(event.srcElement.value)) {
         var delay = parseInt(event.srcElement.value);
         document.getElementById("incognito-option-safety-delay").disabled = false;
         browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-        document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-        {
-            detail: JSON.stringify({safetyDelay: delay})
-        }));
+        document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+            {
+                detail: JSON.stringify({ safetyDelay: delay })
+            }));
     }
 }
 
-function onSafetyDelayDisabled()
-{
+function onSafetyDelayDisabled() {
     document.getElementById("incognito-option-safety-delay").disabled = true;
     document.getElementById("incognito-radio-enable-safety-delay").checked = false;
     browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-    {
-        detail: JSON.stringify({safetyDelay: 0})
-    }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify({ safetyDelay: 0 })
+        }));
 }
 
-function onSafetyDelayEnabled()
-{
+function onSafetyDelayEnabled() {
     var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
     if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
     document.getElementById("incognito-option-safety-delay").disabled = false;
     document.getElementById("incognito-radio-disable-safety-delay").checked = false;
     browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', 
-    {
-        detail: JSON.stringify({safetyDelay: delay})
-    }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify({ safetyDelay: delay })
+        }));
 }
 
-function isSafetyDelayValid(string)
-{
+function isSafetyDelayValid(string) {
     var number = Math.floor(Number(string));
     return (String(number) === string && number >= 1 && number <= 30) || string == ""
 }
 
-function checkInterception()
-{
-    if (isBadProtocol)
-    {
+function checkInterception() {
+    if (isBadProtocol) {
         Swal.fire({
             title: "Bad Protocol",
             html: "Apparently you are using WhatsApp's new multi-device feature. This does not work with WAIncognito yet.",
@@ -414,9 +388,8 @@ function checkInterception()
             confirmButtonColor: "#DD6B55",
             confirmButtonText: "OK",
         });
-    }  
-    else if (!isInterceptionWorking)
-    {
+    }
+    else if (!isInterceptionWorking) {
         Swal.fire({
             title: "Oops...",
             html: "WhatsApp Web Incognito has detected that interception is not working. Please try refreshing this page, or, if the problem presists, writing back to the developer.",
@@ -427,16 +400,15 @@ function checkInterception()
         });
         return false;
     }
-    
+
     return true;
 }
 
-document.addEventListener('onBadProtocolDetected', function(e) {
+document.addEventListener('onBadProtocolDetected', function (e) {
     isBadProtocol = true;
 });
 
-function isNumberKey(evt)
-{
+function isNumberKey(evt) {
     var charCode = (evt.which) ? evt.which : event.keyCode
     if (charCode > 31 && (charCode < 48 || charCode > 57))
         return false;

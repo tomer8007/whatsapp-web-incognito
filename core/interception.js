@@ -9,22 +9,25 @@ var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
-var deletedDB = indexedDB.open("deletedMsgs", 1)
+document.deletedDB = indexedDB.open("deletedMsgs", 1)
 
-deletedDB.onupgradeneeded = function (e) {
+document.deletedDB.onupgradeneeded = function (e) {
     // triggers if the client had no database
     // ...perform initialization...
-    let db = deletedDB.result
+    let db = document.deletedDB.result
     switch (e.oldVersion) {
         case 0:
             db.createObjectStore('msgs', { keyPath: 'id' })
             console.log('WhatsIncognito: Deleted messages database generated')
     }
 };
-deletedDB.onerror = function () {
+document.deletedDB.onerror = function () {
     console.log("WhatsIncognito: Error opening database")
-    console.error("Error", deletedDB);
+    console.error("Error", document.deletedDB);
 };
+document.deletedDB.onsuccess = () => {
+    console.log("WhatsIncognito: Database loaded")
+}
 
 // 
 // Actual interception
@@ -115,8 +118,8 @@ wsHook.after = function (messageEvent, url) {
                 if (isAllowed) resolve(messageEvent);
                 else resolve(null);
 
-                /* 
-                commented out due to a possible "Maximum call stack size exceeds" exception
+
+                /*commented out due to a possible "Maximum call stack size exceeds" exception
 
                 var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
                 WACrypto.packNodeForSending(manipulatedNode, tag).then(function(packet)
@@ -124,10 +127,10 @@ wsHook.after = function (messageEvent, url) {
                     var manipulatedData = packet.serializeWithoutBinaryOpts();
 
                     manipulatedMessageEvent.data = manipulatedData;
-                    if (isAllowed) resolve(manipulatedMessageEvent);
+                    if (isAllowed) resolve(s);
                     else resolve(null);
-                });
-                */
+                });*/
+
             });
         }
         else {
@@ -277,9 +280,10 @@ var NodeHandler = {};
             var children = nodeReader.children(node);
             var tag = nodeReader.tag(node);
             var type = nodeReader.attr("type", node);
-
             if (tag != "action") return true;
             if (!Array.isArray(children)) return true;
+
+            
 
             for (var i = 0; i < children.length; i++) {
                 var child = children[i];
@@ -288,37 +292,60 @@ var NodeHandler = {};
                 var data = child[1];
 
                 var message = parseMessage(children[i]);
+                if (message)
+                /*
+                                            let queryString = ""
+                            if (message.key.fromMe) {
+                                queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                            }
+                            else {
+                                queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                            }
+                            console.log(queryString)
+                            const test = document.querySelector(queryString)
+                            console.log(test)
+                            if (test) {
+                                console.log(test.querySelector("." + UIClassNames.CHAT_BUBBLE))
+                                console.log(FindReact(document.querySelector(queryString)))
+                            }
+                */
+
 
                 var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
                 if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue) {
                     // someone deleted a message, block
-
                     if (saveDeletedMsgsHook) {
-                        const msgs = getChatByJID(message.key.remoteJid).msgs.models
+                        const chat = getChatByJID(message.key.remoteJid)
+                        const msgs = chat.msgs.models
                         let deletedMsgContents = {}
                         for (let i = 0; i < msgs.length; i++) {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id) {
                                 deletedMsgContents.id = msgs[i].id.id
                                 deletedMsgContents.body = msgs[i].body
                                 deletedMsgContents.timestamp = msgs[i].t
-                                deletedMsgContents.from = msgs[i].from.user
+                                deletedMsgContents.from = msgs[i].author.user
                                 deletedMsgContents.Jid = message.key.remoteJid
                                 break
                             }
                         }
-                        const transcation = deletedDB.result.transaction('msgs', "readwrite")
-                        let request = transcation.objectStore("msgs").add(deletedMsgContents)
-                        request.onerror = (e) => {
-    
-                            // ConstraintError occurs when an object with the same id already exists
-                            if (request.error.name == "ConstraintError") {
-                                console.log("WhatsIncognito: Error saving msg, msg ID already exists");
-                            } else {
-                                console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                        if ("id" in deletedMsgContents) {
+                            const transcation = deletedDB.result.transaction('msgs', "readwrite")
+                            let request = transcation.objectStore("msgs").add(deletedMsgContents)
+                            request.onerror = (e) => {
+
+                                // ConstraintError occurs when an object with the same id already exists
+                                if (request.error.name == "ConstraintError") {
+                                    console.log("WhatsIncognito: Error saving msg, msg ID already exists");
+                                } else {
+                                    console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                                }
+                            };
+                            request.onsuccess = (e) => {
+                                console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
                             }
-                        };
-                        request.onsuccess = (e) => {
-                            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
+                        }
+                        else {
+                            console.log("WhatsIncognito: Deleted msg contents not found")
                         }
                     }
 
@@ -349,10 +376,17 @@ var NodeHandler = {};
                 var data = child[1];
 
                 var message = parseMessage(children[i]);
+                if (message && (typeof message.message === "undefined")) {
+
+                    console.log(message)
+                }
                 if (message) messages.push(message);
             }
         }
 
+
+
+        /*
         if ("search" === type) {
             messages = { eof: "true" === nodeReader.attr("last", node), messages: messages };
         }
@@ -371,6 +405,7 @@ var NodeHandler = {};
                 console.log(JSON.parse(JSON.stringify(messages)))
             }
         }
+        */
 
         return node;
     }
@@ -439,7 +474,7 @@ document.addEventListener('onOptionsUpdate', function (e) {
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
-    if ('saveDeletedMsgsHook' in options) saveDeletedMsgsHook = options.saveDeletedMsgsHook;
+    if ('saveDeletedMsgs' in options) saveDeletedMsgsHook = options.saveDeletedMsgs;
 
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
     var safetyDelayPanelExpectedHeight = 44; // be careful with this
@@ -869,7 +904,6 @@ function exposeWhatsAppAPI() {
     window.WhatsAppAPI = {}
 
     var moduleFinder = moduleRaid();
-    console.log(moduleFinder)
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 

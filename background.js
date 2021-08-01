@@ -27,9 +27,9 @@ function onMessage(messageEvent, sender, callback)
         {
             localStorage["showReadWarning"] = messageEvent.showReadWarning;
         }
-        if ("saveDeletedMsgsHook" in messageEvent)
+        if ("saveDeletedMsgs" in messageEvent)
         {
-            localStorage["saveDeletedMsgsHook"] = messageEvent.saveDeletedMsgsHook;
+            localStorage["saveDeletedMsgs"] = messageEvent.saveDeletedMsgs;
         }
     }
     else if (messageEvent.name == "getOptions")
@@ -57,7 +57,7 @@ function onMessage(messageEvent, sender, callback)
 		}
         if (localStorage["saveDeletedMsgs"] != undefined && localStorage["saveDeletedMsgs"] != null)
 		{
-			safetyDelay = localStorage["saveDeletedMsgs"];
+			saveDeletedMsgs = localStorage["saveDeletedMsgs"];
 		}
         callback(
         {
