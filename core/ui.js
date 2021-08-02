@@ -61,7 +61,7 @@ function initialize() {
                                 request.onsuccess = (e) => {
                                     messageText.textContent = ""
                                     if (request.result) {
-                                        textSpan.style.cssText = "font-style: normal; color: white;"
+                                        textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
                                         textSpan.textContent = "Restored Message: \n" + request.result.body
                                     }
                                     else textSpan.textContent = "Failed to restore message"
@@ -92,7 +92,7 @@ function initialize() {
                             request.onsuccess = (e) => {
                                 messageText.textContent = ""
                                 if (request.result) {
-                                    textSpan.style.cssText = "font-style: normal; color: white;"
+                                    textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
                                     textSpan.textContent = "Restored Message: \n" + request.result.body
                                 }
                                 else textSpan.textContent = "Failed to restore message"
