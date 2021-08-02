@@ -7,6 +7,7 @@ initialize();
 var isInterceptionWorking = false;
 var isBadProtocol = false;
 var isUIClassesWorking = true;
+var deletedDB = null;
 
 function initialize() {
     var appElem = document.getElementById("app");
@@ -38,21 +39,44 @@ function initialize() {
                     else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS)) {
                         document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
                     }
+
                     //Scan for deleted msgs and replace the text
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main") {
-                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + "." + UIClassNames.CHAT_MESSAGE2)
+                    if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main") {
+                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + UIClassNames.CHAT_MESSAGE + ".message-out")
                         for (let i = 0; i < msgNodes.length; i++) {
                             const currentNode = msgNodes[i]
-                            const data_id = currentNode.getAttribute("data-id")
-                            const msgID = data_id.split("_")[2]
-
-                            console.log(document.deletedDB)
-                            const transcation = document.deletedDB.result.transaction('msgs', "readwrite")
-                            let request = transcation.objectStore("msgs").get(msgID)
                             const messageText = currentNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
                             if (messageText) {
-                                messageText.innerText = "Restored Message: "
+
+                                const data_id = currentNode.getAttribute("data-id")
+                                const msgID = data_id.split("_")[2]
+
+                                const transcation = deletedDB.result.transaction('msgs', "readonly")
+                                let request = transcation.objectStore("msgs").get(msgID)
+
+                                request.onsuccess = (e) => {
+                                    if (request.result) messageText.innerText = "Restored Message: \n" + request.result.body
+                                    else messageText.innerText = "Failed to restore message"
+                                }
+
                             }
+                        }
+                    }
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out"))) {
+                        const messageText = addedNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
+                        if (messageText) {
+
+                            const data_id = addedNode.getAttribute("data-id")
+                            const msgID = data_id.split("_")[2]
+
+                            const transcation = deletedDB.result.transaction('msgs', "readonly")
+                            let request = transcation.objectStore("msgs").get(msgID)
+
+                            request.onsuccess = (e) => {
+                                if (request.result) messageText.innerText = "Restored Message: \n" + request.result.body
+                                else messageText.innerText = "Failed to restore message"
+                            }
+
                         }
                     }
                 }
@@ -264,6 +288,7 @@ document.addEventListener('onMarkAsReadClick', function (e) {
 
 document.addEventListener('isInterceptionWorking', function (e) {
     isInterceptionWorking = e.detail;
+    deletedDB = indexedDB.open("deletedMsgs", 1)
 });
 
 function onReadConfirmaionsTick() {
