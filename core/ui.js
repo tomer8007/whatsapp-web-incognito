@@ -54,10 +54,22 @@ function initialize() {
                                 const transcation = deletedDB.result.transaction('msgs', "readonly")
                                 let request = transcation.objectStore("msgs").get(msgID)
 
+                                const span = document.createElement("span")
+                                const textSpan = document.createElement("span")
+                                span.className = UIClassNames.DELETED_MESSAGE_SPAN
+
                                 request.onsuccess = (e) => {
-                                    if (request.result) messageText.innerText = "Restored Message: \n" + request.result.body
-                                    else messageText.innerText = "Failed to restore message"
+                                    messageText.textContent = ""
+                                    if (request.result) {
+                                        textSpan.style.cssText = "font-style: normal; color: white;"
+                                        textSpan.textContent = "Restored Message: \n" + request.result.body
+                                    }
+                                    else textSpan.textContent = "Failed to restore message"
+                                    messageText.appendChild(textSpan)
+                                    messageText.appendChild(span)
+
                                 }
+
 
                             }
                         }
@@ -72,10 +84,24 @@ function initialize() {
                             const transcation = deletedDB.result.transaction('msgs', "readonly")
                             let request = transcation.objectStore("msgs").get(msgID)
 
+
+                            const span = document.createElement("span")
+                            const textSpan = document.createElement("span")
+                            span.className = UIClassNames.DELETED_MESSAGE_SPAN
+
                             request.onsuccess = (e) => {
-                                if (request.result) messageText.innerText = "Restored Message: \n" + request.result.body
-                                else messageText.innerText = "Failed to restore message"
+                                messageText.textContent = ""
+                                if (request.result) {
+                                    textSpan.style.cssText = "font-style: normal; color: white;"
+                                    textSpan.textContent = "Restored Message: \n" + request.result.body
+                                }
+                                else textSpan.textContent = "Failed to restore message"
+                                messageText.appendChild(textSpan)
+                                messageText.appendChild(span)
+
                             }
+
+
 
                         }
                     }
