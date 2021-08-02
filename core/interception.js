@@ -9,23 +9,23 @@ var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
-document.deletedDB = indexedDB.open("deletedMsgs", 1)
+var deletedDB = indexedDB.open("deletedMsgs", 1)
 
-document.deletedDB.onupgradeneeded = function (e) {
+deletedDB.onupgradeneeded = function (e) {
     // triggers if the client had no database
     // ...perform initialization...
-    let db = document.deletedDB.result
+    let db = deletedDB.result
     switch (e.oldVersion) {
         case 0:
             db.createObjectStore('msgs', { keyPath: 'id' })
             console.log('WhatsIncognito: Deleted messages database generated')
     }
 };
-document.deletedDB.onerror = function () {
+deletedDB.onerror = function () {
     console.log("WhatsIncognito: Error opening database")
-    console.error("Error", document.deletedDB);
+    console.error("Error", deletedDB);
 };
-document.deletedDB.onsuccess = () => {
+deletedDB.onsuccess = () => {
     console.log("WhatsIncognito: Database loaded")
 }
 
@@ -283,7 +283,7 @@ var NodeHandler = {};
             if (tag != "action") return true;
             if (!Array.isArray(children)) return true;
 
-            
+
 
             for (var i = 0; i < children.length; i++) {
                 var child = children[i];
@@ -293,25 +293,25 @@ var NodeHandler = {};
 
                 var message = parseMessage(children[i]);
                 if (message)
-                /*
-                                            let queryString = ""
-                            if (message.key.fromMe) {
-                                queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                            }
-                            else {
-                                queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                            }
-                            console.log(queryString)
-                            const test = document.querySelector(queryString)
-                            console.log(test)
-                            if (test) {
-                                console.log(test.querySelector("." + UIClassNames.CHAT_BUBBLE))
-                                console.log(FindReact(document.querySelector(queryString)))
-                            }
-                */
+                    /*
+                                                let queryString = ""
+                                if (message.key.fromMe) {
+                                    queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                                }
+                                else {
+                                    queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                                }
+                                console.log(queryString)
+                                const test = document.querySelector(queryString)
+                                console.log(test)
+                                if (test) {
+                                    console.log(test.querySelector("." + UIClassNames.CHAT_BUBBLE))
+                                    console.log(FindReact(document.querySelector(queryString)))
+                                }
+                    */
 
 
-                var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
+                    var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
                 if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue) {
                     // someone deleted a message, block
                     if (saveDeletedMsgsHook) {
@@ -320,7 +320,8 @@ var NodeHandler = {};
                         let deletedMsgContents = {}
                         for (let i = 0; i < msgs.length; i++) {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id) {
-                                deletedMsgContents.id = msgs[i].id.id
+                                deletedMsgContents.id = message.key.id
+                                deletedMsgContents.originalID = msgs[i].id.id
                                 deletedMsgContents.body = msgs[i].body
                                 deletedMsgContents.timestamp = msgs[i].t
                                 deletedMsgContents.from = msgs[i].author.user
