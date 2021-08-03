@@ -305,7 +305,8 @@ var NodeHandler = {};
                                 let author = ""
                                 if (message.key.fromMe) author = msgs[i].from.user
                                 else author = msgs[i].author.user
-                                
+
+                                console.log(msgs[i])
                                 /*
                                 // Determine media data
                                 let body = ""
@@ -346,6 +347,7 @@ var NodeHandler = {};
                                 deletedMsgContents.from = author
                                 deletedMsgContents.isMedia = msgs[i].isMedia
                                 deletedMsgContents.mimetype = msgs[i].mimetype
+                                deletedMsgContents.mediaText = msgs[i].text
                                 deletedMsgContents.Jid = message.key.remoteJid
                                 break
                             }

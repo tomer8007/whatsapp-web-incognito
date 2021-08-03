@@ -63,6 +63,13 @@ function initialize() {
                                     if (request.result) {
                                         textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
                                         if (request.result.isMedia) {
+                                            const titleSpan = document.createElement("span")
+                                            titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                                            titleSpan.textContent = "Restored Media: \n"
+                                            messageText.appendChild(titleSpan) // Top title span
+
+                                            textSpan.textContent = "\n" + request.result.mediaText //caption text span
+                                            
                                             const imgTag = document.createElement("img")
                                             imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
                                             messageText.appendChild(imgTag)
