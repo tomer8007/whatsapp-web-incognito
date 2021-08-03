@@ -295,19 +295,11 @@ var NodeHandler = {};
                 if (message)
                     /*
                                                 let queryString = ""
-                                if (message.key.fromMe) {
-                                    queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                                }
-                                else {
-                                    queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                                }
+                               
                                 console.log(queryString)
-                                const test = document.querySelector(queryString)
+                                
                                 console.log(test)
-                                if (test) {
-                                    console.log(test.querySelector("." + UIClassNames.CHAT_BUBBLE))
-                                    console.log(FindReact(document.querySelector(queryString)))
-                                }
+                                
                     */
 
 
@@ -320,11 +312,15 @@ var NodeHandler = {};
                         let deletedMsgContents = {}
                         for (let i = 0; i < msgs.length; i++) {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id) {
+                                let author = ""
+                                if (message.key.fromMe) author = msgs[i].from.user
+                                else author = msgs[i].author.user
+
                                 deletedMsgContents.id = message.key.id
                                 deletedMsgContents.originalID = msgs[i].id.id
                                 deletedMsgContents.body = msgs[i].body
                                 deletedMsgContents.timestamp = msgs[i].t
-                                deletedMsgContents.from = msgs[i].author.user
+                                deletedMsgContents.from = author
                                 deletedMsgContents.Jid = message.key.remoteJid
                                 break
                             }
@@ -348,6 +344,19 @@ var NodeHandler = {};
                         else {
                             console.log("WhatsIncognito: Deleted msg contents not found")
                         }
+                    }
+
+                    if (message.key.fromMe) {
+                        queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                    }
+                    else {
+                        queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                    }
+                    const msgToBeDeleted = document.querySelector(queryString)
+                    if (msgToBeDeleted) {
+                        console.log(msgToBeDeleted)
+                        //console.log(msgToBeDeleted.querySelector("." + UIClassNames.CHAT_BUBBLE))
+
                     }
 
                     console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
