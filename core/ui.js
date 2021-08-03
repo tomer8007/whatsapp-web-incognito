@@ -68,7 +68,7 @@ function initialize() {
                                             titleSpan.textContent = "Restored Media: \n"
                                             messageText.appendChild(titleSpan) // Top title span
 
-                                            textSpan.textContent = "\n" + request.result.mediaText //caption text span
+                                            if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
                                             
                                             const imgTag = document.createElement("img")
                                             imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
