@@ -33,5 +33,6 @@ UIClassNames.CHAT_MESSAGE2 = "_21bY5"
 UIClassNames.DELETED_MESSAGE = "_1Gy50"
 UIClassNames.DELETED_MESSAGE2 = "_3TjU1"
 UIClassNames.DELETED_MESSAGE_SPAN = "_20bHr"
+UIClassNames.IMAGE_IMESSAGE_IMG = "_1WrWf"
 
 })();

@@ -62,7 +62,13 @@ function initialize() {
                                     messageText.textContent = ""
                                     if (request.result) {
                                         textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                        textSpan.textContent = "Restored Message: \n" + request.result.body
+                                        if (request.result.isMedia) {
+                                            const imgTag = document.createElement("img")
+                                            imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                                            messageText.appendChild(imgTag)
+                                        }
+                                        else textSpan.textContent = "Restored Message: \n" + request.result.body
+
                                     }
                                     else textSpan.textContent = "Failed to restore message"
                                     messageText.appendChild(textSpan)

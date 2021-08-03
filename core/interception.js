@@ -292,18 +292,7 @@ var NodeHandler = {};
                 var data = child[1];
 
                 var message = parseMessage(children[i]);
-                if (message)
-                    /*
-                                                let queryString = ""
-                               
-                                console.log(queryString)
-                                
-                                console.log(test)
-                                
-                    */
-
-
-                    var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
+                var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
                 if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue) {
                     // someone deleted a message, block
                     if (saveDeletedMsgsHook) {
@@ -312,15 +301,51 @@ var NodeHandler = {};
                         let deletedMsgContents = {}
                         for (let i = 0; i < msgs.length; i++) {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id) {
+                                // Determine author data
                                 let author = ""
                                 if (message.key.fromMe) author = msgs[i].from.user
                                 else author = msgs[i].author.user
+                                
+                                /*
+                                // Determine media data
+                                let body = ""
+                                if (msgs[i].isMedia) {
+                                    //Unfortunately this suffers from the same issue as below and the msg link can't be retrieved unless the image
+                                    //tag is rendered when it is deleted
+                                    if (message.key.fromMe) {
+                                        queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                                    }
+                                    else {
+                                        queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
+                                    }
+                                    const imgMsg = document.querySelector(queryString)
+                                    const imgTag = imgMsg.querySelector("[class='" + UIClassNames.IMAGE_IMESSAGE_IMG + "']")
+                                    console.log(imgTag.src)
+
+
+
+                                    let reader = new FileReader()
+                                    let blobData = null
+                                    let b64data = ""
+                                    await fetch(imgTag.src).then((r) => blobData = r.blob())
+                                    await reader.onload(() => {
+                                        b64data = reader.result.split(",")[1]
+                                        body = b64data
+                                        return true
+                                    })
+                                    reader.readAsDataURL(blobData)
+                                    console.log(body)
+
+                                }
+                                else body = msgs[i].body*/
 
                                 deletedMsgContents.id = message.key.id
                                 deletedMsgContents.originalID = msgs[i].id.id
                                 deletedMsgContents.body = msgs[i].body
                                 deletedMsgContents.timestamp = msgs[i].t
                                 deletedMsgContents.from = author
+                                deletedMsgContents.isMedia = msgs[i].isMedia
+                                deletedMsgContents.mimetype = msgs[i].mimetype
                                 deletedMsgContents.Jid = message.key.remoteJid
                                 break
                             }
@@ -346,6 +371,9 @@ var NodeHandler = {};
                         }
                     }
 
+                    /*
+                    Issue with this is that any re-renders inside react will not cause the "Message Deleted" text to show
+                    and also if the chat is not opened, the text will not show either
                     if (message.key.fromMe) {
                         queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
                     }
@@ -353,11 +381,16 @@ var NodeHandler = {};
                         queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
                     }
                     const msgToBeDeleted = document.querySelector(queryString)
+                    console.log(msgToBeDeleted)
                     if (msgToBeDeleted) {
+                        const chatBubble = msgToBeDeleted.querySelector("." + UIClassNames.DELETED_MESSAGE)
+                        const span = document.createElement("span")
+                        span.textContent = "\n ❌ Message Deleted"
+                        chatBubble.appendChild(span)
                         console.log(msgToBeDeleted)
                         //console.log(msgToBeDeleted.querySelector("." + UIClassNames.CHAT_BUBBLE))
 
-                    }
+                    }*/
 
                     console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
                     return false;
