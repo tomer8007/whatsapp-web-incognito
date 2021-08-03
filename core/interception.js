@@ -307,6 +307,11 @@ var NodeHandler = {};
                                 else author = msgs[i].author.user
 
                                 console.log(msgs[i])
+                                //https://media-sin6-2.cdn.whatsapp.net
+
+                                fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath).then((response) => {
+                                    console.log(WACrypto.decryptWithWebCrypto(response.blob()))
+                                })
                                 /*
                                 // Determine media data
                                 let body = ""
