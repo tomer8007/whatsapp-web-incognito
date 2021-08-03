@@ -309,41 +309,14 @@ var NodeHandler = {};
                                 console.log(msgs[i])
                                 //https://media-sin6-2.cdn.whatsapp.net
 
-                                fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath).then((response) => {
-                                    console.log(WACrypto.decryptWithWebCrypto(response.blob()))
-                                })
-                                /*
-                                // Determine media data
-                                let body = ""
-                                if (msgs[i].isMedia) {
-                                    //Unfortunately this suffers from the same issue as below and the msg link can't be retrieved unless the image
-                                    //tag is rendered when it is deleted
-                                    if (message.key.fromMe) {
-                                        queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                                    }
-                                    else {
-                                        queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                                    }
-                                    const imgMsg = document.querySelector(queryString)
-                                    const imgTag = imgMsg.querySelector("[class='" + UIClassNames.IMAGE_IMESSAGE_IMG + "']")
-                                    console.log(imgTag.src)
-
-
-
-                                    let reader = new FileReader()
-                                    let blobData = null
-                                    let b64data = ""
-                                    await fetch(imgTag.src).then((r) => blobData = r.blob())
-                                    await reader.onload(() => {
-                                        b64data = reader.result.split(",")[1]
-                                        body = b64data
-                                        return true
+                                fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath)
+                                    .then((response) => {
+                                        return response.blob()
                                     })
-                                    reader.readAsDataURL(blobData)
-                                    console.log(body)
+                                    .then((data) => {
+                                        console.log(data)
+                                    })
 
-                                }
-                                else body = msgs[i].body*/
 
                                 deletedMsgContents.id = message.key.id
                                 deletedMsgContents.originalID = msgs[i].id.id
@@ -354,27 +327,28 @@ var NodeHandler = {};
                                 deletedMsgContents.mimetype = msgs[i].mimetype
                                 deletedMsgContents.mediaText = msgs[i].text
                                 deletedMsgContents.Jid = message.key.remoteJid
+
+                                if ("id" in deletedMsgContents) {
+                                    const transcation = deletedDB.result.transaction('msgs', "readwrite")
+                                    let request = transcation.objectStore("msgs").add(deletedMsgContents)
+                                    request.onerror = (e) => {
+
+                                        // ConstraintError occurs when an object with the same id already exists
+                                        if (request.error.name == "ConstraintError") {
+                                            console.log("WhatsIncognito: Error saving msg, msg ID already exists");
+                                        } else {
+                                            console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                                        }
+                                    };
+                                    request.onsuccess = (e) => {
+                                        console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
+                                    }
+                                }
+                                else {
+                                    console.log("WhatsIncognito: Deleted msg contents not found")
+                                }
                                 break
                             }
-                        }
-                        if ("id" in deletedMsgContents) {
-                            const transcation = deletedDB.result.transaction('msgs', "readwrite")
-                            let request = transcation.objectStore("msgs").add(deletedMsgContents)
-                            request.onerror = (e) => {
-
-                                // ConstraintError occurs when an object with the same id already exists
-                                if (request.error.name == "ConstraintError") {
-                                    console.log("WhatsIncognito: Error saving msg, msg ID already exists");
-                                } else {
-                                    console.log("WhatsIncognito: Unexpected error saving deleted msg")
-                                }
-                            };
-                            request.onsuccess = (e) => {
-                                console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
-                            }
-                        }
-                        else {
-                            console.log("WhatsIncognito: Deleted msg contents not found")
                         }
                     }
 
