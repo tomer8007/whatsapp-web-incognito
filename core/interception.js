@@ -301,52 +301,100 @@ var NodeHandler = {};
                         let deletedMsgContents = {}
                         for (let i = 0; i < msgs.length; i++) {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id) {
-                                // Determine author data
-                                let author = ""
-                                if (message.key.fromMe) author = msgs[i].from.user
-                                else author = msgs[i].author.user
 
-                                console.log(msgs[i])
-                                //https://media-sin6-2.cdn.whatsapp.net
+                                const runMe = async () => {
+                                    // Determine author data
+                                    let author = ""
+                                    if (message.key.fromMe) author = msgs[i].from.user
+                                    else author = msgs[i].author.user
 
-                                fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath)
-                                    .then((response) => {
-                                        return response.blob()
-                                    })
-                                    .then((data) => {
-                                        console.log(data)
-                                    })
+                                    console.log(msgs[i])
+                                    //https://media-sin6-2.cdn.whatsapp.net
 
+                                    if (msgs[i].isMedia) {
+                                        //get extended media key
+                                        /*
+                                        const master = Uint8Array.from(atob(msgs[i].mediaKey), c => c.charCodeAt(0))
+                                        const masterObj = await window.crypto.subtle.importKey(
+                                            'raw', master, { name: 'HKDF' }, false, ['deriveKey', 'deriveBits']
+                                        );
+                                        const hkdfCtrParams = { name: 'HKDF', salt: new ArrayBuffer(0), info: new ArrayBuffer(0), hash: "SHA-256" };
+                                        key = await window.crypto.subtle.deriveBits(hkdfCtrParams, masterObj, 112 * 8);
+                                        key = new Uint8Array(key);
 
-                                deletedMsgContents.id = message.key.id
-                                deletedMsgContents.originalID = msgs[i].id.id
-                                deletedMsgContents.body = msgs[i].body
-                                deletedMsgContents.timestamp = msgs[i].t
-                                deletedMsgContents.from = author
-                                deletedMsgContents.isMedia = msgs[i].isMedia
-                                deletedMsgContents.mimetype = msgs[i].mimetype
-                                deletedMsgContents.mediaText = msgs[i].text
-                                deletedMsgContents.Jid = message.key.remoteJid
+                                        const iv = key.slice(0, 16);
+                                        const cipherKey = await window.crypto.subtle.importKey(
+                                            "raw",
+                                            key.slice(16, 48),
+                                            "AES-CBC",
+                                            true,
+                                            ["encrypt", "decrypt"]
+                                        );;
 
-                                if ("id" in deletedMsgContents) {
-                                    const transcation = deletedDB.result.transaction('msgs', "readwrite")
-                                    let request = transcation.objectStore("msgs").add(deletedMsgContents)
-                                    request.onerror = (e) => {
+                                        let imgData = await fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath)
+                                            .then((response) => {
+                                                return response.blob()
+                                            })
+                                        const imgData = await imgData.arrayBuffer()
+                                        //const paddedLength = await imgData.byteLength % 16
+                                        //const final = new Uint8Array([...imgData, ...[...Array(paddedLength).keys()]])
 
-                                        // ConstraintError occurs when an object with the same id already exists
-                                        if (request.error.name == "ConstraintError") {
-                                            console.log("WhatsIncognito: Error saving msg, msg ID already exists");
-                                        } else {
-                                            console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                                        try {
+                                            const decodedData = await window.crypto.subtle.decrypt(
+                                                {
+                                                    name: "AES-CBC",
+                                                    iv: iv
+                                                },
+                                                cipherKey,
+                                                imgData
+                                            );
+                                            console.log(decodedData)
                                         }
-                                    };
-                                    request.onsuccess = (e) => {
-                                        console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
+                                        catch (e) {
+                                            console.error(e)
+                                        }
+
+                                        //const decipher = window.crypto.subtle.createDecipheriv('aes-256-cbc', cipherKey, iv);
+*/
+
+
+
                                     }
+
+
+
+                                    deletedMsgContents.id = message.key.id
+                                    deletedMsgContents.originalID = msgs[i].id.id
+                                    deletedMsgContents.body = msgs[i].body
+                                    deletedMsgContents.timestamp = msgs[i].t
+                                    deletedMsgContents.from = author
+                                    deletedMsgContents.isMedia = msgs[i].isMedia
+                                    deletedMsgContents.mimetype = msgs[i].mimetype
+                                    deletedMsgContents.mediaText = msgs[i].text
+                                    deletedMsgContents.Jid = message.key.remoteJid
+
+                                    if ("id" in deletedMsgContents) {
+                                        const transcation = deletedDB.result.transaction('msgs', "readwrite")
+                                        let request = transcation.objectStore("msgs").add(deletedMsgContents)
+                                        request.onerror = (e) => {
+
+                                            // ConstraintError occurs when an object with the same id already exists
+                                            if (request.error.name == "ConstraintError") {
+                                                console.log("WhatsIncognito: Error saving msg, msg ID already exists");
+                                            } else {
+                                                console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                                            }
+                                        };
+                                        request.onsuccess = (e) => {
+                                            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
+                                        }
+                                    }
+                                    else {
+                                        console.log("WhatsIncognito: Deleted msg contents not found")
+                                    }
+
                                 }
-                                else {
-                                    console.log("WhatsIncognito: Deleted msg contents not found")
-                                }
+                                runMe()
                                 break
                             }
                         }
