@@ -274,6 +274,16 @@ var NodeHandler = {};
         return message;
     }
 
+    const arrayBufferToBase64 = (buffer) => {
+        var binary = '';
+        var bytes = new Uint8Array(buffer);
+        var len = bytes.byteLength;
+        for (var i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
 
     NodeHandler.isReceivedNodeAllowed = function (node, tag) {
         try {
@@ -308,54 +318,28 @@ var NodeHandler = {};
                                     if (message.key.fromMe) author = msgs[i].from.user
                                     else author = msgs[i].author.user
 
-                                    console.log(msgs[i])
-                                    //https://media-sin6-2.cdn.whatsapp.net
+                                    //console.log(msgs[i])
 
+                                    let body = ""
                                     if (msgs[i].isMedia) {
-                                        //get extended media key
-                                        
-                                        const master = Uint8Array.from(atob(msgs[i].mediaKey), c => c.charCodeAt(0))
-                                        const masterObj = await window.crypto.subtle.importKey(
-                                            'raw', master, { name: 'HKDF' }, false, ['deriveKey', 'deriveBits']
-                                        );
-                                        const hkdfCtrParams = { name: 'HKDF', salt: new ArrayBuffer(0), info: new ArrayBuffer(0), hash: "SHA-256" };
-                                        key = await window.crypto.subtle.deriveBits(hkdfCtrParams, masterObj, 112 * 8);
-                                        key = new Uint8Array(key);
-
-                                        
-                                        const iv = key.slice(0, 16);
-                                        const algorithmInfo = {name: "AES-CBC",iv: iv};
-                                        const cipherKey = await window.crypto.subtle.importKey("raw", new Uint8Array(key.slice(16, 48)), algorithmInfo, !1, ["decrypt"])
-
-                                        let imgData = await fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath)
-                                            .then((response) => {
-                                                return response.blob()
-                                            })
-                                        imgData
-                                        imgData = await imgData.arrayBuffer()
-                                        console.log()
-                                        let newBuffer = new ArrayBuffer((imgData.byteLength % 16) + imgData.byteLength)
-                                        let newImgArray = new Uint8Array(newBuffer).set(imgData).buffer;
-                                        console.log(newImgArray)
-
-                                        console.log(newImgData)
-                                            const decodedData = await window.crypto.subtle.decrypt(
-                                                algorithmInfo,
-                                                cipherKey,
-                                                newImgData
-                                            );
-                                            console.log(decodedData)
-                                                                
-                                            }
+                                        //get extended media key              
+                                        try {
+                                            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: msgs[i].directPath, encFilehash: msgs[i].encFilehash, filehash: msgs[i].filehash, mediaKey: msgs[i].mediaKey, type: msgs[i].type, signal: (new AbortController).signal })
+                                            body = arrayBufferToBase64(decryptedData)
+                                        }
+                                        catch (e) { console.error(e) }
+                                    }
+                                    else body = msgs[i].body
 
 
                                     deletedMsgContents.id = message.key.id
                                     deletedMsgContents.originalID = msgs[i].id.id
-                                    deletedMsgContents.body = msgs[i].body
+                                    deletedMsgContents.body = body
                                     deletedMsgContents.timestamp = msgs[i].t
                                     deletedMsgContents.from = author
                                     deletedMsgContents.isMedia = msgs[i].isMedia
                                     deletedMsgContents.mimetype = msgs[i].mimetype
+                                    deletedMsgContents.type = msgs[i].type
                                     deletedMsgContents.mediaText = msgs[i].text
                                     deletedMsgContents.Jid = message.key.remoteJid
 
@@ -386,27 +370,6 @@ var NodeHandler = {};
                         }
                     }
 
-                    /*
-                    Issue with this is that any re-renders inside react will not cause the "Message Deleted" text to show
-                    and also if the chat is not opened, the text will not show either
-                    if (message.key.fromMe) {
-                        queryString = "[data-id='true_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                    }
-                    else {
-                        queryString = "[data-id='false_" + message.key.remoteJid + "_" + message.message.protocolMessage.key.id + "']"
-                    }
-                    const msgToBeDeleted = document.querySelector(queryString)
-                    console.log(msgToBeDeleted)
-                    if (msgToBeDeleted) {
-                        const chatBubble = msgToBeDeleted.querySelector("." + UIClassNames.DELETED_MESSAGE)
-                        const span = document.createElement("span")
-                        span.textContent = "\n ❌ Message Deleted"
-                        chatBubble.appendChild(span)
-                        console.log(msgToBeDeleted)
-                        //console.log(msgToBeDeleted.querySelector("." + UIClassNames.CHAT_BUBBLE))
-
-                    }*/
-
                     console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
                     return false;
                 }
@@ -435,8 +398,6 @@ var NodeHandler = {};
 
                 var message = parseMessage(children[i]);
                 if (message && (typeof message.message === "undefined")) {
-
-                    console.log(message)
                 }
                 if (message) messages.push(message);
             }
@@ -962,6 +923,7 @@ function exposeWhatsAppAPI() {
     window.WhatsAppAPI = {}
 
     var moduleFinder = moduleRaid();
+    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadAndDecrypt")[0]
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 

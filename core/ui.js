@@ -70,9 +70,24 @@ function initialize() {
 
                                             if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
                                             
-                                            const imgTag = document.createElement("img")
-                                            imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
-                                            messageText.appendChild(imgTag)
+                                            if (request.result.type === "image") {
+                                                const imgTag = document.createElement("img")
+                                                imgTag.style.cssText = "width: 100%;"
+                                                imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG
+                                                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                                                messageText.appendChild(imgTag)
+                                            }
+                                            else if (request.result.type === "video") {
+                                                const vidTag = document.createElement("video")
+                                                vidTag.controls = true
+                                                vidTag.style.cssText = "width: 100%;"
+                                                const sourceTag = document.createElement("source")
+                                                sourceTag.type = request.result.mimetype
+                                                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                                                vidTag.appendChild(sourceTag)
+                                                messageText.appendChild(vidTag)
+                                            }
+                                            
                                         }
                                         else textSpan.textContent = "Restored Message: \n" + request.result.body
 
