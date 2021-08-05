@@ -313,7 +313,7 @@ var NodeHandler = {};
 
                                     if (msgs[i].isMedia) {
                                         //get extended media key
-                                        /*
+                                        
                                         const master = Uint8Array.from(atob(msgs[i].mediaKey), c => c.charCodeAt(0))
                                         const masterObj = await window.crypto.subtle.importKey(
                                             'raw', master, { name: 'HKDF' }, false, ['deriveKey', 'deriveBits']
@@ -322,45 +322,31 @@ var NodeHandler = {};
                                         key = await window.crypto.subtle.deriveBits(hkdfCtrParams, masterObj, 112 * 8);
                                         key = new Uint8Array(key);
 
+                                        
                                         const iv = key.slice(0, 16);
-                                        const cipherKey = await window.crypto.subtle.importKey(
-                                            "raw",
-                                            key.slice(16, 48),
-                                            "AES-CBC",
-                                            true,
-                                            ["encrypt", "decrypt"]
-                                        );;
+                                        const algorithmInfo = {name: "AES-CBC",iv: iv};
+                                        const cipherKey = await window.crypto.subtle.importKey("raw", new Uint8Array(key.slice(16, 48)), algorithmInfo, !1, ["decrypt"])
 
                                         let imgData = await fetch("https://media-sin6-2.cdn.whatsapp.net" + msgs[i].directPath)
                                             .then((response) => {
                                                 return response.blob()
                                             })
-                                        const imgData = await imgData.arrayBuffer()
-                                        //const paddedLength = await imgData.byteLength % 16
-                                        //const final = new Uint8Array([...imgData, ...[...Array(paddedLength).keys()]])
+                                        imgData
+                                        imgData = await imgData.arrayBuffer()
+                                        console.log()
+                                        let newBuffer = new ArrayBuffer((imgData.byteLength % 16) + imgData.byteLength)
+                                        let newImgArray = new Uint8Array(newBuffer).set(imgData).buffer;
+                                        console.log(newImgArray)
 
-                                        try {
+                                        console.log(newImgData)
                                             const decodedData = await window.crypto.subtle.decrypt(
-                                                {
-                                                    name: "AES-CBC",
-                                                    iv: iv
-                                                },
+                                                algorithmInfo,
                                                 cipherKey,
-                                                imgData
+                                                newImgData
                                             );
                                             console.log(decodedData)
-                                        }
-                                        catch (e) {
-                                            console.error(e)
-                                        }
-
-                                        //const decipher = window.crypto.subtle.createDecipheriv('aes-256-cbc', cipherKey, iv);
-*/
-
-
-
-                                    }
-
+                                                                
+                                            }
 
 
                                     deletedMsgContents.id = message.key.id
