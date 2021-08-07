@@ -62,6 +62,7 @@ function initialize() {
                                     messageText.textContent = ""
                                     if (request.result) {
                                         textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                                        textSpan.className = "copyable-text selectable-text"
                                         if (request.result.isMedia) {
                                             const titleSpan = document.createElement("span")
                                             titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
@@ -121,6 +122,7 @@ function initialize() {
                                 messageText.textContent = ""
                                 if (request.result) {
                                     textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                                    textSpan.className = "copyable-text selectable-text"
                                     if (request.result.isMedia) {
                                         const titleSpan = document.createElement("span")
                                         titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
