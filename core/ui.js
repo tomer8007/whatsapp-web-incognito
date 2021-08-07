@@ -69,7 +69,7 @@ function initialize() {
                                             messageText.appendChild(titleSpan) // Top title span
 
                                             if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
-                                            
+
                                             if (request.result.type === "image") {
                                                 const imgTag = document.createElement("img")
                                                 imgTag.style.cssText = "width: 100%;"
@@ -87,7 +87,7 @@ function initialize() {
                                                 vidTag.appendChild(sourceTag)
                                                 messageText.appendChild(vidTag)
                                             }
-                                            
+
                                         }
                                         else textSpan.textContent = "Restored Message: \n" + request.result.body
 
@@ -121,11 +121,40 @@ function initialize() {
                                 messageText.textContent = ""
                                 if (request.result) {
                                     textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                    textSpan.textContent = "Restored Message: \n" + request.result.body
+                                    if (request.result.isMedia) {
+                                        const titleSpan = document.createElement("span")
+                                        titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                                        titleSpan.textContent = "Restored Media: \n"
+                                        messageText.appendChild(titleSpan) // Top title span
+
+                                        if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
+
+                                        if (request.result.type === "image") {
+                                            const imgTag = document.createElement("img")
+                                            imgTag.style.cssText = "width: 100%;"
+                                            imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG
+                                            imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                                            messageText.appendChild(imgTag)
+                                        }
+                                        else if (request.result.type === "video") {
+                                            const vidTag = document.createElement("video")
+                                            vidTag.controls = true
+                                            vidTag.style.cssText = "width: 100%;"
+                                            const sourceTag = document.createElement("source")
+                                            sourceTag.type = request.result.mimetype
+                                            sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                                            vidTag.appendChild(sourceTag)
+                                            messageText.appendChild(vidTag)
+                                        }
+
+                                    }
+                                    else textSpan.textContent = "Restored Message: \n" + request.result.body
+
                                 }
                                 else textSpan.textContent = "Failed to restore message"
                                 messageText.appendChild(textSpan)
                                 messageText.appendChild(span)
+
 
                             }
 
