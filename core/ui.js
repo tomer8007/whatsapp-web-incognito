@@ -148,6 +148,7 @@ function initialize() {
                                             vidTag.appendChild(sourceTag)
                                             messageText.appendChild(vidTag)
                                         }
+                                        // test
 
                                     }
                                     else textSpan.textContent = "Restored Message: \n" + request.result.body
