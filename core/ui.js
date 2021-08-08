@@ -45,125 +45,11 @@ function initialize() {
                         const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + UIClassNames.CHAT_MESSAGE + ".message-out")
                         for (let i = 0; i < msgNodes.length; i++) {
                             const currentNode = msgNodes[i]
-                            const messageText = currentNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
-                            if (messageText) {
-
-                                const data_id = currentNode.getAttribute("data-id")
-                                const msgID = data_id.split("_")[2]
-
-                                const transcation = deletedDB.result.transaction('msgs', "readonly")
-                                let request = transcation.objectStore("msgs").get(msgID)
-
-                                const span = document.createElement("span")
-                                const textSpan = document.createElement("span")
-                                span.className = UIClassNames.DELETED_MESSAGE_SPAN
-
-                                request.onsuccess = (e) => {
-                                    messageText.textContent = ""
-                                    if (request.result) {
-                                        textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                        textSpan.className = "copyable-text selectable-text"
-                                        if (request.result.isMedia) {
-                                            const titleSpan = document.createElement("span")
-                                            titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                            titleSpan.textContent = "Restored Media: \n"
-                                            messageText.appendChild(titleSpan) // Top title span
-
-                                            if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
-
-                                            if (request.result.type === "image") {
-                                                const imgTag = document.createElement("img")
-                                                imgTag.style.cssText = "width: 100%;"
-                                                imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG
-                                                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
-                                                messageText.appendChild(imgTag)
-                                            }
-                                            else if (request.result.type === "video") {
-                                                const vidTag = document.createElement("video")
-                                                vidTag.controls = true
-                                                vidTag.style.cssText = "width: 100%;"
-                                                const sourceTag = document.createElement("source")
-                                                sourceTag.type = request.result.mimetype
-                                                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
-                                                vidTag.appendChild(sourceTag)
-                                                messageText.appendChild(vidTag)
-                                            }
-
-                                        }
-                                        else textSpan.textContent = "Restored Message: \n" + request.result.body
-
-                                    }
-                                    else textSpan.textContent = "Failed to restore message"
-                                    messageText.appendChild(textSpan)
-                                    messageText.appendChild(span)
-
-                                }
-
-
-                            }
+                            loadDeletedMsgTag(currentNode)
                         }
                     }
                     else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out"))) {
-                        const messageText = addedNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
-                        if (messageText) {
-
-                            const data_id = addedNode.getAttribute("data-id")
-                            const msgID = data_id.split("_")[2]
-
-                            const transcation = deletedDB.result.transaction('msgs', "readonly")
-                            let request = transcation.objectStore("msgs").get(msgID)
-
-
-                            const span = document.createElement("span")
-                            const textSpan = document.createElement("span")
-                            span.className = UIClassNames.DELETED_MESSAGE_SPAN
-
-                            request.onsuccess = (e) => {
-                                messageText.textContent = ""
-                                if (request.result) {
-                                    textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                    textSpan.className = "copyable-text selectable-text"
-                                    if (request.result.isMedia) {
-                                        const titleSpan = document.createElement("span")
-                                        titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
-                                        titleSpan.textContent = "Restored Media: \n"
-                                        messageText.appendChild(titleSpan) // Top title span
-
-                                        if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
-
-                                        if (request.result.type === "image") {
-                                            const imgTag = document.createElement("img")
-                                            imgTag.style.cssText = "width: 100%;"
-                                            imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG
-                                            imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
-                                            messageText.appendChild(imgTag)
-                                        }
-                                        else if (request.result.type === "video") {
-                                            const vidTag = document.createElement("video")
-                                            vidTag.controls = true
-                                            vidTag.style.cssText = "width: 100%;"
-                                            const sourceTag = document.createElement("source")
-                                            sourceTag.type = request.result.mimetype
-                                            sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
-                                            vidTag.appendChild(sourceTag)
-                                            messageText.appendChild(vidTag)
-                                        }
-                                        // test
-
-                                    }
-                                    else textSpan.textContent = "Restored Message: \n" + request.result.body
-
-                                }
-                                else textSpan.textContent = "Failed to restore message"
-                                messageText.appendChild(textSpan)
-                                messageText.appendChild(span)
-
-
-                            }
-
-
-
-                        }
+                        loadDeletedMsgTag(addedNode)
                     }
                 }
                 for (var j = 0; j < removedNodes.length; j++) {
@@ -186,6 +72,77 @@ function initialize() {
         });
 
         mutationObserver.observe(appElem, { childList: true, subtree: true });
+    }
+
+}
+
+function loadDeletedMsgTag(currentNode) {
+
+    const messageText = currentNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
+    if (messageText) {
+
+        const data_id = currentNode.getAttribute("data-id")
+        const msgID = data_id.split("_")[2]
+
+        const transcation = deletedDB.result.transaction('msgs', "readonly")
+        let request = transcation.objectStore("msgs").get(msgID)
+
+        const span = document.createElement("span")
+        const textSpan = document.createElement("span")
+        span.className = UIClassNames.DELETED_MESSAGE_SPAN
+
+        request.onsuccess = (e) => {
+            messageText.textContent = ""
+            if (request.result) {
+                textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                textSpan.className = "copyable-text selectable-text"
+                if (request.result.isMedia) {
+                    const titleSpan = document.createElement("span")
+                    titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                    titleSpan.textContent = "Restored Media: \n"
+                    messageText.appendChild(titleSpan) // Top title span
+
+                    if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
+
+                    if (request.result.type === "image") {
+                        const imgTag = document.createElement("img")
+                        imgTag.style.cssText = "width: 100%;"
+                        imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG
+                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                        messageText.appendChild(imgTag)
+                    }
+                    else if (request.result.type === "sticker") {
+                        const imgTag = document.createElement("img")
+                        imgTag.className = UIClassNames.STICKER_MESSAGE_TAG
+                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                        messageText.appendChild(imgTag)
+                    }
+                    else if (request.result.type === "video") {
+                        const vidTag = document.createElement("video")
+                        vidTag.controls = true
+                        vidTag.style.cssText = "width: 100%;"
+                        const sourceTag = document.createElement("source")
+                        sourceTag.type = request.result.mimetype
+                        sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body
+                        vidTag.appendChild(sourceTag)
+                        messageText.appendChild(vidTag)
+                    }
+                    else if (request.result.type === "document") {
+                        const aTag = document.createElement("a")
+                        aTag.download = request.result.fileName
+                        aTag.href = "data:" + request.result.mimetype + ";base64," + request.result.body
+                        aTag.textContent = "Download \"" + request.result.fileName + "\""
+                        messageText.appendChild(aTag)
+                    }
+                }
+                else textSpan.textContent = "Restored Message: \n" + request.result.body
+
+            }
+            else textSpan.textContent = "Failed to restore message"
+            messageText.appendChild(textSpan)
+            messageText.appendChild(span)
+
+        }
     }
 
 }

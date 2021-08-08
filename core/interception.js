@@ -321,11 +321,16 @@ var NodeHandler = {};
                                     //console.log(msgs[i])
 
                                     let body = ""
-                                    if (msgs[i].isMedia) {
+                                    let isMedia = false
+                                    // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
+                                    if (msgs[i].isMedia || msgs[i].mediaKey) {
+                                        isMedia = true
+
                                         //get extended media key              
                                         try {
                                             const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: msgs[i].directPath, encFilehash: msgs[i].encFilehash, filehash: msgs[i].filehash, mediaKey: msgs[i].mediaKey, type: msgs[i].type, signal: (new AbortController).signal })
                                             body = arrayBufferToBase64(decryptedData)
+                                            
                                         }
                                         catch (e) { console.error(e) }
                                     }
@@ -337,11 +342,13 @@ var NodeHandler = {};
                                     deletedMsgContents.body = body
                                     deletedMsgContents.timestamp = msgs[i].t
                                     deletedMsgContents.from = author
-                                    deletedMsgContents.isMedia = msgs[i].isMedia
+                                    deletedMsgContents.isMedia = isMedia
+                                    deletedMsgContents.fileName = msgs[i].filename
                                     deletedMsgContents.mimetype = msgs[i].mimetype
                                     deletedMsgContents.type = msgs[i].type
                                     deletedMsgContents.mediaText = msgs[i].text
                                     deletedMsgContents.Jid = message.key.remoteJid
+
 
                                     if ("id" in deletedMsgContents) {
                                         const transcation = deletedDB.result.transaction('msgs', "readwrite")
@@ -356,7 +363,7 @@ var NodeHandler = {};
                                             }
                                         };
                                         request.onsuccess = (e) => {
-                                            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.Jid + " from " + deletedMsgContents.from + " successfully.")
+                                            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.")
                                         }
                                     }
                                     else {
