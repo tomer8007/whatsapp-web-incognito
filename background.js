@@ -57,7 +57,7 @@ function onMessage(messageEvent, sender, callback)
 		}
         if (localStorage["saveDeletedMsgs"] != undefined && localStorage["saveDeletedMsgs"] != null)
 		{
-			saveDeletedMsgs = localStorage["saveDeletedMsgs"];
+			saveDeletedMsgs = localStorage["saveDeletedMsgs"] == "true";
 		}
         callback(
         {
