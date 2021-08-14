@@ -110,14 +110,15 @@ function loadDeletedMsgTag(currentNode)
         request.onsuccess = (e) =>
         {
             messageText.textContent = ""
+            const textStyle =  localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgba(48, 48, 48)"
             if (request.result)
             {
-                textSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                textSpan.style.cssText = textStyle
                 textSpan.className = "copyable-text selectable-text"
                 if (request.result.isMedia)
                 {
                     const titleSpan = document.createElement("span")
-                    titleSpan.style.cssText = "font-style: normal; color: rgba(241, 241, 242, 0.95);"
+                    titleSpan.style.cssText = textStyle
                     titleSpan.textContent = "Restored Media: \n"
                     messageText.appendChild(titleSpan) // Top title span
 
