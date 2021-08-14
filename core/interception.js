@@ -465,9 +465,6 @@ var NodeHandler = {};
                 var data = child[1];
 
                 var message = parseMessage(children[i]);
-                if (message && (typeof message.message === "undefined"))
-                {
-                }
                 if (message) messages.push(message);
             }
         }
