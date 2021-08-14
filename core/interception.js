@@ -362,7 +362,7 @@ var NodeHandler = {};
                                 const runMe = async () =>
                                 {
                                     // Determine author data
-                                    console.log(msgs[i])
+                                    //console.log(msgs[i])
                                     let author = ""
                                     if (message.key.fromMe || !message.isGroupMsg) author = msgs[i].from.user
                                     else author = msgs[i].author.user
@@ -611,7 +611,6 @@ document.addEventListener('onReadConfirmationBlocked', function (e)
     var blockedJid = e.detail;
 
     var chat = getCurrentChat();
-    console.log("onReadConfirmationBlocked")
 
     if (readConfirmationsHookEnabled && safetyDelay > 0)
     {
@@ -1030,11 +1029,6 @@ function showToast(message)
     appElement.insertBefore(toast, appElement.firstChild);
     Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
     setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
-}
-
-function getDeletedMsg()
-{
-
 }
 
 // Based on https://stackoverflow.com/a/39165137/1806873
