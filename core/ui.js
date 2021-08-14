@@ -452,7 +452,7 @@ function onSaveDeletedMsgsTick()
     browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
         {
-            detail: JSON.stringify({ saveDeletedMsgsHook: saveDeletedMsgsHook })
+            detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
         }));
 }
 

@@ -476,6 +476,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHook = options.saveDeletedMsgs;
+    console.log(saveDeletedMsgsHook)
 
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
     var safetyDelayPanelExpectedHeight = 44; // be careful with this
