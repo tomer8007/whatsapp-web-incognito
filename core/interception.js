@@ -362,11 +362,12 @@ var NodeHandler = {};
                                 const runMe = async () =>
                                 {
                                     // Determine author data
+                                    console.log(msgs[i])
                                     let author = ""
-                                    if (message.key.fromMe) author = msgs[i].from.user
+                                    if (message.key.fromMe || !message.isGroupMsg) author = msgs[i].from.user
                                     else author = msgs[i].author.user
 
-                                    //console.log(msgs[i])
+                                    
 
                                     let body = ""
                                     let isMedia = false
