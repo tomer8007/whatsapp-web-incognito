@@ -330,82 +330,13 @@ var NodeHandler = {};
                     {
                         const chat = getChatByJID(message.key.remoteJid)
                         const msgs = chat.msgs.models
-                        let deletedMsgContents = {}
+                        
                         for (let i = 0; i < msgs.length; i++)
                         {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id)
                             {
-
-                                const runMe = async () =>
-                                {
-                                    // Determine author data
-                                    //console.log(msgs[i])
-                                    let author = ""
-                                    if (message.key.fromMe || !message.isGroupMsg) author = msgs[i].from.user
-                                    else author = msgs[i].author.user
-
-                                    
-
-                                    let body = ""
-                                    let isMedia = false
-                                    // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
-                                    if (msgs[i].isMedia || msgs[i].mediaKey)
-                                    {
-                                        isMedia = true
-
-                                        //get extended media key              
-                                        try
-                                        {
-                                            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: msgs[i].directPath, encFilehash: msgs[i].encFilehash, filehash: msgs[i].filehash, mediaKey: msgs[i].mediaKey, type: msgs[i].type, signal: (new AbortController).signal })
-                                            body = arrayBufferToBase64(decryptedData)
-
-                                        }
-                                        catch (e) { console.error(e) }
-                                    }
-                                    else body = msgs[i].body
-
-
-                                    deletedMsgContents.id = message.key.id
-                                    deletedMsgContents.originalID = msgs[i].id.id
-                                    deletedMsgContents.body = body
-                                    deletedMsgContents.timestamp = msgs[i].t
-                                    deletedMsgContents.from = author
-                                    deletedMsgContents.isMedia = isMedia
-                                    deletedMsgContents.fileName = msgs[i].filename
-                                    deletedMsgContents.mimetype = msgs[i].mimetype
-                                    deletedMsgContents.type = msgs[i].type
-                                    deletedMsgContents.mediaText = msgs[i].text
-                                    deletedMsgContents.Jid = message.key.remoteJid
-
-
-                                    if ("id" in deletedMsgContents)
-                                    {
-                                        const transcation = deletedDB.result.transaction('msgs', "readwrite")
-                                        let request = transcation.objectStore("msgs").add(deletedMsgContents)
-                                        request.onerror = (e) =>
-                                        {
-
-                                            // ConstraintError occurs when an object with the same id already exists
-                                            if (request.error.name == "ConstraintError")
-                                            {
-                                                console.log("WhatsIncognito: Error saving msg, msg ID already exists");
-                                            } else
-                                            {
-                                                console.log("WhatsIncognito: Unexpected error saving deleted msg")
-                                            }
-                                        };
-                                        request.onsuccess = (e) =>
-                                        {
-                                            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.")
-                                        }
-                                    }
-                                    else
-                                    {
-                                        console.log("WhatsIncognito: Deleted msg contents not found")
-                                    }
-
-                                }
-                                runMe()
+                                // run save deleted msg function
+                                saveDeletedMsgFunc(msgs[i], message)
                                 break
                             }
                         }
@@ -448,7 +379,7 @@ var NodeHandler = {};
 
 
 
-        /*
+        
         if ("search" === type) {
             messages = { eof: "true" === nodeReader.attr("last", node), messages: messages };
         }
@@ -467,7 +398,7 @@ var NodeHandler = {};
                 console.log(JSON.parse(JSON.stringify(messages)))
             }
         }
-        */
+        
 
         return node;
     }
@@ -1015,6 +946,75 @@ deletedDB.onerror = function ()
 deletedDB.onsuccess = () =>
 {
     console.log("WhatsIncognito: Database loaded")
+}
+
+const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
+{
+    let deletedMsgContents = {}
+    // Determine author data
+    //console.log(retrievedMsg)
+    let author = ""
+    if (deleteMsg.key.fromMe || !deleteMsg.isGroupMsg) author = retrievedMsg.from.user
+    else author = retrievedMsg.author.user
+
+    let body = ""
+    let isMedia = false
+    // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
+    if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
+    {
+        isMedia = true
+
+        //get extended media key              
+        try
+        {
+            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, type: retrievedMsg.type, signal: (new AbortController).signal })
+            body = arrayBufferToBase64(decryptedData)
+
+        }
+        catch (e) { console.error(e) }
+    }
+    else body = retrievedMsg.body
+
+
+    deletedMsgContents.id = deleteMsg.key.id
+    deletedMsgContents.originalID = retrievedMsg.id.id
+    deletedMsgContents.body = body
+    deletedMsgContents.timestamp = retrievedMsg.t
+    deletedMsgContents.from = author
+    deletedMsgContents.isMedia = isMedia
+    deletedMsgContents.fileName = retrievedMsg.filename
+    deletedMsgContents.mimetype = retrievedMsg.mimetype
+    deletedMsgContents.type = retrievedMsg.type
+    deletedMsgContents.mediaText = retrievedMsg.text
+    deletedMsgContents.Jid = deleteMsg.key.remoteJid
+
+
+    if ("id" in deletedMsgContents)
+    {
+        const transcation = deletedDB.result.transaction('msgs', "readwrite")
+        let request = transcation.objectStore("msgs").add(deletedMsgContents)
+        request.onerror = (e) =>
+        {
+
+            // ConstraintError occurs when an object with the same id already exists
+            if (request.error.name == "ConstraintError")
+            {
+                console.log("WhatsIncognito: Error saving msg, msg ID already exists");
+            } else
+            {
+                console.log("WhatsIncognito: Unexpected error saving deleted msg")
+            }
+        };
+        request.onsuccess = (e) =>
+        {
+            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.")
+        }
+    }
+    else
+    {
+        console.log("WhatsIncognito: Deleted msg contents not found")
+    }
+
 }
 
 function showToast(message)
