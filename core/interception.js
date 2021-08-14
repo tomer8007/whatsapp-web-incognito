@@ -9,29 +9,6 @@ var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
-var deletedDB = indexedDB.open("deletedMsgs", 1)
-
-deletedDB.onupgradeneeded = function (e)
-{
-    // triggers if the client had no database
-    // ...perform initialization...
-    let db = deletedDB.result
-    switch (e.oldVersion)
-    {
-        case 0:
-            db.createObjectStore('msgs', { keyPath: 'id' })
-            console.log('WhatsIncognito: Deleted messages database generated')
-    }
-};
-deletedDB.onerror = function ()
-{
-    console.log("WhatsIncognito: Error opening database")
-    console.error("Error", deletedDB);
-};
-deletedDB.onsuccess = () =>
-{
-    console.log("WhatsIncognito: Database loaded")
-}
 
 // 
 // Actual interception
@@ -1015,6 +992,30 @@ document.addEventListener('onMainUIReady', function (e)
 // -------------------
 // Helper functions
 // --------------------
+
+var deletedDB = indexedDB.open("deletedMsgs", 1)
+
+deletedDB.onupgradeneeded = function (e)
+{
+    // triggers if the client had no database
+    // ...perform initialization...
+    let db = deletedDB.result
+    switch (e.oldVersion)
+    {
+        case 0:
+            db.createObjectStore('msgs', { keyPath: 'id' })
+            console.log('WhatsIncognito: Deleted messages database generated')
+    }
+};
+deletedDB.onerror = function ()
+{
+    console.log("WhatsIncognito: Error opening database")
+    console.error("Error", deletedDB);
+};
+deletedDB.onsuccess = () =>
+{
+    console.log("WhatsIncognito: Database loaded")
+}
 
 function showToast(message)
 {
