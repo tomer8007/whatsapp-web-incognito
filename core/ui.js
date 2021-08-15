@@ -263,8 +263,8 @@ function addIconIfNeeded()
                     "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                             </div> \
                         </div> \
-                        Save Deleted Messages \
-                        <div class='incognito-options-description'>Saves deleted messages into IndexedDB.</div> \
+                        Save deleted messages \
+                        <div class='incognito-options-description'>Saves deleted messages and shows restored messages in the chat.</div> \
                     </div> \
                     </div>";
 
