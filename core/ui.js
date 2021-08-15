@@ -110,7 +110,7 @@ function loadDeletedMsgTag(currentNode)
         request.onsuccess = (e) =>
         {
             messageText.textContent = ""
-            const textStyle =  localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgba(48, 48, 48)"
+            const textStyle =  localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgba(128, 128, 128)"
             if (request.result)
             {
                 textSpan.style.cssText = textStyle
@@ -159,7 +159,7 @@ function loadDeletedMsgTag(currentNode)
                         messageText.appendChild(aTag)
                     }
                 }
-                else textSpan.textContent = "Restored Message: \n" + request.result.body
+                else textSpan.textContent = "Restored message: \n" + request.result.body
 
             }
             else textSpan.textContent = "Failed to restore message"
