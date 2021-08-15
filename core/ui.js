@@ -264,7 +264,7 @@ function addIconIfNeeded()
                             </div> \
                         </div> \
                         Save deleted messages \
-                        <div class='incognito-options-description'>Saves deleted messages and shows restored messages in the chat.</div> \
+                        <div class='incognito-options-description'>Saves deleted messages and shows restored messages<p> in the chat.</div> \
                     </div> \
                     </div>";
 
