@@ -93,7 +93,7 @@ function initialize()
 function loadDeletedMsgTag(currentNode)
 {
 
-    const messageText = currentNode.querySelector("." + UIClassNames.DELETED_MESSAGE + "." + UIClassNames.DELETED_MESSAGE2)
+    const messageText = currentNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS)
     if (messageText)
     {
 

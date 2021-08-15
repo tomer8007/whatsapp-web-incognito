@@ -29,9 +29,9 @@ UIClassNames.CHAT_ENTRY_CLASS = "_3m_Xw"; // the chat entry in the chats list
 UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM" // the class inside the top-level item;
 
 UIClassNames.CHAT_MESSAGE = "_2wUmf"
-UIClassNames.CHAT_MESSAGE2 = "_21bY5"
-UIClassNames.DELETED_MESSAGE = "_1Gy50"
-UIClassNames.DELETED_MESSAGE2 = "_3TjU1"
+UIClassNames.CHAT_MESSAGE_FROM_SELF_CLASS = "_21bY5"
+UIClassNames.TEXT_WRAP_POSITION_CLASS = "_1Gy50"
+UIClassNames.DELETED_MESSAGE_DIV_CLASS = "_3TjU1"
 UIClassNames.DELETED_MESSAGE_SPAN = "_20bHr"
 UIClassNames.IMAGE_IMESSAGE_IMG = "_1WrWf"
 UIClassNames.STICKER_MESSAGE_TAG = "_3mPXD"
