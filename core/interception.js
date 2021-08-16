@@ -1,7 +1,7 @@
 // global variables
 var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
-var saveDeletedMsgsHook = false
+var saveDeletedMsgsHook = false;
 var safetyDelay = 0;
 var WAdebugMode = false;
 var isInitializing = true;
@@ -328,15 +328,15 @@ var NodeHandler = {};
                     // someone deleted a message, block
                     if (saveDeletedMsgsHook)
                     {
-                        const chat = getChatByJID(message.key.remoteJid)
-                        const msgs = chat.msgs.models
+                        const chat = getChatByJID(message.key.remoteJid);
+                        const msgs = chat.msgs.models;
                         
                         for (let i = 0; i < msgs.length; i++)
                         {
                             if (msgs[i].id.id == message.message.protocolMessage.key.id)
                             {
                                 // run save deleted msg function
-                                saveDeletedMsgFunc(msgs[i], message)
+                                saveDeletedMsgFunc(msgs[i], message);
                                 break
                             }
                         }
@@ -930,22 +930,22 @@ deletedDB.onupgradeneeded = function (e)
 {
     // triggers if the client had no database
     // ...perform initialization...
-    let db = deletedDB.result
+    let db = deletedDB.result;
     switch (e.oldVersion)
     {
         case 0:
-            db.createObjectStore('msgs', { keyPath: 'id' })
-            console.log('WhatsIncognito: Deleted messages database generated')
+            db.createObjectStore('msgs', { keyPath: 'id' });
+            console.log('WhatsIncognito: Deleted messages database generated');
     }
 };
 deletedDB.onerror = function ()
 {
-    console.log("WhatsIncognito: Error opening database")
+    console.log("WhatsIncognito: Error opening database");
     console.error("Error", deletedDB);
 };
 deletedDB.onsuccess = () =>
 {
-    console.log("WhatsIncognito: Database loaded")
+    console.log("WhatsIncognito: Database loaded");
 }
 
 const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
@@ -953,46 +953,46 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
     let deletedMsgContents = {}
     // Determine author data
     //console.log(retrievedMsg)
-    let author = ""
-    if (deleteMsg.key.fromMe || !deleteMsg.isGroupMsg) author = retrievedMsg.from.user
-    else author = retrievedMsg.author.user
+    let author = "";
+    if (deleteMsg.key.fromMe || !deleteMsg.isGroupMsg) author = retrievedMsg.from.user;
+    else author = retrievedMsg.author.user;
 
-    let body = ""
-    let isMedia = false
+    let body = "";
+    let isMedia = false;
     // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
     if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
     {
-        isMedia = true
+        isMedia = true;
 
         //get extended media key              
         try
         {
-            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, type: retrievedMsg.type, signal: (new AbortController).signal })
-            body = arrayBufferToBase64(decryptedData)
+            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, type: retrievedMsg.type, signal: (new AbortController).signal });
+            body = arrayBufferToBase64(decryptedData);
 
         }
-        catch (e) { console.error(e) }
+        catch (e) { console.error(e); }
     }
-    else body = retrievedMsg.body
+    else body = retrievedMsg.body;
 
 
-    deletedMsgContents.id = deleteMsg.key.id
-    deletedMsgContents.originalID = retrievedMsg.id.id
-    deletedMsgContents.body = body
-    deletedMsgContents.timestamp = retrievedMsg.t
-    deletedMsgContents.from = author
-    deletedMsgContents.isMedia = isMedia
-    deletedMsgContents.fileName = retrievedMsg.filename
-    deletedMsgContents.mimetype = retrievedMsg.mimetype
-    deletedMsgContents.type = retrievedMsg.type
-    deletedMsgContents.mediaText = retrievedMsg.text
-    deletedMsgContents.Jid = deleteMsg.key.remoteJid
+    deletedMsgContents.id = deleteMsg.key.id;
+    deletedMsgContents.originalID = retrievedMsg.id.id;
+    deletedMsgContents.body = body;
+    deletedMsgContents.timestamp = retrievedMsg.t;
+    deletedMsgContents.from = author;
+    deletedMsgContents.isMedia = isMedia;
+    deletedMsgContents.fileName = retrievedMsg.filename;
+    deletedMsgContents.mimetype = retrievedMsg.mimetype;
+    deletedMsgContents.type = retrievedMsg.type;
+    deletedMsgContents.mediaText = retrievedMsg.text;
+    deletedMsgContents.Jid = deleteMsg.key.remoteJid;
 
 
     if ("id" in deletedMsgContents)
     {
-        const transcation = deletedDB.result.transaction('msgs', "readwrite")
-        let request = transcation.objectStore("msgs").add(deletedMsgContents)
+        const transcation = deletedDB.result.transaction('msgs', "readwrite");
+        let request = transcation.objectStore("msgs").add(deletedMsgContents);
         request.onerror = (e) =>
         {
 
@@ -1002,17 +1002,17 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
                 console.log("WhatsIncognito: Error saving msg, msg ID already exists");
             } else
             {
-                console.log("WhatsIncognito: Unexpected error saving deleted msg")
+                console.log("WhatsIncognito: Unexpected error saving deleted msg");
             }
         };
         request.onsuccess = (e) =>
         {
-            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.")
+            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
         }
     }
     else
     {
-        console.log("WhatsIncognito: Deleted msg contents not found")
+        console.log("WhatsIncognito: Deleted msg contents not found");
     }
 
 }
@@ -1056,7 +1056,7 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI = {}
 
     var moduleFinder = moduleRaid();
-    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadAndDecrypt")[0]
+    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadAndDecrypt")[0];
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 
