@@ -110,16 +110,18 @@ function loadDeletedMsgTag(currentNode)
         request.onsuccess = (e) =>
         {
             messageText.textContent = ""
-            const textStyle =  localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgba(128, 128, 128)"
             if (request.result)
             {
-                textSpan.style.cssText = textStyle
+                const textSpanStyle = localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)"
+                const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)"
+                textSpan.style.cssText = textSpanStyle
                 textSpan.className = "copyable-text selectable-text"
+                const titleSpan = document.createElement("span")
+                titleSpan.style.cssText = titleSpanStyle
                 if (request.result.isMedia)
                 {
-                    const titleSpan = document.createElement("span")
-                    titleSpan.style.cssText = textStyle
-                    titleSpan.textContent = "Restored Media: \n"
+                    
+                    titleSpan.textContent = "Restored media: \n"
                     messageText.appendChild(titleSpan) // Top title span
 
                     if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText //caption text span
@@ -159,7 +161,11 @@ function loadDeletedMsgTag(currentNode)
                         messageText.appendChild(aTag)
                     }
                 }
-                else textSpan.textContent = "Restored message: \n" + request.result.body
+                else {
+                    titleSpan.textContent = "Restored message: \n"
+                    textSpan.textContent = request.result.body
+                    messageText.appendChild(titleSpan)
+                } 
 
             }
             else textSpan.textContent = "Failed to restore message"
