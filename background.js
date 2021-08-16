@@ -27,6 +27,10 @@ function onMessage(messageEvent, sender, callback)
         {
             localStorage["showReadWarning"] = messageEvent.showReadWarning;
         }
+        if ("saveDeletedMsgs" in messageEvent)
+        {
+            localStorage["saveDeletedMsgs"] = messageEvent.saveDeletedMsgs;
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -34,6 +38,7 @@ function onMessage(messageEvent, sender, callback)
         var readConfirmationsHook = true;
         var showReadWarning = false;
 		var safetyDelay = 0;
+        var saveDeletedMsgs = false
         if (localStorage["presenceUpdatesHook"] == "true" || localStorage["presenceUpdatesHook"] == "false")
         {
             presenceUpdatesHook = localStorage["presenceUpdatesHook"] == "true";
@@ -50,12 +55,17 @@ function onMessage(messageEvent, sender, callback)
 		{
 			safetyDelay = localStorage["safetyDelay"];
 		}
+        if (localStorage["saveDeletedMsgs"] != undefined && localStorage["saveDeletedMsgs"] != null)
+		{
+			saveDeletedMsgs = localStorage["saveDeletedMsgs"] == "true";
+		}
         callback(
         {
             presenceUpdatesHook: presenceUpdatesHook,
             readConfirmationsHook: readConfirmationsHook,
             showReadWarning: showReadWarning,
-			safetyDelay: safetyDelay
+			safetyDelay: safetyDelay,
+            saveDeletedMsgs: saveDeletedMsgs
         });
     }
 }

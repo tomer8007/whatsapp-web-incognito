@@ -12,7 +12,6 @@ WACrypto.decryptWithWebCrypto = function(buffer)
         var data = buffer.slice(48);
         var keys = getKeys();
         var algorithmInfo = {name: "AES-CBC",iv: new Uint8Array(iv)};
-
         return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, !1, ["decrypt"]).then(function(key) {
             return window.crypto.subtle.decrypt(algorithmInfo, key, data).catch(function(e) {
               console.log(e.code + ", " + e.toString());

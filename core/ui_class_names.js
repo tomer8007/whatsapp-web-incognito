@@ -26,6 +26,13 @@ UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
 UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
 
 UIClassNames.CHAT_ENTRY_CLASS = "_3m_Xw"; // the chat entry in the chats list
-UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM" // the class inside the top-level item;
+UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM"; // the class inside the top-level item;
 
+UIClassNames.CHAT_MESSAGE = "_2wUmf";
+UIClassNames.CHAT_MESSAGE_FROM_SELF_CLASS = "_21bY5";
+UIClassNames.TEXT_WRAP_POSITION_CLASS = "_1Gy50";
+UIClassNames.DELETED_MESSAGE_DIV_CLASS = "_3TjU1";
+UIClassNames.DELETED_MESSAGE_SPAN = "_20bHr";
+UIClassNames.IMAGE_IMESSAGE_IMG = "_1WrWf";
+UIClassNames.STICKER_MESSAGE_TAG = "_3mPXD";
 })();
