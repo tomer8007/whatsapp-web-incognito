@@ -37,7 +37,7 @@ wsHook.before = function (originalData, url)
             // encrytped binary payload
             WACrypto.decryptWithWebCrypto(data).then(function (decrypted)
             {
-                if (decrypted == null) resolve(originalData);
+                if (decrypted == null) return resolve(originalData);
 
                 var nodeParser = new NodeParser();
                 var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
@@ -100,7 +100,7 @@ wsHook.after = function (messageEvent, url)
         {
             WACrypto.decryptWithWebCrypto(data).then(function (decrypted)
             {
-                if (decrypted == null) resolve(messageEvent);
+                if (decrypted == null) return resolve(messageEvent);
 
                 var nodeParser = new NodeParser();
                 var node = nodeParser.readNode(new NodeBinaryReader(decrypted));

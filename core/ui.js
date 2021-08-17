@@ -213,79 +213,24 @@ function addIconIfNeeded()
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
         {
             document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-                {
-                    detail: JSON.stringify(options)
-                }));
+            {
+                detail: JSON.stringify(options)
+            }));
 
-            var dropContent = " \
-                    <div class='incognito-options-container' dir='ltr'> \
-                        <div class='incognito-options-title'>Incognito options</div> \
-                                                                                    \
-                                                                                    \
-                        <div class='incognito-options-item'> \
-                            <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
-                                <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important;'> \
-                                    <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-                    "unchecked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
-                                    </div> \
-                                </div> \
-                                Don't send read confirmations \
-                                <div class='incognito-options-description'>Messages that their read confirmation was blocked will be<p> marked in red instead of green.</div> \
-                            </div> \
-                                    \
-                                    \
-                            <div id='incognito-safety-delay-option-panel' style='margin-left: 25px !important; margin-top: 15px; font-size: 12px;'> \
-                                Send after safety delay: <br> \
-                                <div style='margin-top: 10px'> \
-                                    <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
-                                        <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
-                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
-                                        Never \
-                                    </div> \
-                                    <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
-                                        <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
-                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
-                                        After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
-                                        step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
-                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
-                                    </div> \
-                                </div> \
-                            </div> \
-                        </div> \
-                                \
-                                \
-                        <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
-                            <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
-                                    <div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-                    "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
-                                </div> \
-                            </div> \
-                            Don't send \"Last Seen\" updates \
-                            <div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
-                        </div> \
-                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
-                        <div class='checkbox-container " + UIClassNames.CHECKBOX_CONTAINER_CLASS + "' style='display:inline !important'> \
-                                <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-                    "unchecked " + UIClassNames.RECTANGLE_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
-                            </div> \
-                        </div> \
-                        Save deleted messages \
-                        <div class='incognito-options-description'>Saves deleted messages and restores them later.</div> \
-                    </div> \
-                    </div>";
+            var dropContent = generateDropContent(options);
 
             var drop = new Drop(
+            {
+                target: menuItemElem,
+                content: dropContent,
+                position: "bottom left",
+                classes: "drop-theme-incognito",
+                openOn: "click",
+                tetherOptions:
                 {
-                    target: menuItemElem,
-                    content: dropContent,
-                    position: "bottom left",
-                    classes: "drop-theme-incognito",
-                    openOn: "click",
-                    tetherOptions:
-                    {
-                        offset: "-4px -4px 0 0"
-                    },
-                });
+                    offset: "-4px -4px 0 0"
+                },
+            });
             var originalCloseFunction = drop.close;
             drop.close = function ()
             {
@@ -331,6 +276,68 @@ function addIconIfNeeded()
             confirmButtonText: "Got it",
         });
     }
+}
+
+function generateDropContent(options)
+{
+    var dropContent = " \
+        <div class='incognito-options-container' dir='ltr'> \
+            <div class='incognito-options-title'>Incognito options</div> \
+                                                                        \
+                                                                        \
+            <div class='incognito-options-item'> \
+                <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
+                    <div class='checkbox-container' style='display:inline !important;'> \
+                        <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                        </div> \
+                    </div> \
+                    Don't send read confirmations \
+                    <div class='incognito-options-description'>Messages that their read confirmation was blocked<p> will be marked in red instead of green.</div> \
+                </div> \
+                        \
+                        \
+                <div id='incognito-safety-delay-option-panel' style='margin-left: 25px !important; margin-top: 15px; font-size: 12px;'> \
+                    Send after safety delay: <br> \
+                    <div style='margin-top: 10px'> \
+                        <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
+                            <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
+                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
+                            Never \
+                        </div> \
+                        <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
+                            <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
+                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
+                            After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
+                            step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
+                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
+                        </div> \
+                    </div> \
+                </div> \
+            </div> \
+                    \
+                    \
+            <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
+                <div class='checkbox-container' style='display:inline !important'> \
+                        <div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                    </div> \
+                </div> \
+                Don't send \"Last Seen\" updates \
+                <div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
+            </div> \
+            <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
+            <div class='checkbox-container' style='display:inline !important'> \
+                    <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
+        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+                </div> \
+            </div> \
+            Save deleted messages \
+            <div class='incognito-options-description'>Saves deleted messages and restores them later.</div> \
+        </div> \
+        </div>";
+
+    return dropContent;
 }
 
 document.addEventListener('onMarkAsReadClick', function (e)
