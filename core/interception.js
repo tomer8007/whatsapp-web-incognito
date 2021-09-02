@@ -720,9 +720,9 @@ function findChatElementForJID(jid)
     for (var i = 0; i < chatsShown.length; i++)
     {
         var reactElement = FindReact(chatsShown[i]);
-        if (reactElement.props.chat == undefined) continue;
+        if (reactElement.props.data == undefined) continue;
 
-        var id = reactElement.props.chat.id;
+        var id = reactElement.props.data.data.id;
 
         var matches = false;
         if (typeof (jid) == "object" && id == jid)
@@ -788,7 +788,7 @@ function getChatByJID(jid)
     var chat = findChatElementForJID(jid);
     if (chat != null)
     {
-        chat = FindReact(chat).props.chat;
+        chat = FindReact(chat).props.data.data;
     }
     else
     {
@@ -1031,25 +1031,38 @@ function showToast(message)
 
 // Based on https://stackoverflow.com/a/39165137/1806873
 // TODO: Update the function to support Reat 16+ in a good way
-window.FindReact = function (dom)
-{
-    for (var key in dom)
-    {
-        if (key.startsWith("__reactInternalInstance$"))
-        {
-            var reactElement = dom[key];
+function FindReact(dom, traverseUp = 0) {
+    const key = Object.keys(dom).find(key=>{
+        return key.startsWith("__reactFiber$") // react 17+
+            || key.startsWith("__reactInternalInstance$"); // react <17
+    });
+    const domFiber = dom[key];
+    if (domFiber == null) return null;
 
-            return reactElement.memoizedProps.children;
-
-            var compInternals = dom[key]._currentElement;
-            var compWrapper = compInternals._owner;
-            if (compWrapper == null) return compInternals;
-            var comp = compWrapper._instance;
-            return comp;
+    // react <16
+    if (domFiber._currentElement) {
+        let compFiber = domFiber._currentElement._owner;
+        for (let i = 0; i < traverseUp; i++) {
+            compFiber = compFiber._currentElement._owner;
         }
+        return compFiber._instance;
     }
-    return null;
-};
+
+    // react 16+
+    const GetCompFiber = fiber=>{
+        //return fiber._debugOwner; // this also works, but is __DEV__ only
+        let parentFiber = fiber.return;
+        while (typeof parentFiber.type == "string") {
+            parentFiber = parentFiber.return;
+        }
+        return parentFiber;
+    };
+    let compFiber = GetCompFiber(domFiber);
+    for (let i = 0; i < traverseUp; i++) {
+        compFiber = GetCompFiber(compFiber);
+    }
+    return compFiber.stateNode;
+}
 
 function exposeWhatsAppAPI()
 {

@@ -49,19 +49,19 @@ function initialize()
                         document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
                     }
 
-                    //Scan for deleted msgs and replace the text
+                    // Scan for deleted msgs and replace the text
                     if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main")
                     {
                         const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + UIClassNames.CHAT_MESSAGE + ".message-out");
                         for (let i = 0; i < msgNodes.length; i++)
                         {
                             const currentNode = msgNodes[i];
-                            loadDeletedMsgTag(currentNode);
+                            restoreDeletedMessage(currentNode);
                         }
                     }
                     else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out")))
                     {
-                        loadDeletedMsgTag(addedNode);
+                        restoreDeletedMessage(addedNode);
                     }
                 }
                 for (var j = 0; j < removedNodes.length; j++)
@@ -90,14 +90,12 @@ function initialize()
 
 }
 
-function loadDeletedMsgTag(currentNode)
+function restoreDeletedMessage(messageNode)
 {
-
-    const messageText = currentNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
+    const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (messageText)
     {
-
-        const data_id = currentNode.getAttribute("data-id");
+        const data_id = messageNode.getAttribute("data-id");
         const msgID = data_id.split("_")[2];
 
         const transcation = deletedDB.result.transaction('msgs', "readonly");

@@ -9,8 +9,6 @@
 .icon-incognito
 {
     background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
-    color: var(--panel-header-icon);
-    filter: invert(1);
 	  background-repeat: no-repeat;
     background-position: 1px 1px !important;
     background-size: 21px 21px !important;
