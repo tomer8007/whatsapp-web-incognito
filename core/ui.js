@@ -49,7 +49,7 @@ function initialize()
                         document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
                     }
 
-                    // Scan for deleted msgs and replace the text
+                    // Scan for deleted messages and replace the text
                     if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main")
                     {
                         const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + UIClassNames.CHAT_MESSAGE + ".message-out");

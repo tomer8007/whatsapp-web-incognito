@@ -1,9 +1,42 @@
-if (typeof chrome !== "undefined") {
+if (typeof chrome !== "undefined") 
+{
 	var browser = chrome;
 }
 
 injectFunctionInstantly(webScoketInterception);
 injectOtherScripts();
+
+async function injectOtherScripts() 
+{
+	injectScript('core/parsing/binary_reader.js');
+	injectScript('core/parsing/node_parser.js');
+	injectScript('core/parsing/binary_writer.js');
+	injectScript('core/parsing/node_packer.js');
+	injectScript('core/parsing/message_parser.js');
+	injectScript('core/parsing/message_types.js');
+
+	injectScript('core/wa_packet.js');
+	injectScript('core/crypto.js');
+	injectScript('core/ui_class_names.js');
+	
+	injectScript('core/interception.js');
+
+	setTimeout(
+		function() {injectScript('lib/moduleraid.js');},
+		100);
+}
+
+function injectScript(scriptName) {
+	return new Promise(function(resolve, reject) {
+		var s = document.createElement('script');
+		s.src = chrome.extension.getURL(scriptName);
+		s.onload = function() {
+			this.parentNode.removeChild(this);
+			resolve(true);
+		};
+		(document.head||document.documentElement).appendChild(s);
+	});
+}
 
 function injectFunctionInstantly(injectedFunction)
 {
@@ -18,34 +51,24 @@ function injectFunctionInstantly(injectedFunction)
 	(document.head||document.documentElement).appendChild(s);
 }
 
-async function injectOtherScripts() 
+async function injectFromDisk(scriptNames)
 {
-	await injectScript('core/parsing/binary_reader.js');
-	await injectScript('core/parsing/node_parser.js');
-	await injectScript('core/parsing/binary_writer.js');
-	await injectScript('core/parsing/node_packer.js');
-	await injectScript('core/parsing/message_parser.js');
-	await injectScript('core/parsing/message_types.js');
+	// Reading from disk seems to slow down the injection
+	var text;
+	for (var i = 0; i < scriptNames.length; i++)
+	{
+		var scriptName = scriptNames[i];
+		console.log("looking at " + scriptName);
+		var response = await fetch(chrome.extension.getURL(scriptName));
+		var scriptText = new TextDecoder("utf-8").decode(await response.body.getReader().read().value);
+		text += "\r\n\r\n" + scriptText;
+	}
 
-	await injectScript('core/wa_packet.js');
-	await injectScript('core/crypto.js');
-	await injectScript('core/ui_class_names.js');
-
-	await injectScript('lib/moduleraid.js');
 	
-	await injectScript('core/interception.js');
-}
+	var s = document.createElement('script');
+	s.textContent = text;
 
-function injectScript(scriptName) {
-	return new Promise(function(resolve, reject) {
-		var s = document.createElement('script');
-		s.src = chrome.extension.getURL(scriptName);
-		s.onload = function() {
-			this.parentNode.removeChild(this);
-			resolve(true);
-		};
-		(document.head||document.documentElement).appendChild(s);
-	});
+	(document.head||document.documentElement).appendChild(s);
 }
 
 function webScoketInterception()

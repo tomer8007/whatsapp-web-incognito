@@ -3,35 +3,41 @@ var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
 var saveDeletedMsgsHook = false;
 var safetyDelay = 0;
-var WAdebugMode = false;
+
 var isInitializing = true;
 var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
 
+var WAPassthrough = false;
+var WAdebugMode = false;
+
 // 
 // Actual interception
 // 
 
 
-// As you scroll, a hook to load msgs is constantly called and hence the function below is called constantly
 wsHook.before = function (originalData, url)
 {
     // a WebSocket frame is about to be sent out.
 
-    if (!WACrypto.isWebSocketPayloadSupported(originalData))
-    {
-        document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
-        return resolve(messageEvent);
-    }
-
-    var payload = WACrypto.parseWebSocketPayload(originalData);
-    var tag = payload.tag;
-    var data = payload.data;
-
     return new Promise(function (resolve, reject)
     {
+        if (WAPassthrough)
+        {
+            return resolve(originalData);
+        }
+        else if (!WACrypto.isWebSocketPayloadSupported(originalData))
+        {
+            document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
+            return resolve(originalData);
+        }
+
+        var payload = WACrypto.parseWebSocketPayload(originalData);
+        var tag = payload.tag;
+        var data = payload.data;
+
         if (data instanceof ArrayBuffer)
         {
             // encrytped binary payload
@@ -86,7 +92,11 @@ wsHook.after = function (messageEvent, url)
     return new Promise(function (resolve, reject)
     {
         var manipulatedMessageEvent = messageEvent;
-        if (!WACrypto.isWebSocketPayloadSupported(messageEvent.data))
+        if (WAPassthrough)
+        {
+            return resolve(messageEvent);
+        }
+        else if (!WACrypto.isWebSocketPayloadSupported(messageEvent.data))
         {
             document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
             return resolve(messageEvent);
@@ -151,7 +161,6 @@ var NodeHandler = {};
 
 (function ()
 {
-
     NodeHandler.isSentNodeAllowed = function (node, tag)
     {
         try
@@ -336,7 +345,7 @@ var NodeHandler = {};
                             if (msgs[i].id.id == message.message.protocolMessage.key.id)
                             {
                                 // run save deleted msg function
-                                saveDeletedMsgFunc(msgs[i], message);
+                                saveDeletedMessage(msgs[i], message);
                                 break
                             }
                         }
@@ -377,24 +386,25 @@ var NodeHandler = {};
             }
         }
 
-
-
-        
-        if ("search" === type) {
+        if ("search" === type)
+        {
             messages = { eof: "true" === nodeReader.attr("last", node), messages: messages };
         }
 
-        if (messages.length > 0) {
+        if (messages.length > 0) 
+        {
             if (WAdebugMode) console.log("Got messages! (count: " + messages.length + " )");
 
-            if (isScrappingMessages) {
+            if (isScrappingMessages) 
+            {
                 isScrappingMessages = false;
                 messages = messages.concat(messages);
 
                 if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
                 //handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
             }
-            else if (WAdebugMode) {
+            else if (WAdebugMode) 
+            {
                 console.log(JSON.parse(JSON.stringify(messages)))
             }
         }
@@ -948,11 +958,10 @@ deletedDB.onsuccess = () =>
     console.log("WhatsIncognito: Database loaded");
 }
 
-const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
+const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
 {
     let deletedMsgContents = {}
     // Determine author data
-    //console.log(retrievedMsg)
     let author = "";
     if (deleteMsg.key.fromMe || !deleteMsg.isGroupMsg) author = retrievedMsg.from.user;
     else author = retrievedMsg.author.user;
@@ -964,7 +973,7 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
     {
         isMedia = true;
 
-        //get extended media key              
+        // get extended media key              
         try
         {
             const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, type: retrievedMsg.type, signal: (new AbortController).signal });
@@ -974,7 +983,6 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
         catch (e) { console.error(e); }
     }
     else body = retrievedMsg.body;
-
 
     deletedMsgContents.id = deleteMsg.key.id;
     deletedMsgContents.originalID = retrievedMsg.id.id;
@@ -988,7 +996,6 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
     deletedMsgContents.mediaText = retrievedMsg.text;
     deletedMsgContents.Jid = deleteMsg.key.remoteJid;
 
-
     if ("id" in deletedMsgContents)
     {
         const transcation = deletedDB.result.transaction('msgs', "readwrite");
@@ -1000,7 +1007,8 @@ const saveDeletedMsgFunc = async (retrievedMsg, deleteMsg) =>
             if (request.error.name == "ConstraintError")
             {
                 console.log("WhatsIncognito: Error saving msg, msg ID already exists");
-            } else
+            } 
+            else
             {
                 console.log("WhatsIncognito: Unexpected error saving deleted msg");
             }
@@ -1030,8 +1038,8 @@ function showToast(message)
 }
 
 // Based on https://stackoverflow.com/a/39165137/1806873
-// TODO: Update the function to support Reat 16+ in a good way
-function FindReact(dom, traverseUp = 0) {
+function FindReact(dom, traverseUp = 0) 
+{
     const key = Object.keys(dom).find(key=>{
         return key.startsWith("__reactFiber$") // react 17+
             || key.startsWith("__reactInternalInstance$"); // react <17

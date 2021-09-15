@@ -1,4 +1,5 @@
-function WAPacket() {
+function WAPacket() 
+{
         var e = arguments.length > 0 && void 0 !== arguments[0] ? arguments[0] : {}
           , t = e.data;
         this.data = t,
@@ -17,14 +18,15 @@ function WAPacket() {
         this.resendTimer = 0,
         this.ephemeral = !!e.ephemeral,
         this.ignore = !!e.ignore
-    }
+    };
       var c = {
         NEW: "REQUEST_STATE_NEW",
         SENT: "REQUEST_STATE_SENT",
         WEBDACKED: "REQUEST_STATE_WEBDACKED",
         WILL_RETRY: "REQUEST_STATE_WILL_RETRY"
     };
-    WAPacket.prototype = {
+    WAPacket.prototype = 
+    {
         getTag: function() {
             return this.tag || (this.onSend ? this.onSend.tag : void 0)
         },
