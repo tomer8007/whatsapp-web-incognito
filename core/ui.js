@@ -123,7 +123,7 @@ function restoreDeletedMessage(messageNode)
                     messageText.appendChild(titleSpan); // Top title span
 
                     if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText; //caption text span
-
+                    console.log(request.result.type)
                     if (request.result.type === "image")
                     {
                         const imgTag = document.createElement("img");
@@ -158,11 +158,44 @@ function restoreDeletedMessage(messageNode)
                         aTag.textContent = "Download \"" + request.result.fileName + "\"";
                         messageText.appendChild(aTag);
                     }
+                    else if (request.result.type === "ptt") // audio 
+                    {
+                        const audioTag = document.createElement("audio")
+                        audioTag.controls = true;
+                        const sourceTag = document.createElement("source");
+                        sourceTag.type = request.result.mimetype;
+                        sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                        audioTag.appendChild(sourceTag);
+                        messageText.appendChild(audioTag);
+                    }
+                    
                 }
                 else {
-                    titleSpan.textContent = "Restored message: \n";
-                    textSpan.textContent = request.result.body;
-                    messageText.appendChild(titleSpan);
+                    if (request.result.type === "vcard") // contact cards
+                    {
+                        let vcardBody = request.result.body
+                        vcardBody = vcardBody.split(":")
+                        const phone = vcardBody[vcardBody.length-2].slice(0, -4)
+                        const aTagPhone = document.createElement("a")
+                        aTagPhone.href = "tel:" + phone
+                        aTagPhone.textContent = phone
+                        const name = vcardBody[4].split(";")[0].slice(0, -4)
+                        const pTag = document.createElement("p")
+
+                        titleSpan.textContent = "Contact Card: \n\n"
+                        pTag.textContent = "Name: " + name + "\n" + "Contact No.: "
+                        
+                        messageText.appendChild(titleSpan)
+                        messageText.appendChild(pTag)
+                        pTag.appendChild(aTagPhone)
+                        
+                    }
+                    else {
+                        titleSpan.textContent = "Restored message: \n";
+                        textSpan.textContent = request.result.body;
+                        messageText.appendChild(titleSpan);
+                    }
+                    
                 } 
 
             }
