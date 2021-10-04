@@ -983,6 +983,8 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
     deletedMsgContents.type = retrievedMsg.type;
     deletedMsgContents.mediaText = retrievedMsg.text;
     deletedMsgContents.Jid = deleteMsg.key.remoteJid;
+    deletedMsgContents.lng = retrievedMsg.lng;
+    deletedMsgContents.lat = retrievedMsg.lat;
 
     if ("id" in deletedMsgContents)
     {
