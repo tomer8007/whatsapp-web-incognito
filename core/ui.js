@@ -8,7 +8,6 @@ var isInterceptionWorking = false;
 var isBadProtocol = false;
 var isUIClassesWorking = true;
 var deletedDB = null;
-var theme = "light";
 
 function initialize()
 {
@@ -19,6 +18,7 @@ function initialize()
         var mutationObserver = new MutationObserver(function (mutations)
         {
             var found = false;
+            var theme = getTheme();
             for (var i = 0; i < mutations.length; i++)
             {
                 var addedNodes = mutations[i].addedNodes;
@@ -57,12 +57,12 @@ function initialize()
                         for (let i = 0; i < msgNodes.length; i++)
                         {
                             const currentNode = msgNodes[i];
-                            restoreDeletedMessage(currentNode);
+                            restoreDeletedMessage(currentNode, theme);
                         }
                     }
                     else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out")))
                     {
-                        restoreDeletedMessage(addedNode);
+                        restoreDeletedMessage(addedNode, theme);
                     }
                 }
                 for (var j = 0; j < removedNodes.length; j++)
@@ -91,7 +91,7 @@ function initialize()
 
 }
 
-function restoreDeletedMessage(messageNode)
+function restoreDeletedMessage(messageNode, theme)
 {
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (messageText)
@@ -111,7 +111,7 @@ function restoreDeletedMessage(messageNode)
             messageText.textContent = "";
             if (request.result)
             {
-                const textSpanStyle = theme == "dark" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
+                const textSpanStyle = theme == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
                 const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
                 textSpan.style.cssText = textSpanStyle;
                 textSpan.className = "copyable-text selectable-text";
@@ -184,14 +184,12 @@ function restoreDeletedMessage(messageNode)
                         aTagPhone.target = "_blank";
                         aTagPhone.rel = "noopener noreferrer";
                         const name = vcardBody[4].split(";")[0].slice(0, -4);
-                        const pTag = document.createElement("p");
 
                         titleSpan.textContent = "Contact card: \n\n";
-                        pTag.textContent = "Name: " + name + "\n" + "Contact No.: ";
+                        textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
 
                         messageText.appendChild(titleSpan);
-                        messageText.appendChild(pTag);
-                        pTag.appendChild(aTagPhone);
+                        textSpan.appendChild(aTagPhone);
 
                     }
                     else if (request.result.type === "location")
@@ -437,14 +435,18 @@ document.addEventListener('isInterceptionWorking', function (e)
 {
     isInterceptionWorking = e.detail;
     deletedDB = indexedDB.open("deletedMsgs", 1)
-
-    // light/dark mode detection
-    if (localStorage["theme"] != "null") theme = localStorage["theme"].replace(/\"/g, "")
-    else
-    {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = "dark"
-    }
 });
+
+function getTheme() 
+{
+    // light/dark mode detection
+    if (localStorage["theme"] != "null") return localStorage["theme"]
+    else // this is if there is no theme selected by default (null)
+    {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return "\"dark\""
+        else return "\"light\""
+    }
+}
 
 function onReadConfirmaionsTick()
 {
