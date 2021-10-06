@@ -18,7 +18,6 @@ function initialize()
         var mutationObserver = new MutationObserver(function (mutations)
         {
             var found = false;
-            var theme = getTheme();
             for (var i = 0; i < mutations.length; i++)
             {
                 var addedNodes = mutations[i].addedNodes;
@@ -57,12 +56,12 @@ function initialize()
                         for (let i = 0; i < msgNodes.length; i++)
                         {
                             const currentNode = msgNodes[i];
-                            restoreDeletedMessage(currentNode, theme);
+                            restoreDeletedMessage(currentNode);
                         }
                     }
                     else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out")))
                     {
-                        restoreDeletedMessage(addedNode, theme);
+                        restoreDeletedMessage(addedNode);
                     }
                 }
                 for (var j = 0; j < removedNodes.length; j++)
@@ -91,8 +90,8 @@ function initialize()
 
 }
 
-function restoreDeletedMessage(messageNode, theme)
-{
+function restoreDeletedMessage(messageNode) {
+
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (messageText)
     {
@@ -111,7 +110,7 @@ function restoreDeletedMessage(messageNode, theme)
             messageText.textContent = "";
             if (request.result)
             {
-                const textSpanStyle = theme == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
+                const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
                 const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
                 textSpan.style.cssText = textSpanStyle;
                 textSpan.className = "copyable-text selectable-text";
