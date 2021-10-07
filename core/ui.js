@@ -90,8 +90,8 @@ function initialize()
 
 }
 
-function restoreDeletedMessage(messageNode) {
-
+function restoreDeletedMessage(messageNode) 
+{
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (messageText)
     {
@@ -262,24 +262,24 @@ function addIconIfNeeded()
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
         {
             document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-                {
-                    detail: JSON.stringify(options)
-                }));
+            {
+                detail: JSON.stringify(options)
+            }));
 
             var dropContent = generateDropContent(options);
 
             var drop = new Drop(
+            {
+                target: menuItemElem,
+                content: dropContent,
+                position: "bottom left",
+                classes: "drop-theme-incognito",
+                openOn: "click",
+                tetherOptions:
                 {
-                    target: menuItemElem,
-                    content: dropContent,
-                    position: "bottom left",
-                    classes: "drop-theme-incognito",
-                    openOn: "click",
-                    tetherOptions:
-                    {
-                        offset: "-4px -4px 0 0"
-                    },
-                });
+                    offset: "-4px -4px 0 0"
+                },
+            });
             var originalCloseFunction = drop.close;
             drop.close = function ()
             {
