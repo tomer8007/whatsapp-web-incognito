@@ -184,7 +184,7 @@ function restoreDeletedMessage(messageNode)
                         aTagPhone.rel = "noopener noreferrer";
                         const name = vcardBody[4].split(";")[0].slice(0, -4);
 
-                        titleSpan.textContent = "Contact card: \n\n";
+                        titleSpan.textContent = "Restored contact card: \r\n";
                         textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
 
                         messageText.appendChild(titleSpan);
