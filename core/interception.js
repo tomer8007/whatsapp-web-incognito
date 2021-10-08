@@ -298,18 +298,6 @@ var NodeHandler = {};
         return message;
     }
 
-    const arrayBufferToBase64 = (buffer) =>
-    {
-        var binary = '';
-        var bytes = new Uint8Array(buffer);
-        var len = bytes.byteLength;
-        for (var i = 0; i < len; i++)
-        {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
-    }
-
 
     NodeHandler.isReceivedNodeAllowed = function (node, tag)
     {
@@ -995,6 +983,8 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
     deletedMsgContents.type = retrievedMsg.type;
     deletedMsgContents.mediaText = retrievedMsg.text;
     deletedMsgContents.Jid = deleteMsg.key.remoteJid;
+    deletedMsgContents.lng = retrievedMsg.lng;
+    deletedMsgContents.lat = retrievedMsg.lat;
 
     if ("id" in deletedMsgContents)
     {
@@ -1023,6 +1013,18 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
         console.log("WhatsIncognito: Deleted msg contents not found");
     }
 
+}
+
+const arrayBufferToBase64 = (buffer) =>
+{
+    var binary = '';
+    var bytes = new Uint8Array(buffer);
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++)
+    {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
 }
 
 function showToast(message)
