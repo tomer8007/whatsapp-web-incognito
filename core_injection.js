@@ -12,18 +12,20 @@ async function injectOtherScripts()
 	injectScript('core/parsing/node_parser.js');
 	injectScript('core/parsing/binary_writer.js');
 	injectScript('core/parsing/node_packer.js');
-	injectScript('core/parsing/message_parser.js');
+	await injectScript('core/parsing/message_parser.js');
 	injectScript('core/parsing/message_types.js');
 
 	injectScript('core/wa_packet.js');
 	injectScript('core/crypto.js');
 	injectScript('core/ui_class_names.js');
 	
+	injectScript('lib/pako.js');
+	injectScript('core/multi_device.js');
 	injectScript('core/interception.js');
 
 	setTimeout(
 		function() {injectScript('lib/moduleraid.js');},
-		100);
+		900);
 }
 
 function injectScript(scriptName) {

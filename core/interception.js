@@ -17,127 +17,163 @@ var WAdebugMode = false;
 // Actual interception
 // 
 
-
 wsHook.before = function (originalData, url)
 {
+    //
     // a WebSocket frame is about to be sent out.
+    //
 
     return new Promise(function (resolve, reject)
     {
-        if (WAPassthrough)
+        if (WAPassthrough) return resolve(originalData);
+
+        var data = originalData;
+        var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+
+        var tag = "";
+        if (!isMultiDevice)
         {
-            return resolve(originalData);
-        }
-        else if (!WACrypto.isWebSocketPayloadSupported(originalData))
-        {
-            document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
-            return resolve(originalData);
+            payload = WACrypto.parseWebSocketPayload(data);
+            tag = payload.tag;
+            data = payload.data;
         }
 
-        var payload = WACrypto.parseWebSocketPayload(originalData);
-        var tag = payload.tag;
-        var data = payload.data;
-
-        if (data instanceof ArrayBuffer)
+        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
         {
             // encrytped binary payload
-            WACrypto.decryptWithWebCrypto(data).then(function (decrypted)
+            return WACrypto.decryptWithWebCrypto(data, isMultiDevice, false).then(function (decryptedFrames)
             {
-                if (decrypted == null) return resolve(originalData);
-
-                var nodeParser = new NodeParser();
-                var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-
-                if (isInitializing)
+                if (decryptedFrames == null) 
                 {
-                    isInitializing = false;
-                    console.log("WhatsIncognito: Interception is working.");
-                    document.dispatchEvent(new CustomEvent('isInterceptionWorking', { detail: true }));
+                    return resolve(originalData);
                 }
 
-                // Checks if read receipts should be sent
-                var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
-                var manipulatedNode = NodeHandler.manipulateSentNode(node, tag);
-                WACrypto.packNodeForSending(manipulatedNode, tag).then(function (packet)
+                for (var i = 0; i < decryptedFrames.length; i++)
                 {
+                    var decryptedFrameInfo = decryptedFrames[i];
+                    var decryptedFrame = decryptedFrameInfo.frame;
+                    var counter = decryptedFrameInfo.counter;
+
+                    var nodeParser = new NodeParser(isMultiDevice);
+                    var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+    
+                    if (isInitializing)
+                    {
+                        isInitializing = false;
+                        console.log("WhatsIncognito: Interception is working.");
+                        document.dispatchEvent(new CustomEvent('onInterceptionWorking', 
+                                { detail: JSON.stringify({isInterceptionWorking: true, isMultiDevice: isMultiDevice}) }));
+                    }
+                    
                     if (WAdebugMode)
                     {
-                        console.log("[Out] Sending binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted): ");
+                        console.log("[Out] Sending binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted): ");
                         console.log(node);
                     }
+    
+                    // Checks if read receipts should be sent
+                    var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
+                    if (!isAllowed)
+                    {
+                        if (!isMultiDevice) return resolve(null);
+                        node[0] = "not_valid";
+                    }
 
-                    var manipulatedData = packet.serialize();
-                    if (isAllowed) resolve(manipulatedData);
-                    else resolve(null);
+                    var manipulatedNode = NodeHandler.manipulateSentNode(node, tag);
+                    decryptedFrames[i] = {node: manipulatedNode, counter: counter};
+                }
+
+                return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag).then(function (packet)
+                {
+                    return resolve(packet);
                 });
+                
+            }).catch(function(exception)
+            {
+                console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
+                console.error(exception);
+                return resolve(originalData);
             });
         }
         else
         {
             // textual payload
-            if (!(data instanceof ArrayBuffer))
-            {
-                if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
-                if (data != "" && WAdebugMode) console.log(data);
-                resolve(originalData);
-            }
+            if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
+            if (data != "" && WAdebugMode) console.log(data);
+            resolve(originalData);
         }
     });
 }
 
 wsHook.after = function (messageEvent, url)
 {
+    //
     // a WebScoket frame was received from network.
+    //
 
     return new Promise(function (resolve, reject)
     {
+        var data = messageEvent.data;
+        var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+
         var manipulatedMessageEvent = messageEvent;
-        if (WAPassthrough)
+        if (WAPassthrough) return resolve(messageEvent);
+
+        var tag = "";
+        if (!isMultiDevice)
         {
-            return resolve(messageEvent);
-        }
-        else if (!WACrypto.isWebSocketPayloadSupported(messageEvent.data))
-        {
-            document.dispatchEvent(new CustomEvent('onBadProtocolDetected', {}));
-            return resolve(messageEvent);
+            payload = WACrypto.parseWebSocketPayload(data);
+            tag = payload.tag;
+            data = payload.data;
         }
 
-        var payload = WACrypto.parseWebSocketPayload(messageEvent.data);
-        var tag = payload.tag;
-        var data = payload.data;
-
-        if (data instanceof ArrayBuffer)
+        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
         {
-            WACrypto.decryptWithWebCrypto(data).then(function (decrypted)
+            return WACrypto.decryptWithWebCrypto(data, isMultiDevice, true).then(function (decryptedFrames)
             {
-                if (decrypted == null) return resolve(messageEvent);
+                if (decryptedFrames == null) return resolve(messageEvent);
 
-                var nodeParser = new NodeParser();
-                var node = nodeParser.readNode(new NodeBinaryReader(decrypted));
-
-                if (WAdebugMode)
+                for (var i = 0; i < decryptedFrames.length; i++)
                 {
-                    console.log("[In] Received binary with tag '" + tag + "' (" + decrypted.byteLength + " bytes, decrypted)): ");
-                    console.log(node);
+                    var decryptedFrameInfo = decryptedFrames[i];
+                    var decryptedFrame = decryptedFrameInfo.frame;
+                    var counter = decryptedFrameInfo.counter;
+
+                    var nodeParser = new NodeParser(isMultiDevice);
+                    var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+
+                    if (WAdebugMode)
+                    {
+                        console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
+                        console.log(node);
+                    }
+
+                    var isAllowed = NodeHandler.isReceivedNodeAllowed(node, tag);
+                    if (!isAllowed)
+                    {
+                        if (!isMultiDevice) return resolve(null);
+                        node[0] = "not_valid";
+                    }
+
+                    var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
+                    decryptedFrames[i] = {node: manipulatedNode, counter: counter};
                 }
 
-                var isAllowed = NodeHandler.isReceivedNodeAllowed(node, tag);
-                if (isAllowed) resolve(messageEvent);
-                else resolve(null);
+                return resolve(messageEvent);
 
-
-                /*commented out due to a possible "Maximum call stack size exceeds" exception
-
-                var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
-                WACrypto.packNodeForSending(manipulatedNode, tag).then(function(packet)
+                /*
+                commented out due to a possible "Maximum call stack size exceeds" exception
+                
+                WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag).then(function (packet)
                 {
-                    var manipulatedData = packet.serializeWithoutBinaryOpts();
-
-                    manipulatedMessageEvent.data = manipulatedData;
-                    if (isAllowed) resolve(s);
-                    else resolve(null);
-                });*/
-
+                    return resolve(packet);
+                });
+                */
+            }).catch(function(e)
+            {
+                console.error("Passing-through incoming packet due to error:");
+                console.error(e);
+                return resolve(messageEvent);
             });
         }
         else
@@ -163,70 +199,73 @@ var NodeHandler = {};
 {
     NodeHandler.isSentNodeAllowed = function (node, tag)
     {
-        try
+        var subNodes = [node];
+        if (Array.isArray(nodeReader.children(node))) 
         {
-            if (nodeReader.tag(node) != "action") return true;
-            if (!Array.isArray(nodeReader.children(node))) return true;
+            subNodes = subNodes.concat(nodeReader.children(node));
+        }
 
-            var children = nodeReader.children(node);
-            for (var i = 0; i < children.length; i++)
+        for (var i = 0; i < subNodes.length; i++)
+        {
+            var child = subNodes[i];
+
+            var action = child[0];
+            var data = child[1];
+            var shouldBlock = 
+                (readConfirmationsHookEnabled && action === "read" ||
+                readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read" ||
+                readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+
+                (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
+                (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
+                (presenceUpdatesHookEnabled && action == "chatstate" && child[2][0][0] == "composing");
+
+            if (shouldBlock)
             {
-                var child = children[i];
-
-                var action = child[0];
-                var data = child[1];
-                var shouldBlock = (readConfirmationsHookEnabled && action === "read" ||
-                    readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
-
-                    (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-                    (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing");
-
-                if (shouldBlock)
+                switch (action)
                 {
-                    switch (action)
-                    {
-                        case "read":
-                            var isReadReceiptAllowed = exceptionsList.includes(data.jid);
-                            if (isReadReceiptAllowed)
+                    case "read":
+                    case "receipt":
+                        var jid = data.jid ? data.jid : data.to;
+                        var isReadReceiptAllowed = exceptionsList.includes(jid);
+                        if (isReadReceiptAllowed)
+                        {
+                            // this is the user trying to send out a read receipt.
+                            console.log("WhatsIncongito: Allowing read receipt to " + jid + " at index " + data.index);
+
+                            // exceptions are one-time operation, so remove it from the list
+                            exceptionsList = exceptionsList.filter(i => i !== jid)
+
+                            return true;
+                        }
+                        else
+                        {
+                            // We do not allow sending this read receipt.
+                            // invoke the callback and fake a failure response from server
+                            document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
+                                detail: jid
+                            }));
+
+                            if (action == "read" && wsHook.onMessage)
                             {
-                                // this is the user trying to send out a read receipt.
-                                console.log("WhatsIncongito: Allowing read receipt to " + data.jid + " at index " + data.index);
-
-                                // exceptions are one-time operation, so remove it from the list
-                                exceptionsList = exceptionsList.filter(i => i !== data.jid)
-
-                                return true;
-                            }
-                            else
-                            {
-                                // We do not allow sending this read receipt.
-                                // invoke the callback and fake a failure response from server
-                                document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-                                    detail: data["jid"]
-                                }));
-
                                 var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 403}" });
                                 wsHook.onMessage(messageEvent);
                             }
-                            break;
 
-                        case "presence":
-                            var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 200}" });
-                            wsHook.onMessage(messageEvent);
-                            break;
-                    }
+                        }
+                        break;
 
-                    console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-
-                    return false;
+                    case "presence":
+                        //var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 200}" });
+                        //wsHook.onMessage(messageEvent);
+                        break;
                 }
+
+                console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+                console.log(node);
+
+                return false;
             }
-        }
-        catch (exception)
-        {
-            console.error("WhatsIncognito: Allowing WA packet due to exception:");
-            console.error(exception);
-            return true;
         }
 
         return true;
@@ -236,38 +275,28 @@ var NodeHandler = {};
     {
         try
         {
-            if (nodeReader.tag(node) != "action") return node;
-            if (!Array.isArray(nodeReader.children(node))) return node;
+            if (node[0] == "message")
+            {
+                node = this.handleSentMessageNode(node);
+            }
 
             var children = nodeReader.children(node);
-            for (var i = 0; i < children.length; i++)
+            if (children != undefined)
             {
-                var child = children[i];
-
-                var action = child[0];
-                var data = child[1];
-
-                if (action == "message")
+                for (var i = 0; i < children.length; i++)
                 {
-                    var messageBuffer = child[2];
-                    var message = parseMessage(child);
-
-                    if (message != null)
+                    var subNode = children[i];
+                    if (subNode == undefined) continue;
+    
+                    var tag = subNode[0];    
+                    if (tag == "message")
                     {
-                        message = this.handleSentMessage(message);
-
-                        // TODO: following lines are commented out because apperently the parsing above is not complete,
-                        // so the message is not always restored identically
-
-                        // re-assmble everything
-                        // messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-                        // child[2] = messageBuffer; children[i] = child; node[2] = children;
+                        subNode = this.handleSentMessageNode(subNode);
+                        node[2][i] = subNode;
                     }
-
-
-                    return node;
                 }
             }
+            
         }
         catch (exception)
         {
@@ -279,14 +308,28 @@ var NodeHandler = {};
         return node;
     }
 
-    NodeHandler.handleSentMessage = function (message)
+    NodeHandler.handleSentMessageNode = function (messageNode)
     {
-        if (message.key && message.key.remoteJid && isChatBlocked(message.key.remoteJid))
+        var remoteJid = null;
+        if (messageNode[1] == undefined)
+        {
+            // non muti-device.
+            var message = parseMessage(messageNode);
+            if (message == null || message.key == null) return;
+            remoteJid = message.key.remoteJid;
+        }
+        else
+        {
+            // mutli device
+            remoteJid = messageNode[1]["to"];
+        }
+
+        if (remoteJid && isChatBlocked(remoteJid))
         {
             // If the user replyed to a message from this JID,
             // It probably means we can send read receipts for it.
 
-            var chat = getChatByJID(message.key.remoteJid);
+            var chat = getChatByJID(remoteJid);
             var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
             setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
         }
@@ -295,7 +338,14 @@ var NodeHandler = {};
         //         ...
         var putBreakpointHere = 1;
 
-        return message;
+        // TODO: following lines are commented out because apperently the message parsing above is not complete,
+        // so the message is not always restored identically
+
+        // re-assmble everything
+        // messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
+        // subNode[2] = messageBuffer; children[i] = subNode; node[2] = children;
+
+        return messageNode;
     }
 
     const arrayBufferToBase64 = (buffer) =>
@@ -315,45 +365,71 @@ var NodeHandler = {};
     {
         try
         {
-            var children = nodeReader.children(node);
-            var tag = nodeReader.tag(node);
-            var type = nodeReader.attr("type", node);
-            if (tag != "action") return true;
-            if (!Array.isArray(children)) return true;
+            //
+            // Check if this is a message deletion node
+            //
+            var nodeTag = nodeReader.tag(node);
+            if (nodeTag != "action" && nodeTag != "message") return true;
+            var isMultiDevice = nodeTag == "action";
 
-
-
-            for (var i = 0; i < children.length; i++)
+            var isRevokedMessage = false;
+            var remoteJid = null;
+            var messageId = null;
+            if (isMultiDevice)
             {
-                var child = children[i];
+                // non multi-device
 
-                var action = child[0];
-                var data = child[1];
-
-                var message = parseMessage(children[i]);
+                var message = parseMessage(node);
                 var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
                 if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue)
                 {
-                    // someone deleted a message, block
-                    if (saveDeletedMsgsHook)
+                    isRevokedMessage = true;
+                    remoteJid = message.key.remoteJid;
+                    messageId = message.message.protocolMessage.key.id;
+                }
+            }
+            else if (node[1] != null)
+            {
+                // multi-device
+                if (node[1]["edit"] == '7')
+                {
+                    // some kind of message edit? block
+                    isRevokedMessage = true;
+                    remoteJid = node[1]["from"];
+                    messageId = node[1]["id"];
+                }
+            }
+
+            if (isRevokedMessage)
+            {
+                // someone deleted a message, block
+                if (saveDeletedMsgsHook)
+                {
+                    const chat = getChatByJID(remoteJid);
+                    const msgs = chat.msgs.models;
+                    
+                    for (let i = 0; i < msgs.length; i++)
                     {
-                        const chat = getChatByJID(message.key.remoteJid);
-                        const msgs = chat.msgs.models;
-                        
-                        for (let i = 0; i < msgs.length; i++)
+                        if (msgs[i].id.id == messageId)
                         {
-                            if (msgs[i].id.id == message.message.protocolMessage.key.id)
-                            {
-                                // run save deleted msg function
-                                saveDeletedMessage(msgs[i], message);
-                                break
-                            }
+                            // run save deleted msg function
+                            saveDeletedMessage(msgs[i], message);
+                            break;
                         }
                     }
-
-                    console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                    return false;
                 }
+
+                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+                return false;
+            }
+
+            // Recursively check the children
+            var children = nodeReader.children(node);
+            if (!Array.isArray(children)) return true;
+            for (var i = 0; i < children.length; i++)
+            {
+                var subNode = children[i];
+                if (!NodeHandler.isReceivedNodeAllowed(subNode, tag)) return false;
             }
         }
         catch (exception)
@@ -525,8 +601,7 @@ document.addEventListener('onReadConfirmationBlocked', function (e)
 {
     var blockedJid = e.detail;
 
-    var chat = getCurrentChat();
-
+    var chat = getChatByJID(blockedJid);
     if (readConfirmationsHookEnabled && safetyDelay > 0)
     {
         setTimeout(markChatAsPendingReciptsSending, 250);
@@ -555,7 +630,6 @@ document.addEventListener('onReadConfirmationBlocked', function (e)
     blockedChats[chat.id] = chat;
 
 });
-
 
 
 document.addEventListener('onPaneChatOpened', function (e)
@@ -656,156 +730,87 @@ function markChatAsBlocked(chat)
     // turn the unread counter of the chat to red
     //
 
-    var blockedChat = findChatElementForJID(chat.id);
-    if (blockedChat != null)
+    var chatUnreadRead = chat.unreadCount;
+    
+    var currentChat = getCurrentChat();
+    
+    function mark()
     {
-        blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className = UIClassNames.UNREAD_COUNTER_CLASS + " incognito";
+        var blockedChatElem = findChatElementForJID(chat.id);
+        chat.pendingSeenCount = 0;
+
+        if (blockedChatElem != null)
+            blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className = UIClassNames.UNREAD_COUNTER_CLASS + " incognito";
     }
+
+    mark();
+    setTimeout(mark, 200); // for multi-device pendingSeenCount
+
     var messageID = chat.id + chat.lastReceivedKey.id;
 
-    //
-    // Create a "receipts blocked" warning if needed
-    //
-
-    var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
-        document.getElementsByClassName("incognito-message")[0] : null;
-    var warningWasEmpty = warningMessage == null;
-    if (warningMessage == null)
+    if (currentChat.id == chat.id)
     {
-        warningMessage = document.createElement('div');
-        warningMessage.setAttribute('class', 'incognito-message middle');
-        warningMessage.innerHTML = "Read receipts were blocked.";
 
-        var sendButton = document.createElement('div');
+        //
+        // Create a "receipts blocked" warning if needed
+        //
+
+        var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
+        document.getElementsByClassName("incognito-message")[0] : null;
+        var warningWasEmpty = warningMessage == null;
+        if (warningMessage == null)
+        {
+            warningMessage = document.createElement('div');
+            warningMessage.setAttribute('class', 'incognito-message middle');
+            warningMessage.innerHTML = "Read receipts were blocked.";
+
+            var sendButton = document.createElement('div');
+            sendButton.setAttribute('class', 'incognito-send-button');
+            sendButton.innerHTML = "Mark as read";
+            warningMessage.appendChild(sendButton);
+        }
+        else
+        {
+            // we already have a warning message, remove it first
+            warningMessage.remove();
+        }
+
+        var sendButton = warningMessage.lastChild;
         sendButton.setAttribute('class', 'incognito-send-button');
         sendButton.innerHTML = "Mark as read";
-        warningMessage.appendChild(sendButton);
-    }
-    else
-    {
-        // we already have a warning message, remove it first
-        warningMessage.remove();
-    }
-
-    var sendButton = warningMessage.lastChild;
-    sendButton.setAttribute('class', 'incognito-send-button');
-    sendButton.innerHTML = "Mark as read";
-    sendButton.onclick = function ()
-    {
-        var data = {
-            name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id,
-            fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
-            formattedName: chat.contact.formattedName
+        sendButton.onclick = function ()
+        {
+            var data = {
+                name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id,
+                fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
+                formattedName: chat.contact.formattedName
+            };
+            document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
         };
-        document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
-    };
 
-    warningMessage.messageID = messageID;
+        warningMessage.messageID = messageID;
 
-    //
-    // Put that warning under in the chat panel, under the unread counter or at the bottom
-    //
+        //
+        // Put that warning under in the chat panel, under the unread counter or at the bottom
+        //
 
-    var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-    var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
-    if (unreadMarker != null)
-        unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
-    else
-    {
-        warningMessage.setAttribute('class', 'incognito-message');
-        warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
-        parent.appendChild(warningMessage);
+        var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+        var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+        if (unreadMarker != null)
+            unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
+        else
+        {
+            warningMessage.setAttribute('class', 'incognito-message');
+            warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
+            parent.appendChild(warningMessage);
+        }
     }
+    
 
     // if it didn't exist previously, animate it in
     if (blockedChats[chat.id] == undefined || warningWasEmpty)
         Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
     warningMessage.firstChild.textContent = "Read receipts were blocked.";
-}
-
-function findChatElementForJID(jid)
-{
-    var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
-    var blockedChat = null;
-    for (var i = 0; i < chatsShown.length; i++)
-    {
-        var reactElement = FindReact(chatsShown[i]);
-        if (reactElement.props.data == undefined) continue;
-
-        var id = reactElement.props.data.data.id;
-
-        var matches = false;
-        if (typeof (jid) == "object" && id == jid)
-        {
-            matches = true;
-        }
-        else if (typeof (jid) == "string" && id.user == jid.split("@")[0])
-        {
-            matches = true;
-        }
-
-        if (matches)
-        {
-            blockedChat = chatsShown[i];
-            break;
-        }
-
-    }
-
-    return blockedChat;
-}
-
-function getCurrentChat()
-{
-    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    if (elements.length == 0) return null;
-
-    var reactResult = FindReact(elements[0]);
-    var chat = null;
-    if (Array.isArray(reactResult))
-    {
-        for (var i = 0; i < reactResult.length; i++)
-        {
-            if (reactResult[i].props.chat !== undefined)
-            {
-                chat = reactResult[i].props.chat;
-                break;
-            }
-        }
-    }
-    else
-    {
-        chat = reactResult.props.chat;
-    }
-    return chat;
-}
-
-function isChatBlocked(jid)
-{
-    var user = jid.split("@")[0]
-
-    for (jid in blockedChats)
-    {
-        if (jid.split("@")[0] == user)
-            return true;
-    }
-
-    return false;
-}
-
-function getChatByJID(jid)
-{
-    var chat = findChatElementForJID(jid);
-    if (chat != null)
-    {
-        chat = FindReact(chat).props.data.data;
-    }
-    else
-    {
-        chat = chats[jid];
-    }
-
-    return chat;
 }
 
 document.addEventListener('onDropdownOpened', function (e)
@@ -927,12 +932,98 @@ document.addEventListener('onIncognitoOptionsClosed', function (e)
 
 document.addEventListener('onMainUIReady', function (e)
 {
-    exposeWhatsAppAPI();
+    setTimeout(exposeWhatsAppAPI, 100);
 });
 
 // -------------------
 // Helper functions
 // --------------------
+
+function findChatElementForJID(jid)
+{
+    var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
+    var blockedChat = null;
+    for (var i = 0; i < chatsShown.length; i++)
+    {
+        var reactElement = FindReact(chatsShown[i]);
+        if (reactElement.props.data == undefined) continue;
+
+        var id = reactElement.props.data.data.id;
+
+        var matches = false;
+        if (typeof (jid) == "object" && id == jid)
+        {
+            matches = true;
+        }
+        else if (typeof (jid) == "string" && id.user == jid.split("@")[0])
+        {
+            matches = true;
+        }
+
+        if (matches)
+        {
+            blockedChat = chatsShown[i];
+            break;
+        }
+
+    }
+
+    return blockedChat;
+}
+
+function getCurrentChat()
+{
+    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
+    if (elements.length == 0) return null;
+
+    var reactResult = FindReact(elements[0]);
+    var chat = null;
+    if (Array.isArray(reactResult))
+    {
+        for (var i = 0; i < reactResult.length; i++)
+        {
+            if (reactResult[i].props.chat !== undefined)
+            {
+                chat = reactResult[i].props.chat;
+                break;
+            }
+        }
+    }
+    else
+    {
+        chat = reactResult.props.chat;
+    }
+    return chat;
+}
+
+function isChatBlocked(jid)
+{
+    var user = jid.split("@")[0]
+
+    for (jid in blockedChats)
+    {
+        if (jid.split("@")[0] == user)
+            return true;
+    }
+
+    return false;
+}
+
+function getChatByJID(jid)
+{
+    var chat = findChatElementForJID(jid);
+    if (chat != null)
+    {
+        chat = FindReact(chat).props.data.data;
+    }
+    else
+    {
+        chat = chats[jid];
+    }
+
+    return chat;
+}
+
 
 var deletedDB = indexedDB.open("deletedMsgs", 1)
 

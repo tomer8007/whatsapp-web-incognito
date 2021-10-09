@@ -5,14 +5,23 @@ This is a content script responsible for some UI.
 initialize();
 
 var isInterceptionWorking = false;
-var isBadProtocol = false;
+var isMultiDevice = false;
 var isUIClassesWorking = true;
 var deletedDB = null;
 
 function initialize()
 {
-    var appElem = document.getElementById("app");
+    // load saved settings
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    {
+        document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+        {
+            detail: JSON.stringify(options)
+        }));
+    });
 
+    // initialize mutation observer
+    var appElem = document.getElementById("app");
     if (appElem != undefined)
     {
         var mutationObserver = new MutationObserver(function (mutations)
@@ -92,6 +101,8 @@ function initialize()
 
 function restoreDeletedMessage(messageNode)
 {
+    if (deletedDB == null) return;
+
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (messageText)
     {
@@ -278,6 +289,8 @@ function addIconIfNeeded()
 
 function generateDropContent(options)
 {
+    var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen" : "Blocks outgoing presence updates.";
+
     var dropContent = " \
         <div class='incognito-options-container' dir='ltr'> \
             <div class='incognito-options-title'>Incognito options</div> \
@@ -322,7 +335,7 @@ function generateDropContent(options)
                     </div> \
                 </div> \
                 Don't send \"Last Seen\" updates \
-                <div class='incognito-options-description'>Blocks outgoing presence updates.</div> \
+                <div class='incognito-options-description'>" + presenceCaption + "</div> \
             </div> \
             <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
             <div class='checkbox-container' style='display:inline !important'> \
@@ -379,9 +392,12 @@ document.addEventListener('onMarkAsReadClick', function (e)
     });
 });
 
-document.addEventListener('isInterceptionWorking', function (e)
+document.addEventListener('onInterceptionWorking', function (e)
 {
-    isInterceptionWorking = e.detail;
+    var data = JSON.parse(e.detail);
+    isInterceptionWorking = data.isInterceptionWorking;
+    isMultiDevice = data.isMultiDevice;
+
     deletedDB = indexedDB.open("deletedMsgs", 1)
 });
 
@@ -514,18 +530,7 @@ function isSafetyDelayValid(string)
 
 function checkInterception()
 {
-    if (isBadProtocol)
-    {
-        Swal.fire({
-            title: "Bad Protocol",
-            html: "Apparently you are using WhatsApp's new multi-device feature. This does not work with WAIncognito yet.",
-            icon: "error",
-            width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "OK",
-        });
-    }
-    else if (!isInterceptionWorking)
+    if (!isInterceptionWorking)
     {
         Swal.fire({
             title: "Oops...",
@@ -540,11 +545,6 @@ function checkInterception()
 
     return true;
 }
-
-document.addEventListener('onBadProtocolDetected', function (e)
-{
-    isBadProtocol = true;
-});
 
 function isNumberKey(evt)
 {

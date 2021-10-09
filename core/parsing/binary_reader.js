@@ -132,6 +132,7 @@
     }
     var g = 65533
       , h = new Uint8Array(10);
+      
     BinaryReader.prototype = {
         size: function() {
             return this._readEndIndex - this._readIndex
