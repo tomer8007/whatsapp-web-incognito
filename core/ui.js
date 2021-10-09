@@ -99,7 +99,7 @@ function initialize()
 
 }
 
-function restoreDeletedMessage(messageNode)
+function restoreDeletedMessage(messageNode) 
 {
     if (deletedDB == null) return;
 
@@ -121,7 +121,7 @@ function restoreDeletedMessage(messageNode)
             messageText.textContent = "";
             if (request.result)
             {
-                const textSpanStyle = localStorage["theme"] == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
+                const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
                 const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
                 textSpan.style.cssText = textSpanStyle;
                 textSpan.className = "copyable-text selectable-text";
@@ -129,12 +129,11 @@ function restoreDeletedMessage(messageNode)
                 titleSpan.style.cssText = titleSpanStyle;
                 if (request.result.isMedia)
                 {
-                    
+
                     titleSpan.textContent = "Restored media: \n";
                     messageText.appendChild(titleSpan); // Top title span
 
                     if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText; //caption text span
-
                     if (request.result.type === "image")
                     {
                         const imgTag = document.createElement("img");
@@ -169,12 +168,64 @@ function restoreDeletedMessage(messageNode)
                         aTag.textContent = "Download \"" + request.result.fileName + "\"";
                         messageText.appendChild(aTag);
                     }
+                    else if (request.result.type === "ptt") // audio file
+                    {
+                        const audioTag = document.createElement("audio");
+                        audioTag.controls = true;
+                        const sourceTag = document.createElement("source");
+                        sourceTag.type = request.result.mimetype;
+                        sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                        audioTag.appendChild(sourceTag);
+                        messageText.appendChild(audioTag);
+                    }
+
+
                 }
-                else {
-                    titleSpan.textContent = "Restored message: \n";
-                    textSpan.textContent = request.result.body;
-                    messageText.appendChild(titleSpan);
-                } 
+                else
+                {
+                    if (request.result.type === "vcard") // contact cards
+                    {
+                        let vcardBody = request.result.body;
+                        vcardBody = vcardBody.split(":");
+                        const phone = vcardBody[vcardBody.length - 2].slice(0, -4);
+                        const aTagPhone = document.createElement("a");
+                        aTagPhone.href = "tel:" + phone;
+                        aTagPhone.textContent = phone;
+                        aTagPhone.target = "_blank";
+                        aTagPhone.rel = "noopener noreferrer";
+                        const name = vcardBody[4].split(";")[0].slice(0, -4);
+
+                        titleSpan.textContent = "Restored contact card: \r\n";
+                        textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
+
+                        messageText.appendChild(titleSpan);
+                        textSpan.appendChild(aTagPhone);
+
+                    }
+                    else if (request.result.type === "location")
+                    {
+                        titleSpan.textContent = "Restored location: \n";
+                        const imgTag = document.createElement("img");
+                        imgTag.style.cssText = "width: 100%;";
+                        imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
+                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                        messageText.appendChild(imgTag);
+
+                        const locationLink = document.createElement("a");
+                        locationLink.target = "_blank";
+                        locationLink.rel = "noopener noreferrer";
+                        locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(request.result.lat + " " + request.result.lng);
+                        locationLink.textContent = "Google Maps Link"
+                        messageText.appendChild(locationLink);
+                    }
+                    else
+                    {
+                        titleSpan.textContent = "Restored message: \n";
+                        textSpan.textContent = request.result.body;
+                        messageText.appendChild(titleSpan);
+                    }
+
+                }
 
             }
             else textSpan.textContent = "Failed to restore message";
@@ -300,7 +351,7 @@ function generateDropContent(options)
                 <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
                     <div class='checkbox-container' style='display:inline !important;'> \
                         <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+            "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                         </div> \
                     </div> \
                     Don't send read confirmations \
@@ -313,15 +364,15 @@ function generateDropContent(options)
                     <div style='margin-top: 10px'> \
                         <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
                             <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
-                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
+        + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
                             Never \
                         </div> \
                         <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
                             <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
-                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
+        + (options.safetyDelay > 0 ? "checked" : "") + "/> \
                             After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
                             step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
-                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
+        + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
                         </div> \
                     </div> \
                 </div> \
@@ -331,7 +382,7 @@ function generateDropContent(options)
             <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
                 <div class='checkbox-container' style='display:inline !important'> \
                         <div class='checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+            "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                     </div> \
                 </div> \
                 Don't send \"Last Seen\" updates \
@@ -340,7 +391,7 @@ function generateDropContent(options)
             <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
             <div class='checkbox-container' style='display:inline !important'> \
                     <div class='checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked " + UIClassNames.CHECKBOX_CHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.TICKED_CLASS + "'> </div>" :
-        "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
+            "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                 </div> \
             </div> \
             Save deleted messages \
@@ -400,6 +451,17 @@ document.addEventListener('onInterceptionWorking', function (e)
 
     deletedDB = indexedDB.open("deletedMsgs", 1)
 });
+
+function getTheme() 
+{
+    // light/dark mode detection
+    if (localStorage["theme"] != "null") return localStorage["theme"]
+    else // this is if there is no theme selected by default (null)
+    {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return "\"dark\""
+        else return "\"light\""
+    }
+}
 
 function onReadConfirmaionsTick()
 {
