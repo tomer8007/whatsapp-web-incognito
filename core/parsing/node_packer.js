@@ -51,6 +51,7 @@ function NodePacker(isMultiDevice) {
 			DICTIONARY_1: 237,
 			DICTIONARY_2: 238,
 			DICTIONARY_3: 239,
+            JID_FB: 246,
             JID_AD: 247,
 			LIST_8: 248,
 			LIST_16: 249,
@@ -132,9 +133,10 @@ function NodePacker(isMultiDevice) {
                             default:
                                 throw new Error("double byte dictionary token out of range: " + t + " " + o)
                         }
+
+                        this.writeToken(e, a),
+                        this.writeToken(e, i)
                     }
-                    this.writeToken(e, a),
-                    this.writeToken(e, i)
                 }
             else
                 this.writeToken(e, n["s.whatsapp.net"])
@@ -179,10 +181,7 @@ function NodePacker(isMultiDevice) {
         }
         ,
         this.writeToken = function(e, t) {
-            if (t < 245)
-                e.pushByte(t);
-            else if (t <= 500)
-                throw new Error("invalid token")
+            e.pushByte(t);
         }
         ,
         this.writeAttributes = function(e, t) {

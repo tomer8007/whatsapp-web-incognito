@@ -359,9 +359,9 @@ function generateDropContent(options)
                 </div> \
                         \
                         \
-                <div id='incognito-safety-delay-option-panel' style='margin-left: 25px !important; margin-top: 15px; font-size: 12px;'> \
+                <div id='incognito-safety-delay-option-panel' style='margin-left: 25px !important; margin-top: 0px; font-size: 12px; color:dimgray'> \
                     Send after safety delay: <br> \
-                    <div style='margin-top: 10px'> \
+                    <div style='margin-top: 7px'> \
                         <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
                             <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
         + (options.safetyDelay <= 0 ? "checked" : "") + " /> \

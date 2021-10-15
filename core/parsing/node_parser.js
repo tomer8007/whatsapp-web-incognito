@@ -74,6 +74,7 @@ function NodeParser(isMultiDevice = false)
 			DICTIONARY_1: 237,
 			DICTIONARY_2: 238,
 			DICTIONARY_3: 239,
+            JID_FB: 246,
             JID_AD: 247,
 			LIST_8: 248,
 			LIST_16: 249,
@@ -168,7 +169,9 @@ function NodeParser(isMultiDevice = false)
                         if (void 0 !== s)
                             return t && a ? s + "." + t + ":" + a + "@c.us" : 
                                 t ? s + "." + t + "@c.us" : a ? s + ":" + a + "@c.us" : s + "@c.us";
-                        throw new Error(`invalid JID_AD agent:${t} device:${a} user:${s}`)
+                        throw new Error(`invalid JID_AD agent:${t} device:${a} user:${s}`);
+                case o.JID_FB:
+                    debugger;
                 case o.NIBBLE_8:
                 case o.HEX_8:
                     return this.readPacked8(t, e);
