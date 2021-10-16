@@ -23,8 +23,7 @@ wsHook.before = function (originalData, url)
     // a WebSocket frame is about to be sent out.
     //
 
-    var data = messageEvent.data;
-    var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+    var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
 
     var promise = async function(originalData)
     {
@@ -46,7 +45,7 @@ wsHook.before = function (originalData, url)
             if (data instanceof ArrayBuffer || data instanceof Uint8Array)
             {
                 // encrytped binary payload
-                var decryptedFrames =  WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
+                var decryptedFrames =  await WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
                 if (decryptedFrames == null) 
                 {
                     return originalData;
@@ -98,10 +97,10 @@ wsHook.before = function (originalData, url)
                 // textual payload
                 if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
                 if (data != "" && WAdebugMode) console.log(data);
-                resolve(originalData);
+                return originalData;
             }
         }
-        catch (e)
+        catch (exception)
         {
             console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
             console.error(exception);
