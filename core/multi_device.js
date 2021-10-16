@@ -3,15 +3,17 @@ var MultiDevice = {};
 
 var originalImportKey = crypto.subtle.importKey;
 
-MultiDevice.readKey = null;
-MultiDevice.readKeyImported = null;
-MultiDevice.writeKey = null;
-MultiDevice.writeKeyImported = null;
-MultiDevice.readCounter = 0;
-MultiDevice.writeCounter = 0;
-
 MultiDevice.initialize = function()
 {
+    MultiDevice.readKey = null;
+    MultiDevice.readKeyImported = null;
+    MultiDevice.writeKey = null;
+    MultiDevice.writeKeyImported = null;
+    MultiDevice.readCounter = 0;
+    MultiDevice.writeCounter = 0;
+    MultiDevice.incomingQueue = new PromiseQueue();
+    MultiDevice.outgoingQueue = new PromiseQueue();
+
     // install our hook in order to discover the Noise keys
     window.crypto.subtle.importKey = async function(format, keyData, algorithm, extractable, keyUsages)
     {
@@ -55,29 +57,26 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     {
         multipleFrames = true;
     }
-    
-    var frames = []
+
+    var frames = [];
     while (binaryReader._readIndex + 3 < payload.byteLength)
     {
         var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
         var frame = binaryReader.readBuffer(size);
         var counter = isIncoming ? MultiDevice.readCounter++ : MultiDevice.writeCounter++;
         var frameInfo = {frame: frame, counter: counter};
-        frames.push(frameInfo);
 
-        if (multipleFrames)
-        {
-        }
+        frames.push(frameInfo);
     }
 
     for (var i = 0; i < frames.length; i++)
     {
         var frameInfo = frames[i];
+
         var currentFrame = frameInfo.frame;
         var counter = frameInfo.counter;
         
         var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
-    
         var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
 
         var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
@@ -89,7 +88,7 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
             decryptedFrame = toArayBufer(pako.inflate(new Uint8Array(decryptedFrame)));
         }
 
-        frames[i] = {frame: decryptedFrame, counter: counter};
+        frames[i] = {frame: decryptedFrame, counter: counter};  
     }
 
     return frames;
@@ -117,6 +116,12 @@ MultiDevice.sizeOfPacket = function(payload)
 
     var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
     return size;
+};
+
+MultiDevice.enqueuePromise = async function(promise, argument, isIncoming = false)
+{
+    var queue = isIncoming ? MultiDevice.incomingQueue : MultiDevice.outgoingQueue;
+    return queue.enqueue(promise, argument);
 };
 
 MultiDevice.looksLikeHandshakePacket = function(payload)
@@ -166,6 +171,56 @@ MultiDevice.counterToIV = function(counter)
 function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
+}
+
+// https://medium.com/@karenmarkosyan/how-to-manage-promises-into-dynamic-queue-with-vanilla-javascript-9d0d1f8d4df5
+class PromiseQueue {
+    constructor()
+    {
+        this.queue = [];
+        this.pendingPromise = false;
+    }
+
+    enqueue(promise, argument) {
+      return new Promise((resolve, reject) => {
+          this.queue.push({
+              promise,
+              argument,
+              resolve,
+              reject,
+          });
+          this.dequeue();
+      });
+    }
+  
+  dequeue() {
+      if (this.workingOnPromise) {
+        return false;
+      }
+      const item = this.queue.shift();
+      if (!item) {
+        return false;
+      }
+      try {
+        this.workingOnPromise = true;
+        item.promise(item.argument)
+          .then((value) => {
+            this.workingOnPromise = false;
+            item.resolve(value);
+            this.dequeue();
+          })
+          .catch(err => {
+            this.workingOnPromise = false;
+            item.reject(err);
+            this.dequeue();
+          })
+      } catch (err) {
+        this.workingOnPromise = false;
+        item.reject(err);
+        this.dequeue();
+      }
+      return true;
+    }
 }
 
 

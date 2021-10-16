@@ -11,7 +11,7 @@ var chats = {};
 var blockedChats = {};
 
 var WAPassthrough = false;
-var WAdebugMode = false;
+var WAdebugMode = true;
 
 // 
 // Actual interception
@@ -23,37 +23,41 @@ wsHook.before = function (originalData, url)
     // a WebSocket frame is about to be sent out.
     //
 
-    return new Promise(function (resolve, reject)
+    var data = messageEvent.data;
+    var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+
+    var promise = async function(originalData)
     {
-        if (WAPassthrough) return resolve(originalData);
+        if (WAPassthrough) return originalData;
 
-        var data = originalData;
-        var isMultiDevice = !WACrypto.isTagBasedPayload(data);
-
-        var tag = "";
-        if (!isMultiDevice)
+        try
         {
-            payload = WACrypto.parseWebSocketPayload(data);
-            tag = payload.tag;
-            data = payload.data;
-        }
-
-        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
-        {
-            // encrytped binary payload
-            return WACrypto.decryptWithWebCrypto(data, isMultiDevice, false).then(function (decryptedFrames)
+            var data = originalData;
+            var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+    
+            var tag = "";
+            if (!isMultiDevice)
             {
+                payload = WACrypto.parseWebSocketPayload(data);
+                tag = payload.tag;
+                data = payload.data;
+            }
+    
+            if (data instanceof ArrayBuffer || data instanceof Uint8Array)
+            {
+                // encrytped binary payload
+                var decryptedFrames =  WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
                 if (decryptedFrames == null) 
                 {
-                    return resolve(originalData);
+                    return originalData;
                 }
-
+    
                 for (var i = 0; i < decryptedFrames.length; i++)
                 {
                     var decryptedFrameInfo = decryptedFrames[i];
                     var decryptedFrame = decryptedFrameInfo.frame;
                     var counter = decryptedFrameInfo.counter;
-
+    
                     var nodeParser = new NodeParser(isMultiDevice);
                     var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
     
@@ -75,34 +79,37 @@ wsHook.before = function (originalData, url)
                     var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
                     if (!isAllowed)
                     {
-                        if (!isMultiDevice) return resolve(null);
+                        if (!isMultiDevice) return null;
                         node[0] = "not_valid";
                     }
-
+    
                     var manipulatedNode = NodeHandler.manipulateSentNode(node, tag);
                     decryptedFrames[i] = {node: manipulatedNode, counter: counter};
                 }
-
+    
                 return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag).then(function (packet)
                 {
-                    return resolve(packet);
+                    return packet;
                 });
                 
-            }).catch(function(exception)
+            }
+            else
             {
-                console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
-                console.error(exception);
-                return resolve(originalData);
-            });
+                // textual payload
+                if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
+                if (data != "" && WAdebugMode) console.log(data);
+                resolve(originalData);
+            }
         }
-        else
+        catch (e)
         {
-            // textual payload
-            if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
-            if (data != "" && WAdebugMode) console.log(data);
-            resolve(originalData);
+            console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
+            console.error(exception);
+            return originalData;
         }
-    });
+    };
+
+    return isMultiDevice ? MultiDevice.enqueuePromise(promise, originalData, false) : promise(originalData);
 }
 
 wsHook.after = function (messageEvent, url)
@@ -111,82 +118,87 @@ wsHook.after = function (messageEvent, url)
     // a WebScoket frame was received from network.
     //
 
-    return new Promise(function (resolve, reject)
+    var data = messageEvent.data;
+    var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+
+    var promise = async function(messageEvent)
     {
         var data = messageEvent.data;
         var isMultiDevice = !WACrypto.isTagBasedPayload(data);
 
-        var manipulatedMessageEvent = messageEvent;
-        if (WAPassthrough) return resolve(messageEvent);
+        if (WAPassthrough) return messageEvent;
 
-        var tag = "";
-        if (!isMultiDevice)
+        try
         {
-            payload = WACrypto.parseWebSocketPayload(data);
-            tag = payload.tag;
-            data = payload.data;
-        }
-
-        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
-        {
-            return WACrypto.decryptWithWebCrypto(data, isMultiDevice, true).then(function (decryptedFrames)
+            var tag = "";
+            if (!isMultiDevice)
             {
-                if (decryptedFrames == null) return resolve(messageEvent);
-
+                payload = WACrypto.parseWebSocketPayload(data);
+                tag = payload.tag;
+                data = payload.data;
+            }
+    
+            if (data instanceof ArrayBuffer || data instanceof Uint8Array)
+            {
+                var decryptedFrames = await WACrypto.decryptWithWebCrypto(data, isMultiDevice, true);
+                if (decryptedFrames == null) return messageEvent;
+    
                 for (var i = 0; i < decryptedFrames.length; i++)
                 {
                     var decryptedFrameInfo = decryptedFrames[i];
                     var decryptedFrame = decryptedFrameInfo.frame;
                     var counter = decryptedFrameInfo.counter;
-
+    
                     var nodeParser = new NodeParser(isMultiDevice);
                     var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
-
+    
                     if (WAdebugMode)
                     {
                         console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
                         console.log(node);
                     }
-
-                    var isAllowed = NodeHandler.isReceivedNodeAllowed(node, tag);
+    
+                    var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, tag);
                     if (!isAllowed)
                     {
-                        if (!isMultiDevice) return resolve(null);
+                        if (!isMultiDevice) null;
                         node[0] = "not_valid";
                     }
-
+    
                     var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
                     decryptedFrames[i] = {node: manipulatedNode, counter: counter};
                 }
-
-                return resolve(messageEvent);
-
+    
+                return messageEvent;
+    
                 /*
                 commented out due to a possible "Maximum call stack size exceeds" exception
                 
-                WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag).then(function (packet)
+                return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag).then(function (packet)
                 {
-                    return resolve(packet);
+                    return packet;
                 });
                 */
-            }).catch(function(e)
+            }
+            else
             {
-                console.error("Passing-through incoming packet due to error:");
-                console.error(e);
-                return resolve(messageEvent);
-            });
+                // textual payload
+                if (WAdebugMode) console.log("[In] Received message with tag '" + tag + "':");
+                if (data != "" && WAdebugMode)
+                    console.log(data);
+    
+                return messageEvent;
+            }
         }
-        else
+        catch (e)
         {
-            // textual payload
-            if (WAdebugMode) console.log("[In] Received message with tag '" + tag + "':");
-            if (data != "" && WAdebugMode)
-                console.log(data);
+            console.error("Passing-through incoming packet due to error:");
+            console.error(e);
+            return messageEvent;
+        };
+    };
 
-            resolve(messageEvent);
-        }
-
-    });
+    return isMultiDevice ? MultiDevice.enqueuePromise(promise, messageEvent, true) : promise(messageEvent);
 }
 
 //
@@ -349,7 +361,7 @@ var NodeHandler = {};
     }
 
 
-    NodeHandler.isReceivedNodeAllowed = function (node, tag)
+    NodeHandler.isReceivedNodeAllowed = async function (node, tag)
     {
         try
         {
@@ -378,13 +390,16 @@ var NodeHandler = {};
             }
             else if (node[1] != null)
             {
+                remoteJid = node[1]["from"];
+                messageId = node[1]["id"];
+
+                var decryptedMessage = await decryptE2EMessage(node);
+
                 // multi-device
                 if (node[1]["edit"] == '7')
                 {
                     // some kind of message edit? block
                     isRevokedMessage = true;
-                    remoteJid = node[1]["from"];
-                    messageId = node[1]["id"];
                 }
             }
 
@@ -417,7 +432,8 @@ var NodeHandler = {};
             for (var i = 0; i < children.length; i++)
             {
                 var subNode = children[i];
-                if (!NodeHandler.isReceivedNodeAllowed(subNode, tag)) return false;
+                var isChildAllowed = await NodeHandler.isReceivedNodeAllowed(subNode, tag)
+                if (!isChildAllowed) return false;
             }
         }
         catch (exception)
@@ -509,6 +525,52 @@ var NodeHandler = {};
         }
     }
 
+    async function decryptE2EMessage(messageNode)
+    {
+        if (messageNode[2][0][0] != "enc") return null;
+
+        var remoteJid = messageNode[1]["from"];
+
+        var ciphertext = messageNode[2][0][2];
+        var chiphertextType = messageNode[2][0][1]["type"];
+
+        var signalDBRequest = indexedDB.open("signal-storage", 70);
+        var signalDB = await new Promise((resolve, reject) => 
+        {
+            signalDBRequest.onsuccess = () =>
+            {
+                resolve(signalDBRequest.result);
+            }
+            signalDBRequest.onerror = () => {console.error("can't open signal-storage."); reject(false);}
+        });
+        var exported = await exportIdbDatabase(signalDB);
+
+        /*var address = new libsignal.SignalProtocolAddress(remoteJid.substring(0, remoteJid.indexOf("@")), 0);
+        var mr = new moduleRaid();
+        var storage = mr.findModule("SessionStoreWriteBackCache")[0].default;
+        var sessionCipher = new libsignal.SessionCipher(storage, address);
+        if (chiphertextType == "msg")
+        {
+            console.log("decrypting msg");
+             var plaintext = await sessionCipher.decryptWhisperMessage(ciphertext);
+             console.log(plaintext);
+        }
+        else if (chiphertextType == "pkmsg")
+        {
+            console.log("decrypting pkmsg");
+            var plaintext = await sessionCipher.decryptPreKeyWhisperMessage(ciphertext);
+            console.log(plaintext);
+        }*/
+        
+        //await clearDatabase(signalDB);
+        //importToIdbDatabase(signalDB, exported);
+        await new Promise((resolve, reject) => 
+        {
+            setTimeout(() => {signalDB.close(); resolve();}, 150);
+        });
+        
+    }
+
     var nodeReader =
     {
         tag: function (e) { return e && e[0] },
@@ -545,26 +607,39 @@ var NodeHandler = {};
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
+    // update options
     var options = JSON.parse(e.detail);
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHook = options.saveDeletedMsgs;
 
+    // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
     var safetyDelayPanelExpectedHeight = 44; // be careful with this
+    var cssRule = getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS);
     if (readConfirmationsHookEnabled)
     {
-        getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
+        if (cssRule != undefined)
+        {
+            cssRule.style.backgroundColor = 'rgba(9, 210, 97, 0.3)';
+        }
         if (safetyDelayPanel != null)
+        {
             Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15 },
                 { defaultDuration: 200, easing: [.1, .82, .25, 1] });
+        }
     }
     else
     {
-        getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS).style.backgroundColor = 'rgba(9, 210, 97, 1)';
+        if (cssRule != undefined)
+        {
+            cssRule.style.backgroundColor = 'rgba(9, 210, 97, 1)';
+        }
         if (safetyDelayPanel != null)
+        {
             Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
+        }
         var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
             document.getElementsByClassName("incognito-message")[0] : null;
         if (warningMessage != null)
@@ -1013,7 +1088,7 @@ function getChatByJID(jid)
 }
 
 
-var deletedDB = indexedDB.open("deletedMsgs", 1)
+var deletedDB = indexedDB.open("deletedMsgs", 1);
 
 deletedDB.onupgradeneeded = function (e)
 {
@@ -1029,7 +1104,7 @@ deletedDB.onupgradeneeded = function (e)
 };
 deletedDB.onerror = function ()
 {
-    console.log("WhatsIncognito: Error opening database");
+    console.error("WhatsIncognito: Error opening database");
     console.error("Error", deletedDB);
 };
 deletedDB.onsuccess = () =>
@@ -1128,6 +1203,97 @@ function showToast(message)
     appElement.insertBefore(toast, appElement.firstChild);
     Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
     setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
+}
+
+function exportIdbDatabase(idbDatabase) {
+    return new Promise((resolve, reject) => {
+      const exportObject = {}
+      if (idbDatabase.objectStoreNames.length === 0) {
+        resolve(JSON.stringify(exportObject))
+      } else {
+        const transaction = idbDatabase.transaction(
+          idbDatabase.objectStoreNames,
+          'readonly'
+        )
+  
+        transaction.addEventListener('error', reject)
+  
+        for (const storeName of idbDatabase.objectStoreNames) {
+          const allObjects = []
+          transaction
+            .objectStore(storeName)
+            .openCursor()
+            .addEventListener('success', event => {
+              const cursor = event.target.result
+              if (cursor) {
+                // Cursor holds value, put it into store data
+                allObjects.push(cursor.value)
+                cursor.continue();
+              } else {
+                // No more values, store is done
+                exportObject[storeName] = allObjects
+  
+                // Last store was handled
+                if (idbDatabase.objectStoreNames.length === Object.keys(exportObject).length) {
+                  resolve(exportObject);
+                }
+              }
+            })
+        }
+      }
+    })
+  }
+
+function importToIdbDatabase(idbDatabase, importObject) {
+    return new Promise((resolve, reject) => {
+      const transaction = idbDatabase.transaction(
+        idbDatabase.objectStoreNames,
+        'readwrite'
+      )
+      transaction.addEventListener('error', reject)
+  
+      for (const storeName of idbDatabase.objectStoreNames) {
+        let count = 0
+        for (const toAdd of importObject[storeName]) {
+          const request = transaction.objectStore(storeName).add(toAdd)
+          request.addEventListener('success', () => {
+            count++
+            if (count === importObject[storeName].length) {
+              // Added all objects for this store
+              delete importObject[storeName]
+              if (Object.keys(importObject).length === 0) {
+                // Added all object stores
+                resolve()
+              }
+            }
+          })
+        }
+      }
+    })
+  }
+
+  function clearDatabase(idbDatabase) {
+    return new Promise((resolve, reject) => {
+      const transaction = idbDatabase.transaction(
+        idbDatabase.objectStoreNames,
+        'readwrite'
+      )
+      transaction.addEventListener('error', reject)
+  
+      let count = 0
+      for (const storeName of idbDatabase.objectStoreNames) {
+        transaction
+          .objectStore(storeName)
+          .clear()
+          .addEventListener('success', () => {
+            count++
+            if (count === idbDatabase.objectStoreNames.length) {
+              // Cleared all object stores
+              resolve()
+            }
+          })
+      }
+    })
 }
 
 // Based on https://stackoverflow.com/a/39165137/1806873

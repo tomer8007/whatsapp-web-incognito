@@ -2,7 +2,7 @@
 var WACrypto = {};
 
 (function() {
-WACrypto.decryptWithWebCrypto = function(buffer, isMultiDevice, isIncoming = true) 
+WACrypto.decryptWithWebCrypto = async function(buffer, isMultiDevice, isIncoming = true) 
 {
     if (buffer instanceof Uint8Array) buffer = toArayBufer(buffer);
 
@@ -16,15 +16,13 @@ WACrypto.decryptWithWebCrypto = function(buffer, isMultiDevice, isIncoming = tru
             var data = buffer.slice(48);
             var keys = getKeys();
             var algorithmInfo = {name: "AES-CBC",iv: new Uint8Array(iv)};
-            return window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, false, ["decrypt"]).then(function(key) {
-                return window.crypto.subtle.decrypt(algorithmInfo, key, data).then(function(decrypted)
-                {
-                    return [{frame: decrypted, counter: 0}]
-                })
-                .catch(function(e) {
-                    console.log(e.code + ", " + e.toString());
-                });
-            });
+            const key = await window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, false, ["decrypt"]);
+            try {
+                const decrypted = await window.crypto.subtle.decrypt(algorithmInfo, key, data);
+                return [{ frame: decrypted, counter: 0 }];
+            } catch (e) {
+                console.log(e.code + ", " + e.toString());
+            }
         
         } catch (exception)
         {
