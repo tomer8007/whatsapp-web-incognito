@@ -228,7 +228,9 @@ function restoreDeletedMessage(messageNode)
                 }
 
             }
-            else textSpan.textContent = "Failed to restore message";
+            else 
+                textSpan.textContent = "Failed to restore message";
+
             messageText.appendChild(textSpan);
             messageText.appendChild(span);
 
@@ -341,6 +343,8 @@ function addIconIfNeeded()
 function generateDropContent(options)
 {
     var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen" : "Blocks outgoing presence updates.";
+    var deletedMessagesTitle = isMultiDevice ? "Restore deleted messages" : "Save deleted messages";
+    var deletedMessagesCaption = isMultiDevice ? "See deleted messages, even if the tab was closed <p>during deletion" : "Saves deleted messages and restores them later.";
 
     var dropContent = " \
         <div class='incognito-options-container' dir='ltr'> \
@@ -394,8 +398,8 @@ function generateDropContent(options)
             "unchecked " + UIClassNames.CHECKBOX_UNCHECKED_CLASS + "'> <div class='checkmark " + UIClassNames.UNTICKED_CLASS + "'> </div>") + "\
                 </div> \
             </div> \
-            Save deleted messages \
-            <div class='incognito-options-description'>Saves deleted messages and restores them later.</div> \
+            "+deletedMessagesTitle+ " \
+            <div class='incognito-options-description'>"+deletedMessagesCaption+"</div> \
         </div> \
         </div>";
 

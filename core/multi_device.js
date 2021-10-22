@@ -69,27 +69,46 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         frames.push(frameInfo);
     }
 
-    for (var i = 0; i < frames.length; i++)
+    try
     {
-        var frameInfo = frames[i];
-
-        var currentFrame = frameInfo.frame;
-        var counter = frameInfo.counter;
-        
-        var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
-        var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
-
-        var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
-        var flags = new Uint8Array(decryptedFrame)[0];
-        decryptedFrame = decryptedFrame.slice(1);
-        if (flags & 2)
+        for (var i = 0; i < frames.length; i++)
         {
-            // zlib compressed. decompress
-            decryptedFrame = toArayBufer(pako.inflate(new Uint8Array(decryptedFrame)));
+            var frameInfo = frames[i];
+    
+            var currentFrame = frameInfo.frame;
+            var counter = frameInfo.counter;
+            
+            var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
+            var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
+    
+            var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+            var flags = new Uint8Array(decryptedFrame)[0];
+            decryptedFrame = decryptedFrame.slice(1);
+            if (flags & 2)
+            {
+                // zlib compressed. decompress
+                decryptedFrame = toArayBufer(pako.inflate(new Uint8Array(decryptedFrame)));
+            }
+    
+            frames[i] = {frame: decryptedFrame, counter: counter};  
         }
-
-        frames[i] = {frame: decryptedFrame, counter: counter};  
     }
+    catch (exception)
+    {
+        if (exception.name.includes("OperationError"))
+        {
+            // reverse the counter, in case this is another socket
+            if (isIncoming) MultiDevice.readCounter--;
+            else MultiDevice.writeBuffer--;
+            throw "Wrong counter in decryption";
+        }
+        else
+        {
+            throw exception;
+        }
+    }
+
+
 
     return frames;
 };

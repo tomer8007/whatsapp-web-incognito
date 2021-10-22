@@ -1,7 +1,7 @@
 // global variables
 var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
-var saveDeletedMsgsHook = false;
+var saveDeletedMsgsHookEnabled = false;
 var safetyDelay = 0;
 
 var isInitializing = true;
@@ -74,22 +74,19 @@ wsHook.before = function (originalData, url)
                         console.log(node);
                     }
     
-                    // Checks if read receipts should be sent
                     var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
+                    var manipulatedNode = node.slice();
                     if (!isAllowed)
                     {
                         if (!isMultiDevice) return null;
-                        node[0] = "not_valid";
+                        manipulatedNode[0] = "blocked_node";
                     }
     
-                    var manipulatedNode = NodeHandler.manipulateSentNode(node, tag);
+                    manipulatedNode = await NodeHandler.manipulateSentNode(manipulatedNode, isMultiDevice);
                     decryptedFrames[i] = {node: manipulatedNode, counter: counter};
                 }
     
-                return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag).then(function (packet)
-                {
-                    return packet;
-                });
+                return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag);
                 
             }
             else
@@ -158,26 +155,23 @@ wsHook.after = function (messageEvent, url)
                     }
     
                     var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, tag);
+                    var manipulatedNode = node.slice();
                     if (!isAllowed)
                     {
-                        if (!isMultiDevice) null;
-                        node[0] = "not_valid";
+                        if (!isMultiDevice) return null;
+                        manipulatedNode[0] = "blocked_node";
                     }
     
-                    var manipulatedNode = NodeHandler.manipulateReceivedNode(node, tag);
+                    manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
                     decryptedFrames[i] = {node: manipulatedNode, counter: counter};
                 }
     
-                return messageEvent;
-    
-                /*
-                commented out due to a possible "Maximum call stack size exceeds" exception
-                
                 return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag).then(function (packet)
                 {
-                    return packet;
+                    messageEvent.data = packet;
+                    return messageEvent;
                 });
-                */
+                
             }
             else
             {
@@ -242,7 +236,7 @@ var NodeHandler = {};
                         if (isReadReceiptAllowed)
                         {
                             // this is the user trying to send out a read receipt.
-                            console.log("WhatsIncongito: Allowing read receipt to " + jid + " at index " + data.index);
+                            console.log("WhatsIncongito: Allowing read receipt to " + jid);
 
                             // exceptions are one-time operation, so remove it from the list
                             exceptionsList = exceptionsList.filter(i => i !== jid)
@@ -282,28 +276,39 @@ var NodeHandler = {};
         return true;
     }
 
-    NodeHandler.manipulateSentNode = function (node, tag)
+    NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
     {
         try
         {
-            if (node[0] == "message")
-            {
-                node = this.handleSentMessageNode(node);
-            }
+            if (nodeReader.tag(node) != "message" && nodeReader.tag(node) != "action") return node;
 
-            var children = nodeReader.children(node);
-            if (children != undefined)
+            if (isMultiDevice)
             {
+                var participants = nodeReader.children(node)[0];
+                var children = nodeReader.children(participants);
                 for (var i = 0; i < children.length; i++)
                 {
-                    var subNode = children[i];
-                    if (subNode == undefined) continue;
-    
-                    var tag = subNode[0];    
-                    if (tag == "message")
+                    var childNode = children[i];
+                    if (nodeReader.tag(childNode) != "to") continue;
+
+                    var messageNode = nodeReader.children(childNode)[0];
+                    if (nodeReader.tag(messageNode) == "enc")
                     {
-                        subNode = this.handleSentMessageNode(subNode);
-                        node[2][i] = subNode;
+                        childNode = await this.manipulateSentMessageNode(childNode);
+                        children[i] = childNode;
+                    }
+                }
+            }
+            else if (nodeReader.tag(node) == "action")
+            {
+                var children = nodeReader.children(node);
+                for (var i = 0; i < children.length; i++)
+                {
+                    var child = children[i];
+                    if (nodeReader.tag(child) == "message")
+                    {
+                        var messageNode = await this.manipulateSentMessageNode(child);
+                        children[i] = messageNode;
                     }
                 }
             }
@@ -319,20 +324,27 @@ var NodeHandler = {};
         return node;
     }
 
-    NodeHandler.handleSentMessageNode = function (messageNode)
+    NodeHandler.manipulateSentMessageNode = async function (messageNode)
     {
         var remoteJid = null;
         if (messageNode[1] == undefined)
         {
+            var message = await parseMessage(messageNode);
+            if (WAdebugMode)
+            {
+                console.log("WAIncognito: Sending message:");
+                console.log(message);
+            }
+
             // non muti-device.
-            var message = parseMessage(messageNode);
             if (message == null || message.key == null) return;
             remoteJid = message.key.remoteJid;
         }
         else
         {
-            // mutli device
-            remoteJid = messageNode[1]["to"];
+            // multi device
+            if (nodeReader.tag(messageNode) != "to") debugger;
+            remoteJid = messageNode[1]["jid"] ? messageNode[1]["jid"]: messageNode[1]["from"];
         }
 
         if (remoteJid && isChatBlocked(remoteJid))
@@ -362,78 +374,76 @@ var NodeHandler = {};
 
     NodeHandler.isReceivedNodeAllowed = async function (node, tag)
     {
+        var isAllowed = true;
+
         try
         {
-            //
-            // Check if this is a message deletion node
-            //
             var nodeTag = nodeReader.tag(node);
+            var children = nodeReader.children(node);
             if (nodeTag != "action" && nodeTag != "message") return true;
-            var isMultiDevice = nodeTag == "action";
 
-            var isRevokedMessage = false;
-            var remoteJid = null;
-            var messageId = null;
-            if (isMultiDevice)
+            // scan for message nodes
+            var messages = [];
+            var nodes = [node];
+            if (Array.isArray(children)) nodes = nodes.concat(children);
+            for (var i = 0 ; i < nodes.length; i++)
             {
-                // non multi-device
+                var node = nodes[i];
+                if (nodeReader.tag(node) != "message") continue;
 
-                var message = parseMessage(node);
-                var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
-                if (message && message.message && message.message.protocolMessage && message.message.protocolMessage.type == messageRevokeValue)
+                var childs = nodeReader.children(node);
+                var isMultiDevice = Array.isArray(childs) && nodeReader.tag(childs[0]) == "enc";
+
+                var message = await parseMessage(node);
+                messages.push(message);
+
+                var remoteJid = null;
+                if (!isMultiDevice)
                 {
-                    isRevokedMessage = true;
+                    // non multi-device
                     remoteJid = message.key.remoteJid;
-                    messageId = message.message.protocolMessage.key.id;
+                    messageId = message.key.id;
+                    message = message.message;
                 }
-            }
-            else if (node[1] != null)
-            {
-                remoteJid = node[1]["from"];
-                messageId = node[1]["id"];
-
-                var decryptedMessage = await decryptE2EMessage(node);
-
-                // multi-device
-                if (node[1]["edit"] == '7')
+                else if (node[1] != null)
                 {
-                    // some kind of message edit? block
-                    isRevokedMessage = true;
+                    remoteJid = node[1]["from"];
+                    messageId = node[1]["id"];
                 }
-            }
 
-            if (isRevokedMessage)
-            {
-                // someone deleted a message, block
-                if (saveDeletedMsgsHook)
+                //
+                // Check if this is a message deletion node
+                //
+                var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
+                if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
                 {
-                    const chat = getChatByJID(remoteJid);
-                    const msgs = chat.msgs.models;
+                    var deletedMessageId = message.protocolMessage.key.id;
                     
-                    for (let i = 0; i < msgs.length; i++)
+                    // someone deleted a message, block
+                    if (saveDeletedMsgsHookEnabled)
                     {
-                        if (msgs[i].id.id == messageId)
+                        const chat = getChatByJID(remoteJid);
+                        if (chat)
                         {
-                            // run save deleted msg function
-                            saveDeletedMessage(msgs[i], message);
-                            break;
+                            const msgs = chat.msgs.models;
+                        
+                            for (let i = 0; i < msgs.length; i++)
+                            {
+                                if (msgs[i].id.id == deletedMessageId)
+                                {
+                                    saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                                    break;
+                                }
+                            }
                         }
+
+                        console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+                        isAllowed = false;
+                        break;
                     }
                 }
-
-                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                return false;
             }
 
-            // Recursively check the children
-            var children = nodeReader.children(node);
-            if (!Array.isArray(children)) return true;
-            for (var i = 0; i < children.length; i++)
-            {
-                var subNode = children[i];
-                var isChildAllowed = await NodeHandler.isReceivedNodeAllowed(subNode, tag)
-                if (!isChildAllowed) return false;
-            }
         }
         catch (exception)
         {
@@ -442,52 +452,20 @@ var NodeHandler = {};
             return true;
         }
 
-        return true;
+        if (WAdebugMode && messages.length > 0)
+        {
+            console.log("Got messages:");
+            console.log(messages);
+        }
+
+        return isAllowed;
     }
 
-    NodeHandler.manipulateReceivedNode = function (node)
+    NodeHandler.manipulateReceivedNode = async function (node)
     {
         var messages = [];
         var children = nodeReader.children(node);
-        var tag = nodeReader.tag(node);
         var type = nodeReader.attr("type", node);
-
-        if (Array.isArray(children))
-        {
-            for (var i = 0; i < children.length; i++)
-            {
-                var child = children[i];
-                var action = child[0];
-                var data = child[1];
-
-                var message = parseMessage(children[i]);
-                if (message) messages.push(message);
-            }
-        }
-
-        if ("search" === type)
-        {
-            messages = { eof: "true" === nodeReader.attr("last", node), messages: messages };
-        }
-
-        if (messages.length > 0) 
-        {
-            if (WAdebugMode) console.log("Got messages! (count: " + messages.length + " )");
-
-            if (isScrappingMessages) 
-            {
-                isScrappingMessages = false;
-                messages = messages.concat(messages);
-
-                if (WAdebugMode) console.log(JSON.parse(JSON.stringify(messages)));
-                //handler.scrapMessages(t[0].key.remoteJid, t[0].key.id, 50);
-            }
-            else if (WAdebugMode) 
-            {
-                console.log(JSON.parse(JSON.stringify(messages)))
-            }
-        }
-        
 
         return node;
     }
@@ -507,20 +485,30 @@ var NodeHandler = {};
         isScrappingMessages = true;
     }
 
-    function parseMessage(e)
+    async function parseMessage(e)
     {
-        switch (nodeReader.tag(e))
+        var children = nodeReader.children(e);
+        var isMultiDevice = Array.isArray(children) && nodeReader.tag(children[0]) == "enc";
+
+        if (!isMultiDevice)
         {
-            case "message":
-                return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
-            case "groups_v2":
-            case "broadcast":
-            case "notification":
-            case "call_log":
-            case "security":
-                return null;
-            default:
-                return null;
+            switch (nodeReader.tag(e))
+            {
+                case "message":
+                    return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
+                case "groups_v2":
+                case "broadcast":
+                case "notification":
+                case "call_log":
+                case "security":
+                    return null;
+                default:
+                    return null;
+            }
+        }
+        else
+        {
+            return decryptE2EMessage(e);
         }
     }
 
@@ -528,45 +516,39 @@ var NodeHandler = {};
     {
         if (messageNode[2][0][0] != "enc") return null;
 
-        var remoteJid = messageNode[1]["from"];
+        var remoteJid = messageNode[1]["jid"] ? messageNode[1]["jid"] : messageNode[1]["from"];
 
         var ciphertext = messageNode[2][0][2];
         var chiphertextType = messageNode[2][0][1]["type"];
 
+        var storage = new moduleRaid().findModule("SessionStoreWriteBackCache")[0].default;
+        storage.flushBufferToDiskIfNotMemOnlyMode();
+
+        // back up the signal database
         var signalDBRequest = indexedDB.open("signal-storage", 70);
-        var signalDB = await new Promise((resolve, reject) => 
-        {
-            signalDBRequest.onsuccess = () =>
-            {
-                resolve(signalDBRequest.result);
-            }
+        var signalDB = await new Promise((resolve, reject) => { signalDBRequest.onsuccess = () => { resolve(signalDBRequest.result); }
             signalDBRequest.onerror = () => {console.error("can't open signal-storage."); reject(false);}
         });
         var exported = await exportIdbDatabase(signalDB);
 
-        /*var address = new libsignal.SignalProtocolAddress(remoteJid.substring(0, remoteJid.indexOf("@")), 0);
-        var mr = new moduleRaid();
-        var storage = mr.findModule("SessionStoreWriteBackCache")[0].default;
+        // decrypt the message
+        var address = new libsignal.SignalProtocolAddress(remoteJid.substring(0, remoteJid.indexOf("@")), 0);
         var sessionCipher = new libsignal.SessionCipher(storage, address);
-        if (chiphertextType == "msg")
-        {
-            console.log("decrypting msg");
-             var plaintext = await sessionCipher.decryptWhisperMessage(ciphertext);
-             console.log(plaintext);
-        }
-        else if (chiphertextType == "pkmsg")
-        {
-            console.log("decrypting pkmsg");
-            var plaintext = await sessionCipher.decryptPreKeyWhisperMessage(ciphertext);
-            console.log(plaintext);
-        }*/
+        var message = chiphertextType == "pkmsg" ? await sessionCipher.decryptPreKeyWhisperMessage(ciphertext)
+                                : await sessionCipher.decryptWhisperMessage(ciphertext);
         
-        //await clearDatabase(signalDB);
-        //importToIdbDatabase(signalDB, exported);
-        await new Promise((resolve, reject) => 
-        {
-            setTimeout(() => {signalDB.close(); resolve();}, 150);
-        });
+        // unpad the message
+        message = new Uint8Array(message);
+        message = new Uint8Array(message.buffer,message. byteOffset,message.length - message[message.length - 1]);
+        
+        // restore the signal database
+        await clearDatabase(signalDB);
+        importToIdbDatabase(signalDB, exported);
+        await new Promise((resolve, reject) => { setTimeout(() => {signalDB.close(); resolve();}, 80); });
+
+        storage.deleteAllCache();
+
+        return messageTypes.Message.parse(message);
         
     }
 
@@ -611,11 +593,11 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
-    if ('saveDeletedMsgs' in options) saveDeletedMsgsHook = options.saveDeletedMsgs;
+    if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    var safetyDelayPanelExpectedHeight = 44; // be careful with this
+    var safetyDelayPanelExpectedHeight = 42; // be careful with this
     var cssRule = getCSSRule('html[dir] .' + UIClassNames.UNREAD_COUNTER_CLASS);
     if (readConfirmationsHookEnabled)
     {
@@ -625,7 +607,7 @@ document.addEventListener('onOptionsUpdate', function (e)
         }
         if (safetyDelayPanel != null)
         {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 15 },
+            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 0 },
                 { defaultDuration: 200, easing: [.1, .82, .25, 1] });
         }
     }
@@ -802,7 +784,11 @@ function markChatAsBlocked(chat)
         chat.pendingSeenCount = 0;
 
         if (blockedChatElem != null)
-            blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS).className = UIClassNames.UNREAD_COUNTER_CLASS + " incognito";
+        {
+            var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
+            if (unreadCounter)
+                unreadCounter.className = UIClassNames.UNREAD_COUNTER_CLASS + " incognito";
+        }
     }
 
     mark();
@@ -872,20 +858,26 @@ function markChatAsBlocked(chat)
     // if it didn't exist previously, animate it in
     if (blockedChats[chat.id] == undefined || warningWasEmpty)
         Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
-    warningMessage.firstChild.textContent = "Read receipts were blocked.";
+
+    if (warningMessage)
+        warningMessage.firstChild.textContent = "Read receipts were blocked.";
 }
 
 document.addEventListener('onDropdownOpened', function (e)
 {
     var menuItems = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0].getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
-    var reactMenuItems = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0])[0].props.children;
+    var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
+    var reactMenuItems = reactResult.props.children[0].props.children;
+    if (reactMenuItems.props == undefined) return;
+    reactMenuItems = reactMenuItems.props.children;
+
     var markAsReadButton = null;
     var props = null;
     for (var i = 0; i < reactMenuItems.length; i++)
     {
         if (reactMenuItems[i] == null) continue;
 
-        if (reactMenuItems[i].key == ".$mark_unread")
+        if (reactMenuItems[i].key == "mark_unread")
         {
             markAsReadButton = menuItems[i];
             props = reactMenuItems[i].props;
@@ -1099,6 +1091,7 @@ deletedDB.onupgradeneeded = function (e)
         case 0:
             db.createObjectStore('msgs', { keyPath: 'id' });
             console.log('WhatsIncognito: Deleted messages database generated');
+            break;
     }
 };
 deletedDB.onerror = function ()
@@ -1111,16 +1104,18 @@ deletedDB.onsuccess = () =>
     console.log("WhatsIncognito: Database loaded");
 }
 
-const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
+const saveDeletedMessage = async (retrievedMsg, deletedMessageKey, revokeMessageID) =>
 {
-    let deletedMsgContents = {}
     // Determine author data
     let author = "";
-    if (deleteMsg.key.fromMe || !deleteMsg.isGroupMsg) author = retrievedMsg.from.user;
-    else author = retrievedMsg.author.user;
+    if (deletedMessageKey.fromMe || !retrievedMsg.isGroupMsg) 
+        author = retrievedMsg.from.user;
+    else 
+        author = retrievedMsg.author.user;
 
     let body = "";
     let isMedia = false;
+
     // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
     if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
     {
@@ -1129,15 +1124,23 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
         // get extended media key              
         try
         {
-            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, type: retrievedMsg.type, signal: (new AbortController).signal });
+            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, 
+                                                                                            encFilehash: retrievedMsg.encFilehash, 
+                                                                                            filehash: retrievedMsg.filehash, 
+                                                                                            mediaKey: retrievedMsg.mediaKey, 
+                                                                                            type: retrievedMsg.type, signal: (new AbortController).signal });
             body = arrayBufferToBase64(decryptedData);
 
         }
         catch (e) { console.error(e); }
     }
-    else body = retrievedMsg.body;
+    else 
+    {   
+        body = retrievedMsg.body;
+    }
 
-    deletedMsgContents.id = deleteMsg.key.id;
+    let deletedMsgContents = {}
+    deletedMsgContents.id = revokeMessageID;
     deletedMsgContents.originalID = retrievedMsg.id.id;
     deletedMsgContents.body = body;
     deletedMsgContents.timestamp = retrievedMsg.t;
@@ -1147,7 +1150,7 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
     deletedMsgContents.mimetype = retrievedMsg.mimetype;
     deletedMsgContents.type = retrievedMsg.type;
     deletedMsgContents.mediaText = retrievedMsg.text;
-    deletedMsgContents.Jid = deleteMsg.key.remoteJid;
+    deletedMsgContents.Jid = deletedMessageKey.remoteJid;
     deletedMsgContents.lng = retrievedMsg.lng;
     deletedMsgContents.lat = retrievedMsg.lat;
 
@@ -1161,21 +1164,21 @@ const saveDeletedMessage = async (retrievedMsg, deleteMsg) =>
             // ConstraintError occurs when an object with the same id already exists
             if (request.error.name == "ConstraintError")
             {
-                console.log("WhatsIncognito: Error saving msg, msg ID already exists");
+                console.log("WhatsIncognito: Error saving message, message ID already exists");
             } 
             else
             {
-                console.log("WhatsIncognito: Unexpected error saving deleted msg");
+                console.log("WhatsIncognito: Unexpected error saving deleted message");
             }
         };
         request.onsuccess = (e) =>
         {
-            console.log("WhatsIncognito: Saved deleted msg with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
+            console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
         }
     }
     else
     {
-        console.log("WhatsIncognito: Deleted msg contents not found");
+        console.log("WhatsIncognito: Deleted message contents not found");
     }
 
 }

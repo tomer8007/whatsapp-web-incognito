@@ -120,7 +120,7 @@ function webScoketInterception()
 				}).catch(function(e)
 				{
 					console.error(e);
-					_send.apply(WSObject, [newData]);  
+					_send.apply(WSObject, [data]);  
 				});
 			}
 
