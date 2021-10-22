@@ -11,7 +11,7 @@ var chats = {};
 var blockedChats = {};
 
 var WAPassthrough = false;
-var WAdebugMode = true;
+var WAdebugMode = false;
 
 // 
 // Actual interception
@@ -253,6 +253,7 @@ var NodeHandler = {};
 
                             if (action == "read" && wsHook.onMessage)
                             {
+                                // TODO: in multi-device, not sending an error message back to the client results in a lot of repeated attempts.
                                 var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 403}" });
                                 wsHook.onMessage(messageEvent);
                             }
