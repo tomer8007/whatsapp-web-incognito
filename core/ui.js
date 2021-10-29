@@ -261,7 +261,7 @@ async function addIconIfNeeded()
         var menuItemElem = document.createElement("div");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
-        menuItemElem.innerHTML = '<div aria-disabled="false" role="button" tabindex="0" class="_26lC3" title="Menu" aria-label="Menu"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="0 0 26 26" width="24" height="24" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>';
+        menuItemElem.innerHTML = '<div aria-disabled="false" role="button" tabindex="0" class="_26lC3" title="Incognito Options" aria-label="Incognito Options"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="0 0 26 26" width="24" height="24" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>';
         var path = menuItemElem.getElementsByTagName("path")[0];
         var svg = menuItemElem.getElementsByTagName("svg")[0];
         //path.setAttribute("d", "M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z");
