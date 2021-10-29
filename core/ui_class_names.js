@@ -12,14 +12,6 @@ UIClassNames.OUTER_DROPDOWN_CLASS = "o--vV"; // outside class of dropdown with "
 UIClassNames.DROPDOWN_CLASS = "_1HnQz";
 UIClassNames.DROPDOWN_ENTRY_CLASS = "_2qR8G _1wMaz _18oo2";
 
-UIClassNames.CHEKBOX_PADDIG_CLASS = "_3yThi";
-UIClassNames.RECTANGLE_CLASS = "_2MZaO";
-UIClassNames.GREEN_BACKGROUND_CLASS = "UF5Li";
-UIClassNames.CHECKBOX_CHECKED_CLASS = UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHEKBOX_PADDIG_CLASS + " " + UIClassNames.GREEN_BACKGROUND_CLASS;
-UIClassNames.CHECKBOX_UNCHECKED_CLASS = UIClassNames.RECTANGLE_CLASS + " " + UIClassNames.CHEKBOX_PADDIG_CLASS + " " + "_2MZaO";
-UIClassNames.TICKED_CLASS = "_2IweK _2PGX8";
-UIClassNames.UNTICKED_CLASS = "_2IweK _1NdIy";
-
 UIClassNames.UNREAD_COUNTER_CLASS = "_23LrM";
 
 UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class

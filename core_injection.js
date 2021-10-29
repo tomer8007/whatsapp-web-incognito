@@ -28,6 +28,7 @@ async function injectOtherScripts()
 		900);
 }
 
+
 function injectScript(scriptName) {
 	return new Promise(function(resolve, reject) {
 		var s = document.createElement('script');

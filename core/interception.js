@@ -239,7 +239,7 @@ var NodeHandler = {};
                             console.log("WhatsIncongito: Allowing read receipt to " + jid);
 
                             // exceptions are one-time operation, so remove it from the list
-                            exceptionsList = exceptionsList.filter(i => i !== jid)
+                            exceptionsList = exceptionsList.filter(i => i !== jid);
 
                             return true;
                         }
@@ -319,6 +319,7 @@ var NodeHandler = {};
         {
             console.error("WhatsIncognito: Allowing WA packet due to exception:");
             console.error(exception);
+            console.error(exception.stack);
             return node;
         }
 
@@ -608,7 +609,7 @@ document.addEventListener('onOptionsUpdate', function (e)
         }
         if (safetyDelayPanel != null)
         {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 1, marginTop: 0 },
+            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 },
                 { defaultDuration: 200, easing: [.1, .82, .25, 1] });
         }
     }
