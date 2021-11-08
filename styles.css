@@ -115,13 +115,13 @@
 .incognito-options-title
 {
     height: 50px !important;
-    padding: 12.5px 24px 0 24px !important;
+    padding: 12.5px 25px 0 24px !important;
     font-size: 20px !important;
 }
 
 .incognito-options-item
 {
-    padding: 12.5px 24px !important;
+    padding: 12.5px 25px !important;
 }
 
 .incognito-options-item:hover
@@ -132,7 +132,7 @@
 .incognito-options-description
 {
     padding-top: 10px !important;
-    padding-left: 25px !important;
+    padding-left: 28px !important;
     font-size: 12px !important;
     opacity: 0.8 !important;
 }

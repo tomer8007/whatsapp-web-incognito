@@ -344,7 +344,7 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen" : "Blocks outgoing presence updates.";
+    var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen.<p>This is a Multi-Device limitation." : "Blocks outgoing presence updates.";
     var deletedMessagesTitle = isMultiDevice ? "Restore deleted messages" : "Save deleted messages";
     var deletedMessagesCaption = isMultiDevice ? "See deleted messages, even if the tab was closed <p>during deletion" : "Saves deleted messages and restores them later.";
 
