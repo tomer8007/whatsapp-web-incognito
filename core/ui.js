@@ -121,7 +121,8 @@ function restoreDeletedMessage(messageNode)
             messageText.textContent = "";
             if (request.result)
             {
-                const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : "font-style: normal; color: rgb(48, 48, 48)";
+                const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : 
+                                                                 "font-style: normal; color: rgb(48, 48, 48)";
                 const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
                 textSpan.style.cssText = textSpanStyle;
                 textSpan.className = "copyable-text selectable-text";
@@ -214,7 +215,8 @@ function restoreDeletedMessage(messageNode)
                         const locationLink = document.createElement("a");
                         locationLink.target = "_blank";
                         locationLink.rel = "noopener noreferrer";
-                        locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(request.result.lat + " " + request.result.lng);
+                        locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
+                                                encodeURIComponent(request.result.lat + " " + request.result.lng);
                         locationLink.textContent = "Google Maps Link"
                         messageText.appendChild(locationLink);
                     }
@@ -261,10 +263,11 @@ async function addIconIfNeeded()
         var menuItemElem = document.createElement("div");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
-        menuItemElem.innerHTML = '<div aria-disabled="false" role="button" tabindex="0" class="_26lC3" title="Incognito Options" aria-label="Incognito Options"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="0 0 26 26" width="24" height="24" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>';
+        menuItemElem.innerHTML = '<div aria-disabled="false" role="button" tabindex="0" class="_26lC3" title="Incognito Options" \
+                                aria-label="Incognito Options"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="0 0 26 26" \
+                                width="24" height="24" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>';
         var path = menuItemElem.getElementsByTagName("path")[0];
         var svg = menuItemElem.getElementsByTagName("svg")[0];
-        //path.setAttribute("d", "M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z");
 
         var response = await fetch(chrome.extension.getURL("images/incognito_gray_24.svg"));
 		var text = await response.text();
@@ -333,7 +336,8 @@ async function addIconIfNeeded()
         isUIClassesWorking = false;
         Swal.fire({
             title: "WAIncognito is temporarily broken",
-            html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extnesion will not appear. <br><Br> Please be patient for a few days until a newer compatible version will be released.',
+            html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extnesion will not appear. \
+                    <br><Br> Please be patient for a few days until a newer compatible version will be released.',
             icon: "warning",
             width: 600,
             confirmButtonColor: "#DD6B55",
@@ -344,9 +348,12 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen.<p>This is a Multi-Device limitation." : "Blocks outgoing presence updates.";
-    var deletedMessagesTitle = isMultiDevice ? "Restore deleted messages" : "Save deleted messages";
-    var deletedMessagesCaption = isMultiDevice ? "See deleted messages, even if the tab was closed <p>during deletion" : "Saves deleted messages and restores them later.";
+    var presenceCaption = isMultiDevice ? "May prevent you from seeing other people's last seen.<p>This is a multi-device mode limitation." : 
+                                          "Blocks outgoing presence updates.";
+    var deletedMessagesTitle = isMultiDevice ? "Restore deleted messages" : 
+                                                "Save deleted messages";
+    var deletedMessagesCaption = isMultiDevice ? "See deleted messages, even if the tab was closed <p>during deletion" : 
+                                                 "Saves deleted messages and restores them later.";
 
     var dropContent = " \
         <div class='incognito-options-container' dir='ltr'> \
@@ -356,12 +363,14 @@ function generateDropContent(options)
             <div class='incognito-options-item'> \
                 <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
                     <div class='checkbox-container-incognito' style=''> \
-                        <div class='checkbox checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> <div class='checkmark incognito-mark incognito-marked'> </div>" :
+                        <div class='checkbox checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
+                        <div class='checkmark incognito-mark incognito-marked'> </div>" :
                         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                         </div> \
                     </div> \
                     Don't send read confirmations \
-                    <div class='incognito-options-description'>Messages that their read confirmation was blocked<p> will be marked in red instead of green.</div> \
+                    <div class='incognito-options-description'>Messages that their read confirmation was blocked<p> \
+                    will be marked in red instead of green.</div> \
                 </div> \
                         \
                         \
@@ -387,7 +396,8 @@ function generateDropContent(options)
                     \
             <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
                 <div class='checkbox-container-incognito' style=''> \
-                    <div class='checkbox checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked incognito-checked'> <div class='checkmark incognito-mark incognito-marked'> </div>" :
+                    <div class='checkbox checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked incognito-checked'> \
+                    <div class='checkmark incognito-mark incognito-marked'> </div>" :
                     "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                     </div> \
                 </div> \
@@ -396,7 +406,8 @@ function generateDropContent(options)
             </div> \
             <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
             <div class='checkbox-container-incognito' style=''> \
-                <div class='checkbox checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked incognito-checked'> <div class='checkmark incognito-mark incognito-marked'> </div>" :
+                <div class='checkbox checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked incognito-checked'> \
+                <div class='checkmark incognito-mark incognito-marked'> </div>" :
                     "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                 </div> \
             </div> \
@@ -419,7 +430,8 @@ document.addEventListener('onMarkAsReadClick', function (e)
             {
                 Swal.fire({
                     title: "Mark as read?",
-                    text: data.formattedName + " will be able to tell you read the last " + (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
+                    text: data.formattedName + " will be able to tell you read the last " + 
+                            (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
                     input: 'checkbox',
                     inputValue: 0,
                     inputPlaceholder: "Don't show this warning again",

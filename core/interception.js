@@ -329,7 +329,9 @@ var NodeHandler = {};
     NodeHandler.manipulateSentMessageNode = async function (messageNode)
     {
         var remoteJid = null;
-        if (messageNode[1] == undefined)
+        var isMultiDevice = messageNode[1];
+
+        if (!isMultiDevice)
         {
             var message = await parseMessage(messageNode);
             if (WAdebugMode)
@@ -338,7 +340,6 @@ var NodeHandler = {};
                 console.log(message);
             }
 
-            // non muti-device.
             if (message == null || message.key == null) return;
             remoteJid = message.key.remoteJid;
         }
@@ -363,16 +364,16 @@ var NodeHandler = {};
         //         ...
         var putBreakpointHere = 1;
 
-        // TODO: following lines are commented out because apperently the message parsing above is not complete,
-        // so the message is not always restored identically
-
-        // re-assmble everything
-        // messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-        // subNode[2] = messageBuffer; children[i] = subNode; node[2] = children;
+        if (!isMultiDevice)
+        {
+            // TODO: following lines are commented out due to non-complete message types
+            // re-assmble everything
+            //messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
+            //messageNode[2] = messageBuffer;
+        }
 
         return messageNode;
     }
-
 
     NodeHandler.isReceivedNodeAllowed = async function (node, tag)
     {
