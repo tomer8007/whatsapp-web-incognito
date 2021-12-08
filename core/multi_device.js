@@ -1,4 +1,7 @@
-// Mult device support
+// 
+// Noise protocol handling
+//
+
 var MultiDevice = {};
 
 var originalImportKey = crypto.subtle.importKey;

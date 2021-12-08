@@ -1,7 +1,9 @@
-// Crypto
+//
+// Encryption & decryption of WhatsApp packets
+//
+
 var WACrypto = {};
 
-(function() {
 WACrypto.decryptWithWebCrypto = async function(buffer, isMultiDevice, isIncoming = true) 
 {
     if (buffer instanceof Uint8Array) buffer = toArayBufer(buffer);
@@ -240,5 +242,3 @@ function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
 }
-
-})();

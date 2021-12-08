@@ -12,7 +12,7 @@ UIClassNames.OUTER_DROPDOWN_CLASS = "o--vV"; // outside class of dropdown with "
 UIClassNames.DROPDOWN_CLASS = "_1HnQz";
 UIClassNames.DROPDOWN_ENTRY_CLASS = "_2qR8G _1wMaz _18oo2";
 
-UIClassNames.UNREAD_COUNTER_CLASS = "_23LrM";
+UIClassNames.UNREAD_COUNTER_CLASS = "ovhn1urg";
 
 UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
 UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
