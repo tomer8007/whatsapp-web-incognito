@@ -15,9 +15,11 @@ async function injectOtherScripts()
 	await injectScript('core/parsing/message_parser.js');
 	injectScript('core/parsing/message_types.js');
 
+	injectScript('core/utils.js');
 	injectScript('core/wa_packet.js');
 	injectScript('core/crypto.js');
 	injectScript('core/ui_class_names.js');
+	injectScript('core/inline_ui.js');
 	
 	injectScript('lib/pako.js');
 	injectScript('core/multi_device.js');

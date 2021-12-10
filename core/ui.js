@@ -468,139 +468,140 @@ function restoreDeletedMessage(messageNode)
     if (deletedDB == null) return;
 
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
-    if (messageText)
+    if (!messageText) return;
+
+    const data_id = messageNode.getAttribute("data-id");
+    const msgID = data_id.split("_")[2];
+
+    const transcation = deletedDB.result.transaction('msgs', "readonly");
+    let request = transcation.objectStore("msgs").get(msgID);
+
+    const span = document.createElement("span");
+    const textSpan = document.createElement("span");
+    span.className = UIClassNames.DELETED_MESSAGE_SPAN;
+
+    request.onsuccess = (e) =>
     {
-        const data_id = messageNode.getAttribute("data-id");
-        const msgID = data_id.split("_")[2];
-
-        const transcation = deletedDB.result.transaction('msgs', "readonly");
-        let request = transcation.objectStore("msgs").get(msgID);
-
-        const span = document.createElement("span");
-        const textSpan = document.createElement("span");
-        span.className = UIClassNames.DELETED_MESSAGE_SPAN;
-
-        request.onsuccess = (e) =>
+        messageText.textContent = "";
+        if (!request.result)
         {
-            messageText.textContent = "";
-            if (request.result)
-            {
-                const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : 
-                                                                 "font-style: normal; color: rgb(48, 48, 48)";
-                const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
-                textSpan.style.cssText = textSpanStyle;
-                textSpan.className = "copyable-text selectable-text";
-                const titleSpan = document.createElement("span");
-                titleSpan.style.cssText = titleSpanStyle;
-                if (request.result.isMedia)
-                {
-
-                    titleSpan.textContent = "Restored media: \n";
-                    messageText.appendChild(titleSpan); // Top title span
-
-                    if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText; //caption text span
-                    if (request.result.type === "image")
-                    {
-                        const imgTag = document.createElement("img");
-                        imgTag.style.cssText = "width: 100%;";
-                        imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
-                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        messageText.appendChild(imgTag);
-                    }
-                    else if (request.result.type === "sticker")
-                    {
-                        const imgTag = document.createElement("img");
-                        imgTag.className = UIClassNames.STICKER_MESSAGE_TAG;
-                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        messageText.appendChild(imgTag);
-                    }
-                    else if (request.result.type === "video")
-                    {
-                        const vidTag = document.createElement("video");
-                        vidTag.controls = true;
-                        vidTag.style.cssText = "width: 100%;";
-                        const sourceTag = document.createElement("source");
-                        sourceTag.type = request.result.mimetype;
-                        sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        vidTag.appendChild(sourceTag);
-                        messageText.appendChild(vidTag);
-                    }
-                    else if (request.result.type === "document")
-                    {
-                        const aTag = document.createElement("a");
-                        aTag.download = request.result.fileName;
-                        aTag.href = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        aTag.textContent = "Download \"" + request.result.fileName + "\"";
-                        messageText.appendChild(aTag);
-                    }
-                    else if (request.result.type === "ptt") // audio file
-                    {
-                        const audioTag = document.createElement("audio");
-                        audioTag.controls = true;
-                        const sourceTag = document.createElement("source");
-                        sourceTag.type = request.result.mimetype;
-                        sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        audioTag.appendChild(sourceTag);
-                        messageText.appendChild(audioTag);
-                    }
-
-
-                }
-                else
-                {
-                    if (request.result.type === "vcard") // contact cards
-                    {
-                        let vcardBody = request.result.body;
-                        vcardBody = vcardBody.split(":");
-                        const phone = vcardBody[vcardBody.length - 2].slice(0, -4);
-                        const aTagPhone = document.createElement("a");
-                        aTagPhone.href = "tel:" + phone;
-                        aTagPhone.textContent = phone;
-                        aTagPhone.target = "_blank";
-                        aTagPhone.rel = "noopener noreferrer";
-                        const name = vcardBody[4].split(";")[0].slice(0, -4);
-
-                        titleSpan.textContent = "Restored contact card: \r\n";
-                        textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
-
-                        messageText.appendChild(titleSpan);
-                        textSpan.appendChild(aTagPhone);
-
-                    }
-                    else if (request.result.type === "location")
-                    {
-                        titleSpan.textContent = "Restored location: \n";
-                        const imgTag = document.createElement("img");
-                        imgTag.style.cssText = "width: 100%;";
-                        imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
-                        imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                        messageText.appendChild(imgTag);
-
-                        const locationLink = document.createElement("a");
-                        locationLink.target = "_blank";
-                        locationLink.rel = "noopener noreferrer";
-                        locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
-                                                encodeURIComponent(request.result.lat + " " + request.result.lng);
-                        locationLink.textContent = "Google Maps Link"
-                        messageText.appendChild(locationLink);
-                    }
-                    else
-                    {
-                        titleSpan.textContent = "Restored message: \n";
-                        textSpan.textContent = request.result.body;
-                        messageText.appendChild(titleSpan);
-                    }
-
-                }
-
-            }
-            else 
-                textSpan.textContent = "Failed to restore message";
-
+            textSpan.textContent = "Failed to restore message";
             messageText.appendChild(textSpan);
             messageText.appendChild(span);
+            return;
+        }
+
+        const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : 
+                                                            "font-style: normal; color: rgb(48, 48, 48)";
+        const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
+        textSpan.style.cssText = textSpanStyle;
+        textSpan.className = "copyable-text selectable-text";
+        const titleSpan = document.createElement("span");
+        titleSpan.style.cssText = titleSpanStyle;
+        if (request.result.isMedia)
+        {
+
+            titleSpan.textContent = "Restored media: \n";
+            messageText.appendChild(titleSpan); // Top title span
+
+            if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText; //caption text span
+            if (request.result.type === "image")
+            {
+                const imgTag = document.createElement("img");
+                imgTag.style.cssText = "width: 100%;";
+                imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
+                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                messageText.appendChild(imgTag);
+            }
+            else if (request.result.type === "sticker")
+            {
+                const imgTag = document.createElement("img");
+                imgTag.className = UIClassNames.STICKER_MESSAGE_TAG;
+                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                messageText.appendChild(imgTag);
+            }
+            else if (request.result.type === "video")
+            {
+                const vidTag = document.createElement("video");
+                vidTag.controls = true;
+                vidTag.style.cssText = "width: 100%;";
+                const sourceTag = document.createElement("source");
+                sourceTag.type = request.result.mimetype;
+                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                vidTag.appendChild(sourceTag);
+                messageText.appendChild(vidTag);
+            }
+            else if (request.result.type === "document")
+            {
+                const aTag = document.createElement("a");
+                aTag.download = request.result.fileName;
+                aTag.href = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                aTag.textContent = "Download \"" + request.result.fileName + "\"";
+                messageText.appendChild(aTag);
+            }
+            else if (request.result.type === "ptt") // audio file
+            {
+                const audioTag = document.createElement("audio");
+                audioTag.controls = true;
+                const sourceTag = document.createElement("source");
+                sourceTag.type = request.result.mimetype;
+                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                audioTag.appendChild(sourceTag);
+                messageText.appendChild(audioTag);
+            }
+
 
         }
+        else
+        {
+            if (request.result.type === "vcard") // contact cards
+            {
+                let vcardBody = request.result.body;
+                vcardBody = vcardBody.split(":");
+                const phone = vcardBody[vcardBody.length - 2].slice(0, -4);
+                const aTagPhone = document.createElement("a");
+                aTagPhone.href = "tel:" + phone;
+                aTagPhone.textContent = phone;
+                aTagPhone.target = "_blank";
+                aTagPhone.rel = "noopener noreferrer";
+                const name = vcardBody[4].split(";")[0].slice(0, -4);
+
+                titleSpan.textContent = "Restored contact card: \r\n";
+                textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
+
+                messageText.appendChild(titleSpan);
+                textSpan.appendChild(aTagPhone);
+
+            }
+            else if (request.result.type === "location")
+            {
+                titleSpan.textContent = "Restored location: \n";
+                const imgTag = document.createElement("img");
+                imgTag.style.cssText = "width: 100%;";
+                imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
+                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                messageText.appendChild(imgTag);
+
+                const locationLink = document.createElement("a");
+                locationLink.target = "_blank";
+                locationLink.rel = "noopener noreferrer";
+                locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
+                                        encodeURIComponent(request.result.lat + " " + request.result.lng);
+                locationLink.textContent = "Google Maps Link"
+                messageText.appendChild(locationLink);
+            }
+            else
+            {
+                titleSpan.textContent = "Restored message: \n";
+                textSpan.textContent = request.result.body;
+                messageText.appendChild(titleSpan);
+            }
+
+        }
+            
+        messageText.appendChild(textSpan);
+        messageText.appendChild(span);
+
     }
 }
 
