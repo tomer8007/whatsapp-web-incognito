@@ -183,6 +183,8 @@ wsHook.after = function (messageEvent, url)
     }
     catch (e)
     {
+        if (e.message.includes("stream end")) return messageEvent;
+
         console.error("Passing-through incoming packet due to error:");
         console.error(e);
         return messageEvent;
@@ -521,7 +523,7 @@ async function decryptE2EMessage(messageNode)
     var ciphertext = messageNode[2][0][2];
     var chiphertextType = messageNode[2][0][1]["type"];
 
-    var storage = new moduleRaid().findModule("SessionStoreWriteBackCache")[0].default;
+    var storage = new moduleRaid().findModule("getSignalProtocolStore")[0].getSignalProtocolStore();
     storage.flushBufferToDiskIfNotMemOnlyMode();
 
     // back up the signal database

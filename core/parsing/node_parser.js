@@ -90,7 +90,9 @@ function NodeParser(isMultiDevice = false)
         this.readNode = function(e) {
             var t = e.readByte(), r = this.readListSize(e, t);
             if (t = e.readByte(), t === o.STREAM_END)
+            {
                 throw new Error("unexpected stream end " + e.debugInfo());
+            }
             var n = this.readString(e, t);
             if (0 === r || !n)
                 throw new Error("invalid node. 0 list or empty tag" + e.debugInfo());
