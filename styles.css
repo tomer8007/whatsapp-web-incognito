@@ -1,5 +1,7 @@
 
-/* CSS Document */
+/*
+  Menu/Icon
+*/
 
 .menu-item-incognito
 {
@@ -23,11 +25,34 @@
     }
 }
 
+/*
+  Unread counters
+*/
+
+.blocked-color
+{
+	background-color: rgba(255,0,0,0.3) !important;
+}
+
+.unread-count.blinking
+{
+	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+}
+
+.blinking
+{
+	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+}
+
 .drop-theme-incognito.drop-element
 {
   z-index: 1100 !important;
 	transform-origin: left top 0px;
 }
+
+/*
+  Checkbox
+*/
 
 .checkbox-container-incognito
 {
@@ -100,6 +125,10 @@
   opacity: 1 !important;
 }
 
+/*
+  Options
+*/
+
 .incognito-options-container
 {
     background-color: var(--dropdown-background) !important;
@@ -142,25 +171,6 @@
 	direction: ltr
 }
 
-.unread-count.incognito
-{
-	background-color: rgba(255,0,0,0.3) !important;
-}
-
-.incognito
-{
-	background-color: rgba(255,0,0,0.3) !important;
-}
-
-.unread-count.blinking
-{
-	-webkit-animation:blink normal 0.7s infinite ease-in-out;
-}
-
-.blinking
-{
-	-webkit-animation:blink normal 0.7s infinite ease-in-out;
-}
 
 .incognito-message
 {

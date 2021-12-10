@@ -37,9 +37,10 @@ function initialize()
                     var addedNode = addedNodes[j];
                     if (addedNode.classList == undefined) continue;
 
-                    if (addedNode.classList.contains("two") || addedNode.getElementsByClassName("two").length > 0)
+                    if (addedNode.getElementsByClassName("two").length > 0)
                     {
                         // main app was added, UI is ready
+                        addIconIfNeeded();
                         setTimeout(function () { onMainUIReady(); }, 100);
 
                         found = true;
@@ -106,10 +107,8 @@ function onMainUIReady()
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
 
     setTimeout(checkInterception, 1000);
-    addIconIfNeeded();
 
-    // if the menu itme is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
-    setTimeout(addIconIfNeeded, 500);
+    // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     setTimeout(addIconIfNeeded, 1000);
 }
 
@@ -139,13 +138,9 @@ async function addIconIfNeeded()
 
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
         {
-            document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-            {
-                detail: JSON.stringify(options)
-            }));
+            document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
 
             var dropContent = generateDropContent(options);
-
             var drop = new Drop(
             {
                 target: menuItemElem,
@@ -223,7 +218,7 @@ function generateDropContent(options)
             <div class='incognito-options-item'> \
                 <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
                     <div class='checkbox-container-incognito' style=''> \
-                        <div class='checkbox checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
+                        <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
                         <div class='checkmark incognito-mark incognito-marked'> </div>" :
                         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                         </div> \
@@ -345,6 +340,10 @@ function getTheme()
     }
 }
 
+//
+// Drop handlers
+//
+
 function onReadConfirmaionsTick()
 {
     var readConfirmationsHook = false;
@@ -460,6 +459,9 @@ function onSafetyDelayEnabled()
     }));
 }
 
+//
+// Utils
+//
 
 function restoreDeletedMessage(messageNode) 
 {
@@ -606,7 +608,7 @@ function tickCheckbox(checkbox, checkmark)
 {
     var checkboxClass = checkbox.getAttribute("class");
     checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " incognito-checked");
-    checkmark.className += "incognito-marked";
+    checkmark.classList.add("incognito-marked");
 }
 
 function untickCheckbox(checkbox, checkmark)

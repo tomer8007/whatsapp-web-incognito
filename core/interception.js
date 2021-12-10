@@ -642,6 +642,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     var safetyDelayPanelExpectedHeight = 42; // be careful with this
     if (readConfirmationsHookEnabled)
     {
+        document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 0.3)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 },
@@ -650,6 +651,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     }
     else
     {
+        document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 1)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
@@ -667,14 +669,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
     for (var i = 0; i < unreadCounters.length; i++)
     {
-        if (readConfirmationsHookEnabled)
-        {
-            unreadCounters[i].className = unreadCounters[i].className + " incognito";
-        }
-        else
-        {
-            unreadCounters[i].className = unreadCounters[i].className.replace("incognito", "");
-        }
+        unreadCounters[i].classList.remove("blocked-color");
     }
 
 
@@ -847,7 +842,7 @@ function markChatAsPendingReciptsSending()
             var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
             if (unreadCounter != null)
             {
-                unreadCounter.className += " blinking";
+                unreadCounter.classList.add("blinking");
             }
         }
 
@@ -867,7 +862,7 @@ function markChatAsPendingReciptsSending()
                 document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
 
                 var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-                unreadCounter.className = unreadCounter.className.replace("incognito", "").replace("blinking", "");
+                unreadCounter.className = unreadCounter.className.replace("blocked-color", "").replace("blinking", "");
             }
         }, 1000);
 
@@ -901,8 +896,8 @@ function markChatAsBlocked(chat)
         if (blockedChatElem != null)
         {
             var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter && !unreadCounter.className.includes("incognito"))
-                unreadCounter.className = unreadCounter.className + " incognito";
+            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
+                unreadCounter.classList.add("blocked-color");
         }
     }
 
@@ -1089,7 +1084,7 @@ deletedDB.onerror = function ()
 };
 deletedDB.onsuccess = () =>
 {
-    console.log("WhatsIncognito: Database loaded");
+    
 }
 
 const saveDeletedMessage = async (retrievedMsg, deletedMessageKey, revokeMessageID) =>
