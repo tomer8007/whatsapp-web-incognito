@@ -38,24 +38,10 @@ function getCurrentChat()
 {
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
     if (elements.length == 0) return null;
+    var chatPanel = elements[0];
 
-    var reactResult = FindReact(elements[0]);
-    var chat = null;
-    if (Array.isArray(reactResult))
-    {
-        for (var i = 0; i < reactResult.length; i++)
-        {
-            if (reactResult[i].props.chat !== undefined)
-            {
-                chat = reactResult[i].props.chat;
-                break;
-            }
-        }
-    }
-    else
-    {
-        chat = reactResult.props.chat;
-    }
+    var reactResult = FindReact(elements[0], traverseUp = 2);
+    var chat = reactResult.props.children.props.children.props.chat;
     return chat;
 }
 

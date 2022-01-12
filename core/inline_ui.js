@@ -2,6 +2,8 @@
 // UI Event handlers
 // ---------------------
 
+// TODO: exceptions get thrown silently inside event listeners. fix this
+
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
@@ -300,7 +302,6 @@ function markChatAsBlocked(chat)
     //
 
     var chatUnreadRead = chat.unreadCount;
-    
     var currentChat = getCurrentChat();
     
     function mark()

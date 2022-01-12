@@ -85,7 +85,6 @@ wsHook.before = function (originalData, url)
             }
 
             return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag);
-            
         }
         else
         {
@@ -183,7 +182,7 @@ wsHook.after = function (messageEvent, url)
     }
     catch (e)
     {
-        if (e.message.includes("stream end")) return messageEvent;
+        if (e.message && e.message.includes("stream end")) return messageEvent;
 
         console.error("Passing-through incoming packet due to error:");
         console.error(e);
@@ -382,12 +381,15 @@ NodeHandler.isReceivedNodeAllowed = async function (node, tag)
     {
         var nodeTag = nodeReader.tag(node);
         var children = nodeReader.children(node);
+
+        // we care only about nodes potentially containing a message
         if (nodeTag != "action" && nodeTag != "message") return true;
 
         // scan for message nodes
         var messages = [];
         var nodes = [node];
         if (Array.isArray(children)) nodes = nodes.concat(children);
+
         for (var i = 0 ; i < nodes.length; i++)
         {
             var node = nodes[i];
@@ -494,6 +496,7 @@ async function parseMessage(e)
 
     if (!isMultiDevice)
     {
+        // the message is not singal-encrypted, so just parse it
         switch (nodeReader.tag(e))
         {
             case "message":
@@ -510,6 +513,7 @@ async function parseMessage(e)
     }
     else
     {
+        // decrypt the signal message
         return decryptE2EMessage(e);
     }
 }
@@ -526,11 +530,13 @@ async function decryptE2EMessage(messageNode)
     var storage = new moduleRaid().findModule("getSignalProtocolStore")[0].getSignalProtocolStore();
     storage.flushBufferToDiskIfNotMemOnlyMode();
 
-    // back up the signal database
+    // open the signal DB
     var signalDBRequest = indexedDB.open("signal-storage", 70);
     var signalDB = await new Promise((resolve, reject) => { signalDBRequest.onsuccess = () => { resolve(signalDBRequest.result); }
         signalDBRequest.onerror = () => {console.error("can't open signal-storage."); reject(false);}
     });
+
+    // back up the signal DB
     var exported = await exportIdbDatabase(signalDB);
 
     // decrypt the message
