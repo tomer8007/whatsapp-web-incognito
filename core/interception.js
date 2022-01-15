@@ -44,10 +44,7 @@ wsHook.before = function (originalData, url)
         {
             // encrytped binary payload
             var decryptedFrames =  await WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
-            if (decryptedFrames == null)
-            {
-                return originalData;
-            }
+            if (decryptedFrames == null) return originalData;
 
             for (var i = 0; i < decryptedFrames.length; i++)
             {
@@ -151,7 +148,7 @@ wsHook.after = function (messageEvent, url)
                     console.log(node);
                 }
 
-                var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, tag);
+                var isAllowed = await NodeHandler.isReceivedNodeAllowed(node);
                 var manipulatedNode = node.slice();
                 if (!isAllowed)
                 {
@@ -215,9 +212,10 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
         var action = child[0];
         var data = child[1];
         var shouldBlock = 
-            (readConfirmationsHookEnabled && action === "read" ||
-            readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read" ||
-            readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+            (readConfirmationsHookEnabled && action === "read") ||
+            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
+            (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
+            (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
             (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
             (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
@@ -331,7 +329,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode)
 
     if (!isMultiDevice)
     {
-        var message = await parseMessage(messageNode);
+        var message = await getMessageFromNode(messageNode);
         if (WAdebugMode)
         {
             console.log("WAIncognito: Sending message:");
@@ -373,87 +371,77 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode)
     return messageNode;
 }
 
-NodeHandler.isReceivedNodeAllowed = async function (node, tag)
+NodeHandler.isReceivedNodeAllowed = async function (node)
 {
     var isAllowed = true;
 
-    try
+    var nodeTag = nodeReader.tag(node);
+    var children = nodeReader.children(node);
+
+    // we care only about nodes potentially containing a message
+    if (nodeTag != "action" && nodeTag != "message") return true;
+
+    // scan for message nodes
+    var messages = [];
+    var nodes = [node];
+    if (Array.isArray(children)) nodes = nodes.concat(children);
+
+    for (var i = 0 ; i < nodes.length; i++)
     {
-        var nodeTag = nodeReader.tag(node);
-        var children = nodeReader.children(node);
+        var node = nodes[i];
+        if (nodeReader.tag(node) != "message") continue;
 
-        // we care only about nodes potentially containing a message
-        if (nodeTag != "action" && nodeTag != "message") return true;
+        var childs = nodeReader.children(node);
+        var isMultiDevice = Array.isArray(childs) && nodeReader.tag(childs[0]) == "enc";
 
-        // scan for message nodes
-        var messages = [];
-        var nodes = [node];
-        if (Array.isArray(children)) nodes = nodes.concat(children);
+        var message = await getMessageFromNode(node);
+        messages.push(message);
 
-        for (var i = 0 ; i < nodes.length; i++)
+        var remoteJid = null;
+        if (!isMultiDevice)
         {
-            var node = nodes[i];
-            if (nodeReader.tag(node) != "message") continue;
-
-            var childs = nodeReader.children(node);
-            var isMultiDevice = Array.isArray(childs) && nodeReader.tag(childs[0]) == "enc";
-
-            var message = await parseMessage(node);
-            messages.push(message);
-
-            var remoteJid = null;
-            if (!isMultiDevice)
-            {
-                // non multi-device
-                remoteJid = message.key.remoteJid;
-                messageId = message.key.id;
-                message = message.message;
-            }
-            else if (node[1] != null)
-            {
-                remoteJid = node[1]["from"];
-                messageId = node[1]["id"];
-            }
-
-            //
-            // Check if this is a message deletion node
-            //
-            var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
-            if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
-            {
-                var deletedMessageId = message.protocolMessage.key.id;
-                
-                // someone deleted a message, block
-                if (saveDeletedMsgsHookEnabled)
-                {
-                    const chat = getChatByJID(remoteJid);
-                    if (chat)
-                    {
-                        const msgs = chat.msgs.models;
-                    
-                        for (let i = 0; i < msgs.length; i++)
-                        {
-                            if (msgs[i].id.id == deletedMessageId)
-                            {
-                                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                                break;
-                            }
-                        }
-                    }
-
-                    console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                    isAllowed = false;
-                    break;
-                }
-            }
+            // non multi-device
+            remoteJid = message.key.remoteJid;
+            messageId = message.key.id;
+            message = message.message;
+        }
+        else if (node[1] != null)
+        {
+            remoteJid = node[1]["from"];
+            messageId = node[1]["id"];
         }
 
-    }
-    catch (exception)
-    {
-        console.error("WhatsIncognito: Allowing WA packet due to exception:");
-        console.error(exception);
-        return true;
+        //
+        // Check if this is a message deletion node
+        //
+        var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
+        if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
+        {
+            var deletedMessageId = message.protocolMessage.key.id;
+            
+            // someone deleted a message, block
+            if (saveDeletedMsgsHookEnabled)
+            {
+                const chat = getChatByJID(remoteJid);
+                if (chat)
+                {
+                    const msgs = chat.msgs.models;
+                
+                    for (let i = 0; i < msgs.length; i++)
+                    {
+                        if (msgs[i].id.id == deletedMessageId)
+                        {
+                            saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                            break;
+                        }
+                    }
+                }
+
+                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+                isAllowed = false;
+                break;
+            }
+        }
     }
 
     if (WAdebugMode && messages.length > 0)
@@ -489,18 +477,18 @@ NodeHandler.scrapMessages = function (jid, index, count)
     isScrappingMessages = true;
 }
 
-async function parseMessage(e)
+async function getMessageFromNode(node)
 {
-    var children = nodeReader.children(e);
+    var children = nodeReader.children(node);
     var isMultiDevice = Array.isArray(children) && nodeReader.tag(children[0]) == "enc";
 
     if (!isMultiDevice)
     {
         // the message is not singal-encrypted, so just parse it
-        switch (nodeReader.tag(e))
+        switch (nodeReader.tag(node))
         {
             case "message":
-                return messageTypes.WebMessageInfo.parse(nodeReader.children(e));
+                return messageTypes.WebMessageInfo.parse(nodeReader.children(node));
             case "groups_v2":
             case "broadcast":
             case "notification":
@@ -514,7 +502,7 @@ async function parseMessage(e)
     else
     {
         // decrypt the signal message
-        return decryptE2EMessage(e);
+        return decryptE2EMessage(node);
     }
 }
 
@@ -542,8 +530,25 @@ async function decryptE2EMessage(messageNode)
     // decrypt the message
     var address = new libsignal.SignalProtocolAddress(remoteJid.substring(0, remoteJid.indexOf("@")), 0);
     var sessionCipher = new libsignal.SessionCipher(storage, address);
-    var message = chiphertextType == "pkmsg" ? await sessionCipher.decryptPreKeyWhisperMessage(ciphertext)
-                            : await sessionCipher.decryptWhisperMessage(ciphertext);
+    var message = null;
+    switch (chiphertextType)
+    {
+        case "pkmsg":
+            // Pre-Key message
+            message = await sessionCipher.decryptPreKeyWhisperMessage(ciphertext);
+            break;
+        case "msg":
+            // Regular message
+            message = await sessionCipher.decryptWhisperMessage(ciphertext);
+            break;
+        case "skmsg":
+            // Sender Key message, aka group message
+            var participant = messageNode[1]["participant"];
+            var participantAddress = new libsignal.SignalProtocolAddress(participant.substring(0, participant.indexOf("@")), 0);
+            var groupCipher = new window.libsignal.GroupCipher(storage, remoteJid, participantAddress);
+            message = await groupCipher.decryptSenderKeyMessage(ciphertext)
+            break;
+    }
     
     // unpad the message
     message = new Uint8Array(message);
@@ -593,7 +598,7 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI = {}
 
     var moduleFinder = moduleRaid();
-    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadAndDecrypt")[0];
+    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 
@@ -648,7 +653,7 @@ const saveDeletedMessage = async (retrievedMsg, deletedMessageKey, revokeMessage
         // get extended media key              
         try
         {
-            const decryptedData = await WhatsAppAPI.downloadManager.default.downloadAndDecrypt({ directPath: retrievedMsg.directPath, 
+            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndDecrypt({ directPath: retrievedMsg.directPath, 
                                                                                             encFilehash: retrievedMsg.encFilehash, 
                                                                                             filehash: retrievedMsg.filehash, 
                                                                                             mediaKey: retrievedMsg.mediaKey, 
