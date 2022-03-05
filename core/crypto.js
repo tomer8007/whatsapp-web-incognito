@@ -39,7 +39,6 @@ WACrypto.decryptWithWebCrypto = async function(buffer, isMultiDevice, isIncoming
     {
         var decryptedFrames = MultiDevice.decryptNoisePacket(buffer, isIncoming);
         return decryptedFrames;
-        
     }
 }
 

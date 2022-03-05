@@ -160,11 +160,9 @@ wsHook.after = function (messageEvent, url)
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter};
             }
 
-            return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag).then(function (packet)
-            {
-                messageEvent.data = packet;
-                return messageEvent;
-            });
+            var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
+            messageEvent.data = packet;
+            return messageEvent;
             
         }
         else
@@ -177,12 +175,12 @@ wsHook.after = function (messageEvent, url)
             return messageEvent;
         }
     }
-    catch (e)
+    catch (exception)
     {
-        if (e.message && e.message.includes("stream end")) return messageEvent;
+        if (exception.message && exception.message.includes("stream end")) return messageEvent;
 
         console.error("Passing-through incoming packet due to error:");
-        console.error(e);
+        console.error(exception);
         return messageEvent;
     };
 
@@ -378,7 +376,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node)
     var nodeTag = nodeReader.tag(node);
     var children = nodeReader.children(node);
 
-    // we care only about nodes potentially containing a message
+    // if this node does not contain a message, it's allowed
     if (nodeTag != "action" && nodeTag != "message") return true;
 
     // scan for message nodes
@@ -422,7 +420,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node)
             // someone deleted a message, block
             if (saveDeletedMsgsHookEnabled)
             {
-                const chat = getChatByJID(remoteJid);
+                var chat = getChatByJID(remoteJid);
                 if (chat)
                 {
                     const msgs = chat.msgs.models;
@@ -460,21 +458,6 @@ NodeHandler.manipulateReceivedNode = async function (node)
     var type = nodeReader.attr("type", node);
 
     return node;
-}
-
-var messages = [];
-var isScrappingMessages = false;
-var epoch = 8;
-
-NodeHandler.scrapMessages = function (jid, index, count)
-{
-    messages = [];
-    var startNode = ["query", {
-        "type": "message", "kind": "before", "jid": jid, "count": count.toString(),
-        "index": index, "owner": "true", "epoch": (epoch++).toString()
-    }, null];
-    WACrypto.sendNode(startNode);
-    isScrappingMessages = true;
 }
 
 async function getMessageFromNode(node)
@@ -552,7 +535,7 @@ async function decryptE2EMessage(messageNode)
     
     // unpad the message
     message = new Uint8Array(message);
-    message = new Uint8Array(message.buffer,message. byteOffset,message.length - message[message.length - 1]);
+    message = new Uint8Array(message.buffer, message.byteOffset, message.length - message[message.length - 1]);
     
     // restore the signal database
     await clearDatabase(signalDB);
@@ -562,7 +545,6 @@ async function decryptE2EMessage(messageNode)
     storage.deleteAllCache();
 
     return messageTypes.Message.parse(message);
-    
 }
 
 var nodeReader =

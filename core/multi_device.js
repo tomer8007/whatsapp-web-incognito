@@ -111,8 +111,6 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         }
     }
 
-
-
     return frames;
 };
 
@@ -176,8 +174,8 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     if (window.WAdebugMode)
     {
         if (looksLikeClientHello) console.log("WAIncognito: client hello");
-        if (looksLikeServerHello) console.log("WAIncgnito: server hello");
-        if (looksLikeClientFinish) console.log("WAIncgnito: client finish");
+        if (looksLikeServerHello) console.log("WAIncognito: server hello");
+        if (looksLikeClientFinish) console.log("WAIncognito: client finish");
     }
 
     return looksLikeClientHello || looksLikeServerHello || looksLikeClientFinish;
