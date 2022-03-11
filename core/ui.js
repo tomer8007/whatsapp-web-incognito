@@ -256,7 +256,7 @@ function generateDropContent(options)
                     "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                     </div> \
                 </div> \
-                Don't send \"Last Seen\" updates \
+                Don't send \"Last Seen\" and \"Online\" updates \
                 <div class='incognito-options-description'>" + presenceCaption + "</div> \
             </div> \
             <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
