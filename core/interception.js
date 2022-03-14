@@ -392,7 +392,11 @@ NodeHandler.isReceivedNodeAllowed = async function (node)
         var childs = nodeReader.children(node);
         var isMultiDevice = Array.isArray(childs) && nodeReader.tag(childs[0]) == "enc";
 
+        // We temporarily don't support singal decyption because it may corrupt the signal DB
+        if (isMultiDevice) return true;
+
         var message = await getMessageFromNode(node);
+        
         messages.push(message);
 
         var remoteJid = null;
