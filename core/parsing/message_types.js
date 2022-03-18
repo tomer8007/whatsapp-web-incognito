@@ -1,6 +1,6 @@
 // List of protobuf specifications for diffrenet message types.
 // This is not complete. For a fuller list:
-// https://github.com/adiwajshing/Baileys/blob/19f870bfa7276a1d69ca50256bcc1f97c593692c/src/Binary/WAMessage.proto#L1356
+// https://github.com/adiwajshing/Baileys/blob/f2859e53871a4ca14165f9646a25ff6f052b8090/WAProto/WAProto.proto#L1442
 
 var messageTypes = {};
 

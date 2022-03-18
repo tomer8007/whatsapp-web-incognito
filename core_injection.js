@@ -3,15 +3,16 @@ if (typeof chrome !== "undefined")
 	var browser = chrome;
 }
 
-injectFunctionInstantly(webScoketInterception);
+injectScript('core/ws_hook.js'); // important to inject as early as possible
+
 injectOtherScripts();
 
 async function injectOtherScripts() 
 {
 	injectScript('core/parsing/binary_reader.js');
-	injectScript('core/parsing/node_parser.js');
+	injectScript('core/parsing/node_reader.js');
 	injectScript('core/parsing/binary_writer.js');
-	injectScript('core/parsing/node_packer.js');
+	injectScript('core/parsing/node_writer.js');
 	await injectScript('core/parsing/message_parser.js');
 	injectScript('core/parsing/message_types.js');
 
@@ -30,11 +31,11 @@ async function injectOtherScripts()
 		900);
 }
 
-
-function injectScript(scriptName) {
+function injectScript(scriptName) 
+{
 	return new Promise(function(resolve, reject) {
 		var s = document.createElement('script');
-		s.src = chrome.extension.getURL(scriptName);
+		s.src = chrome.runtime.getURL(scriptName);
 		s.onload = function() {
 			this.parentNode.removeChild(this);
 			resolve(true);
@@ -43,10 +44,11 @@ function injectScript(scriptName) {
 	});
 }
 
+// Inline script injection might not work due to Content-Security-Policy
 function injectFunctionInstantly(injectedFunction)
 {
 	// Reading from disk seems to slow down the injection
-	/* var response = await fetch(chrome.extension.getURL(scriptName));
+	/* var response = await fetch(chrome.runtime.getURL(scriptName));
 	   var text = new TextDecoder("utf-8").decode(await response.body.getReader().read().value); */
 	
 	var s = document.createElement('script');
@@ -64,7 +66,7 @@ async function injectFromDisk(scriptNames)
 	{
 		var scriptName = scriptNames[i];
 		console.log("looking at " + scriptName);
-		var response = await fetch(chrome.extension.getURL(scriptName));
+		var response = await fetch(chrome.runtime.getURL(scriptName));
 		var scriptText = new TextDecoder("utf-8").decode(await response.body.getReader().read().value);
 		text += "\r\n\r\n" + scriptText;
 	}

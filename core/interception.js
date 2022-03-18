@@ -489,66 +489,8 @@ async function getMessageFromNode(node)
     else
     {
         // decrypt the signal message
-        return decryptE2EMessage(node);
+        return MultiDevice.decryptE2EMessage(node);
     }
-}
-
-async function decryptE2EMessage(messageNode)
-{
-    if (messageNode[2][0][0] != "enc") return null;
-
-    var remoteJid = messageNode[1]["jid"] ? messageNode[1]["jid"] : messageNode[1]["from"];
-
-    var ciphertext = messageNode[2][0][2];
-    var chiphertextType = messageNode[2][0][1]["type"];
-
-    var storage = new moduleRaid().findModule("getSignalProtocolStore")[0].getSignalProtocolStore();
-    storage.flushBufferToDiskIfNotMemOnlyMode();
-
-    // open the signal DB
-    var signalDBRequest = indexedDB.open("signal-storage", 70);
-    var signalDB = await new Promise((resolve, reject) => { signalDBRequest.onsuccess = () => { resolve(signalDBRequest.result); }
-        signalDBRequest.onerror = () => {console.error("can't open signal-storage."); reject(false);}
-    });
-
-    // back up the signal DB
-    var exported = await exportIdbDatabase(signalDB);
-
-    // decrypt the message
-    var address = new libsignal.SignalProtocolAddress(remoteJid.substring(0, remoteJid.indexOf("@")), 0);
-    var sessionCipher = new libsignal.SessionCipher(storage, address);
-    var message = null;
-    switch (chiphertextType)
-    {
-        case "pkmsg":
-            // Pre-Key message
-            message = await sessionCipher.decryptPreKeyWhisperMessage(ciphertext);
-            break;
-        case "msg":
-            // Regular message
-            message = await sessionCipher.decryptWhisperMessage(ciphertext);
-            break;
-        case "skmsg":
-            // Sender Key message, aka group message
-            var participant = messageNode[1]["participant"];
-            var participantAddress = new libsignal.SignalProtocolAddress(participant.substring(0, participant.indexOf("@")), 0);
-            var groupCipher = new window.libsignal.GroupCipher(storage, remoteJid, participantAddress);
-            message = await groupCipher.decryptSenderKeyMessage(ciphertext)
-            break;
-    }
-    
-    // unpad the message
-    message = new Uint8Array(message);
-    message = new Uint8Array(message.buffer, message.byteOffset, message.length - message[message.length - 1]);
-    
-    // restore the signal database
-    await clearDatabase(signalDB);
-    importToIdbDatabase(signalDB, exported);
-    await new Promise((resolve, reject) => { setTimeout(() => {signalDB.close(); resolve();}, 80); });
-
-    storage.deleteAllCache();
-
-    return messageTypes.Message.parse(message);
 }
 
 var nodeReader =

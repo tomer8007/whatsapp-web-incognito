@@ -211,7 +211,6 @@ WACrypto.packNodesForSending = async function(nodesInfo, isMultiDevice = false, 
     }
 
     return packetBinaryWriter.toBuffer();
-    
 }
 
 function getKeys()

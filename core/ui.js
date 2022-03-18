@@ -128,7 +128,7 @@ async function addIconIfNeeded()
         var path = menuItemElem.getElementsByTagName("path")[0];
         var svg = menuItemElem.getElementsByTagName("svg")[0];
 
-        var response = await fetch(chrome.extension.getURL("images/incognito_gray_24.svg"));
+        var response = await fetch(chrome.runtime.getURL("images/incognito_gray_24.svg"));
 		var text = await response.text();
         var dom = new DOMParser().parseFromString(text, 'text/html');
         var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;

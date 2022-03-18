@@ -5,72 +5,77 @@ if (typeof chrome !== "undefined") {
   var browser = chrome;
 }
 
-browser.runtime.onMessage.addListener(onMessage);
-
-function onMessage(messageEvent, sender, callback)
+browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 {
     if (messageEvent.name == "setOptions")
     {
         if ("presenceUpdatesHook" in messageEvent)
 		{
-			localStorage["presenceUpdatesHook"] = messageEvent.presenceUpdatesHook;
+            chrome.storage.local.set({"presenceUpdatesHook": messageEvent.presenceUpdatesHook});
 		}
 		if ("readConfirmationsHook" in messageEvent)
 		{
-			localStorage["readConfirmationsHook"] = messageEvent.readConfirmationsHook;
+            chrome.storage.local.set({"readConfirmationsHook": messageEvent.readConfirmationsHook});
 		}
 		if ("safetyDelay" in messageEvent)
 		{
-			localStorage["safetyDelay"] = messageEvent.safetyDelay;
+            chrome.storage.local.set({"safetyDelay": messageEvent.safetyDelay});
         }
         if ("showReadWarning" in messageEvent)
         {
-            localStorage["showReadWarning"] = messageEvent.showReadWarning;
+            chrome.storage.local.set({"showReadWarning": messageEvent.showReadWarning});
         }
         if ("saveDeletedMsgs" in messageEvent)
         {
-            localStorage["saveDeletedMsgs"] = messageEvent.saveDeletedMsgs;
+            chrome.storage.local.set({"saveDeletedMsgs": messageEvent.saveDeletedMsgs});
         }
     }
     else if (messageEvent.name == "getOptions")
     {
+        // these are the default values. we will update them according to the storage
 		var presenceUpdatesHook = true;
         var readConfirmationsHook = true;
         var showReadWarning = false;
 		var safetyDelay = 0;
-        var saveDeletedMsgs = false
-        if (localStorage["presenceUpdatesHook"] == "true" || localStorage["presenceUpdatesHook"] == "false")
-        {
-            presenceUpdatesHook = localStorage["presenceUpdatesHook"] == "true";
-        }
-        if (localStorage["readConfirmationsHook"] == "true" || localStorage["readConfirmationsHook"] == "false")
-        {
-            readConfirmationsHook = localStorage["readConfirmationsHook"] == "true";
-        }
-        if (localStorage["showReadWarning"] == "true" || localStorage["showReadWarning"] == "false")
-        {
-            showReadWarning = localStorage["showReadWarning"] == "true";
-        }
-		if (localStorage["safetyDelay"] != undefined && localStorage["safetyDelay"] != null)
-		{
-			safetyDelay = localStorage["safetyDelay"];
-		}
-        if (localStorage["saveDeletedMsgs"] != undefined && localStorage["saveDeletedMsgs"] != null)
-		{
-			saveDeletedMsgs = localStorage["saveDeletedMsgs"] == "true";
-		}
-        callback(
-        {
-            presenceUpdatesHook: presenceUpdatesHook,
-            readConfirmationsHook: readConfirmationsHook,
-            showReadWarning: showReadWarning,
-			safetyDelay: safetyDelay,
-            saveDeletedMsgs: saveDeletedMsgs
-        });
-    }
-}
+        var saveDeletedMsgs = false;
 
-browser.browserAction.onClicked.addListener(function(activeTab)
+        chrome.storage.local.get(['presenceUpdatesHook', 'readConfirmationsHook', 'showReadWarning', 'safetyDelay', 'saveDeletedMsgs']).then(function(storage)
+        {
+            if (storage["presenceUpdatesHook"] != undefined)
+            {
+                presenceUpdatesHook = storage["presenceUpdatesHook"];
+            }
+            if (storage["readConfirmationsHook"] != undefined)
+            {
+                readConfirmationsHook = storage["readConfirmationsHook"];
+            }
+            if (storage["showReadWarning"] != undefined)
+            {
+                showReadWarning = storage["showReadWarning"];
+            }
+            if (storage["safetyDelay"] != undefined)
+            {
+                safetyDelay = storage["safetyDelay"];
+            }
+            if (storage["saveDeletedMsgs"] != undefined)
+            {
+                saveDeletedMsgs = storage["saveDeletedMsgs"];
+            }
+            callback(
+            {
+                presenceUpdatesHook: presenceUpdatesHook,
+                readConfirmationsHook: readConfirmationsHook,
+                showReadWarning: showReadWarning,
+                safetyDelay: safetyDelay,
+                saveDeletedMsgs: saveDeletedMsgs
+            });
+        });   
+    }
+    
+    return true;
+});
+
+browser.action.onClicked.addListener(function(activeTab)
 {
     var newURL = "https://web.whatsapp.com";
     browser.tabs.create({ url: newURL });

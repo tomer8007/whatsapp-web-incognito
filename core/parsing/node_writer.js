@@ -87,7 +87,8 @@ function NodeParser(isMultiDevice = false)
 			SINGLE_BYTE_MAX: 256,
 			PACKED_MAX: 254
     	};
-        this.readNode = function(e) {
+        this.readNode = function(e) 
+        {
             var t = e.readByte(), r = this.readListSize(e, t);
             if (t = e.readByte(), t === o.STREAM_END)
             {
@@ -115,7 +116,8 @@ function NodeParser(isMultiDevice = false)
                 d = e.readBytes(p)
             } else
                 d = this.readString(e, t);
-            return [n, i, d]
+
+            return [n, i, d];
         }
         ,
         this.isListTag = function(e) {
