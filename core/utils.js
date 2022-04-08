@@ -36,7 +36,7 @@ function findChatEntryElementForJID(jid)
 
 function getCurrentChat()
 {
-    if (WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.getActive)
+    if (window.WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.getActive)
         return WhatsAppAPI.Store.Chat.getActive();
 
     // fallback to old method
@@ -79,7 +79,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
-    if (WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
+    if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
         return WhatsAppAPI.Store.Chat.find(jid);
 
     // fallback to old method

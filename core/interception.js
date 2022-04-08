@@ -423,7 +423,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
                 var deletedMessageId = message.protocolMessage.key.id;
                 
                 // someone deleted a message, block
-                if (saveDeletedMsgsHookEnabled && messages.length == 1)
+                if (saveDeletedMsgsHookEnabled && nodeMessages.length == 1)
                 {
                     var chat = await getChatByJID(remoteJid);
                     if (chat)
