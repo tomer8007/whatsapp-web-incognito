@@ -11,7 +11,8 @@ function findChatEntryElementForJID(jid)
         var reactElement = FindReact(chatsShown[i]);
         if (reactElement.props.data == undefined) continue;
 
-        var id = reactElement.props.data.data.id;
+        var data = reactElement.props.data;
+        var id = data.data ? data.data.id : data.chat.id;
 
         var matches = false;
         if (typeof (jid) == "object" && id == jid)
@@ -85,7 +86,9 @@ async function getChatByJID(jid)
     var chat = findChatEntryElementForJID(jid);
     if (chat != null)
     {
-        chat = FindReact(chat).props.data.data;
+        var data = FindReact(chat).props.data;
+        if (data.data) chat = data.data;
+        else chat = data.chat;
     }
     else
     {

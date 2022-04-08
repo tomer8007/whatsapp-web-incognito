@@ -213,7 +213,8 @@ function markChatAsPendingReciptsSending()
     var chatWindow = getCurrentChatPanel();
     var chat = getCurrentChat();
     var messageID = chat.id + chat.lastReceivedKey.id;
-    var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
+    var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
+                            document.getElementsByClassName("incognito-message")[0] : null;
     var seconds = safetyDelay;
 
     if (chatWindow != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
@@ -246,7 +247,7 @@ function markChatAsPendingReciptsSending()
         else
         {
             warningMessage.setAttribute('class', 'incognito-message');
-            warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
+            warningMessage.style = "padding-left: 9%; padding-right: 9%; margin-bottom: 12px; margin-top: 10px;";
             parent.appendChild(warningMessage);
         }
         Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
@@ -351,16 +352,16 @@ function markChatAsBlocked(chat)
         // Put that warning under in the chat panel, under the unread counter or at the bottom
         //
 
-        var parent = getCurrentChatPanel();
-        var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? 
-                                parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+        var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+        var unreadMarker = innerChatPanel.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? 
+                                innerChatPanel.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
         else
         {
             warningMessage.setAttribute('class', 'incognito-message');
-            warningMessage.style = "padding-left: 9%; margin-bottom: 12px; margin-top: 10px;";
-            parent.appendChild(warningMessage);
+            warningMessage.style = "padding-left: 9%; padding-right: 9%; margin-bottom: 12px; margin-top: 10px;";
+            innerChatPanel.appendChild(warningMessage);
         }
     }
 
