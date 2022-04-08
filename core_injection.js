@@ -1,7 +1,3 @@
-if (typeof chrome !== "undefined") 
-{
-	var browser = chrome;
-}
 
 injectScript('core/ws_hook.js'); // important to inject as early as possible
 

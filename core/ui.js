@@ -2,6 +2,11 @@
 This is a content script responsible for some UI.
 */
 
+if (chrome != undefined) 
+{
+	var browser = chrome;
+}
+
 initialize();
 
 var isInterceptionWorking = false;
@@ -53,10 +58,6 @@ function initialize()
                             document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
 
                         }, 200);
-                    }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_PANEL_CLASS))
-                    {
-                        document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
                     }
 
                     // Scan for deleted messages and replace the text

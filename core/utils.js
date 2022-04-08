@@ -2,7 +2,7 @@
 // Helper functions
 // --------------------
 
-function findChatElementForJID(jid)
+function findChatEntryElementForJID(jid)
 {
     var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
     var blockedChat = null;
@@ -28,7 +28,6 @@ function findChatElementForJID(jid)
             blockedChat = chatsShown[i];
             break;
         }
-
     }
 
     return blockedChat;
@@ -36,13 +35,32 @@ function findChatElementForJID(jid)
 
 function getCurrentChat()
 {
-    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    if (elements.length == 0) return null;
-    var chatPanel = elements[0];
+    if (WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.getActive)
+        return WhatsAppAPI.Store.Chat.getActive();
 
-    var reactResult = FindReact(elements[0], traverseUp = 2);
-    var chat = reactResult.props.children.props.children.props.chat;
+    // fallback to old method
+    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
+    var elements2 = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS_2);
+    if (elements.length > 0)
+    {
+        var reactResult = FindReact(elements[0], traverseUp = 2);
+        var chat = reactResult.props.children.props.children.props.chat;
+    }
+    else
+    {
+        var reactResult = FindReact(elements2[0], traverseUp = 3);
+        var chat = reactResult.props.children.props.children.props.children.props.chat;
+    }
+    
     return chat;
+}
+
+function getCurrentChatPanel()
+{
+    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
+    var elements2 = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS_2);
+    if (elements.length > 0 ) return elements[0];
+    else return elements2[0];
 }
 
 function isChatBlocked(jid)
@@ -58,9 +76,13 @@ function isChatBlocked(jid)
     return false;
 }
 
-function getChatByJID(jid)
+async function getChatByJID(jid)
 {
-    var chat = findChatElementForJID(jid);
+    if (WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
+        return WhatsAppAPI.Store.Chat.find(jid);
+
+    // fallback to old method
+    var chat = findChatEntryElementForJID(jid);
     if (chat != null)
     {
         chat = FindReact(chat).props.data.data;
@@ -70,7 +92,7 @@ function getChatByJID(jid)
         chat = chats[jid];
     }
 
-    return chat;
+    return new Promise(function(resolve, reject) {resolve(chat);});
 }
 
 const arrayBufferToBase64 = (buffer) =>

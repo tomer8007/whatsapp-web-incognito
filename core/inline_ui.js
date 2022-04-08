@@ -91,11 +91,11 @@ document.addEventListener('onOptionsUpdate', function (e)
     }
 });
 
-document.addEventListener('onReadConfirmationBlocked', function (e)
+document.addEventListener('onReadConfirmationBlocked', async function (e)
 {
     var blockedJid = e.detail;
 
-    var chat = getChatByJID(blockedJid);
+    var chat = await getChatByJID(blockedJid);
     if (readConfirmationsHookEnabled && safetyDelay > 0)
     {
         setTimeout(markChatAsPendingReciptsSending, 250);
@@ -169,13 +169,13 @@ document.addEventListener('onDropdownOpened', function (e)
     }
 });
 
-document.addEventListener('sendReadConfirmation', function (e)
+document.addEventListener('sendReadConfirmation', async function (e)
 {
     var data = JSON.parse(e.detail);
     var messageIndex = data.index != undefined ? data.index : data.lastMessageIndex;
     var messageID = data.jid + messageIndex;
 
-    var chat = getChatByJID(data.jid);
+    var chat = await getChatByJID(data.jid);
 
     exceptionsList.push(data.jid);
     WhatsAppAPI.Seen.sendSeen(chat).then(function (e)
@@ -210,7 +210,7 @@ document.addEventListener('sendReadConfirmation', function (e)
 
 function markChatAsPendingReciptsSending()
 {
-    var chatWindow = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+    var chatWindow = getCurrentChatPanel();
     var chat = getCurrentChat();
     var messageID = chat.id + chat.lastReceivedKey.id;
     var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
@@ -253,7 +253,7 @@ function markChatAsPendingReciptsSending()
             { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
         // make the unread counter blink
-        var blockedChat = findChatElementForJID(chat.id);
+        var blockedChat = findChatEntryElementForJID(chat.id);
         if (blockedChat != null)
         {
             var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
@@ -302,29 +302,7 @@ function markChatAsBlocked(chat)
         return;
     }
 
-    //
-    // turn the unread counter of the chat to red
-    //
-
-    var chatUnreadRead = chat.unreadCount;
     var currentChat = getCurrentChat();
-    
-    function mark()
-    {
-        var blockedChatElem = findChatElementForJID(chat.id);
-        chat.pendingSeenCount = 0;
-
-        if (blockedChatElem != null)
-        {
-            var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
-                unreadCounter.classList.add("blocked-color");
-        }
-    }
-
-    mark();
-    setTimeout(mark, 200); // for multi-device pendingSeenCount
-
     var messageID = chat.id + chat.lastReceivedKey.id;
 
     if (currentChat.id == chat.id)
@@ -373,8 +351,9 @@ function markChatAsBlocked(chat)
         // Put that warning under in the chat panel, under the unread counter or at the bottom
         //
 
-        var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+        var parent = getCurrentChatPanel();
+        var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? 
+                                parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
         else
@@ -384,6 +363,28 @@ function markChatAsBlocked(chat)
             parent.appendChild(warningMessage);
         }
     }
+
+    //
+    // turn the unread counter of the chat to red
+    //
+
+    var chatUnreadRead = chat.unreadCount;
+    
+    function markUnreadCounter()
+    {
+        var blockedChatElem = findChatEntryElementForJID(chat.id);
+        chat.pendingSeenCount = 0;
+
+        if (blockedChatElem != null)
+        {
+            var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
+            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
+                unreadCounter.classList.add("blocked-color");
+        }
+    }
+
+    markUnreadCounter();
+    setTimeout(markUnreadCounter, 200); // for multi-device pendingSeenCount
     
 
     // if it didn't exist previously, animate it in

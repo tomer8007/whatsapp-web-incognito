@@ -15,6 +15,7 @@ UIClassNames.DROPDOWN_ENTRY_CLASS = "_2qR8G _1wMaz _18oo2";
 UIClassNames.UNREAD_COUNTER_CLASS = "ovhn1urg";
 
 UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
+UIClassNames.CHAT_PANEL_CLASS_2 = "_2gzeB";
 UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
 
 UIClassNames.CHAT_ENTRY_CLASS = "_3m_Xw"; // the chat entry in the chats list

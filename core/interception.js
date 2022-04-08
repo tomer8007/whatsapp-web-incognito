@@ -352,7 +352,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevi
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
 
-        var chat = getChatByJID(remoteJid);
+        var chat = await getChatByJID(remoteJid);
         var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
         setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
     }
@@ -425,7 +425,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
                 // someone deleted a message, block
                 if (saveDeletedMsgsHookEnabled && messages.length == 1)
                 {
-                    var chat = getChatByJID(remoteJid);
+                    var chat = await getChatByJID(remoteJid);
                     if (chat)
                     {
                         const msgs = chat.msgs.models;
@@ -525,7 +525,7 @@ function exposeWhatsAppAPI()
 
     var moduleFinder = moduleRaid();
     window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
-    window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1];
+    window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1].default;
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
 
     if (window.WhatsAppAPI.Seen == undefined)
