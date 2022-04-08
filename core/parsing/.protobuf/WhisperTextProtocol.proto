@@ -1,0 +1,75 @@
+// Based on 
+// https://github.com/signalapp/libsignal-protocol-javascript/blob/master/protos/WhisperTextProtocol.proto
+// https://github.com/adiwajshing/Baileys/blob/master/WASignalGroup/group.proto
+
+package textsecure;
+
+option java_package = "org.whispersystems.libsignal.protocol";
+option java_outer_classname = "WhisperProtos";
+
+message WhisperMessage {
+  optional bytes  ephemeralKey    = 1;
+  optional uint32 counter         = 2;
+  optional uint32 previousCounter = 3;
+  optional bytes  ciphertext      = 4; // PushMessageContent
+}
+
+message PreKeyWhisperMessage {
+  optional uint32 preKeyId       = 1;
+  optional bytes  baseKey        = 2;
+  optional bytes  identityKey    = 3;
+  optional bytes  message        = 4; // WhisperMessage
+  optional uint32 registrationId = 5;
+  optional uint32 signedPreKeyId = 6;
+}
+
+message KeyExchangeMessage {
+  optional uint32 id               = 1;
+  optional bytes  baseKey          = 2;
+  optional bytes  ephemeralKey     = 3;
+  optional bytes  identityKey      = 4;
+  optional bytes  baseKeySignature = 5;
+}
+
+//
+// Group related
+//
+
+message SenderKeyMessage {
+	optional uint32 id         = 1;
+	optional uint32 iteration  = 2;
+	optional bytes  ciphertext = 3;
+  }
+  
+message WhisperSenderKeyDistributionMessage {
+  optional uint32 id         = 1;
+  optional uint32 iteration  = 2;
+  optional bytes  chainKey   = 3;
+  optional bytes  signingKey = 4;
+}
+
+message SenderChainKey {
+  optional uint32 iteration = 1;
+  optional bytes  seed      = 2;
+}
+
+message SenderMessageKey {
+    optional uint32 iteration = 1;
+    optional bytes  seed      = 2;
+}
+
+message SenderSigningKey {
+    optional bytes public  = 1;
+    optional bytes private = 2;
+}
+
+message SenderKeyStateStructure {
+    optional uint32           senderKeyId       = 1;
+    optional SenderChainKey   senderChainKey    = 2;
+    optional SenderSigningKey senderSigningKey  = 3;
+    repeated SenderMessageKey senderMessageKeys = 4;
+}
+
+message SenderKeyRecordStructure {
+    repeated SenderKeyStateStructure senderKeyStates = 1;
+}

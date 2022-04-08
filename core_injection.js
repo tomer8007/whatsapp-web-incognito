@@ -13,8 +13,10 @@ async function injectOtherScripts()
 	injectScript('core/parsing/node_reader.js');
 	injectScript('core/parsing/binary_writer.js');
 	injectScript('core/parsing/node_writer.js');
-	await injectScript('core/parsing/message_parser.js');
-	injectScript('core/parsing/message_types.js');
+	injectScript('core/parsing/.protobuf/WhisperTextProtocol.js');
+	injectScript('core/parsing/.protobuf/WAProto.js');
+
+	injectScript('lib/pbf.3.0.5.min.js');
 
 	injectScript('core/utils.js');
 	injectScript('core/wa_packet.js');

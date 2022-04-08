@@ -43,7 +43,7 @@ wsHook.before = function (originalData, url)
         if (data instanceof ArrayBuffer || data instanceof Uint8Array)
         {
             // encrytped binary payload
-            var decryptedFrames =  await WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
+            var decryptedFrames = await WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
             if (decryptedFrames == null) return originalData;
 
             for (var i = 0; i < decryptedFrames.length; i++)
@@ -148,7 +148,7 @@ wsHook.after = function (messageEvent, url)
                     console.log(node);
                 }
 
-                var isAllowed = await NodeHandler.isReceivedNodeAllowed(node);
+                var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, isMultiDevice);
                 var manipulatedNode = node.slice();
                 if (!isAllowed)
                 {
@@ -275,35 +275,38 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
 {
     try
     {
-        if (nodeReader.tag(node) != "message" && nodeReader.tag(node) != "action") return node;
-
-        if (isMultiDevice)
+        if (node[0] == "message" || node[0] == "action")
         {
-            var participants = nodeReader.children(node)[0];
-            var children = nodeReader.children(participants);
-            for (var i = 0; i < children.length; i++)
-            {
-                var childNode = children[i];
-                if (nodeReader.tag(childNode) != "to") continue;
+            // manipulating a message node
 
-                var messageNode = nodeReader.children(childNode)[0];
-                if (nodeReader.tag(messageNode) == "enc")
+            if (isMultiDevice)
+            {
+                var participants = nodeReader.children(node)[0];
+                var children = nodeReader.children(participants);
+                for (var i = 0; i < children.length; i++)
                 {
-                    childNode = await this.manipulateSentMessageNode(childNode);
-                    children[i] = childNode;
+                    var childNode = children[i];
+                    if (nodeReader.tag(childNode) != "to") continue;
+    
+                    var messageNode = nodeReader.children(childNode)[0];
+                    if (nodeReader.tag(messageNode) == "enc")
+                    {
+                        childNode = await this.manipulateSentMessageNode(childNode, isMultiDevice);
+                        children[i] = childNode;
+                    }
                 }
             }
-        }
-        else if (nodeReader.tag(node) == "action")
-        {
-            var children = nodeReader.children(node);
-            for (var i = 0; i < children.length; i++)
+            else if (nodeReader.tag(node) == "action")
             {
-                var child = children[i];
-                if (nodeReader.tag(child) == "message")
+                var children = nodeReader.children(node);
+                for (var i = 0; i < children.length; i++)
                 {
-                    var messageNode = await this.manipulateSentMessageNode(child);
-                    children[i] = messageNode;
+                    var child = children[i];
+                    if (nodeReader.tag(child) == "message")
+                    {
+                        var messageNode = await this.manipulateSentMessageNode(child, isMultiDevice);
+                        children[i] = messageNode;
+                    }
                 }
             }
         }
@@ -320,14 +323,14 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
     return node;
 }
 
-NodeHandler.manipulateSentMessageNode = async function (messageNode)
+NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevice)
 {
     var remoteJid = null;
     var isMultiDevice = messageNode[1];
 
     if (!isMultiDevice)
     {
-        var message = await getMessageFromNode(messageNode);
+        var message = (await getMessagesFromNode(messageNode, isMultiDevice))[0];
         if (WAdebugMode)
         {
             console.log("WAIncognito: Sending message:");
@@ -369,7 +372,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode)
     return messageNode;
 }
 
-NodeHandler.isReceivedNodeAllowed = async function (node)
+NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
 {
     var isAllowed = true;
 
@@ -390,60 +393,62 @@ NodeHandler.isReceivedNodeAllowed = async function (node)
         if (nodeReader.tag(node) != "message") continue;
 
         var childs = nodeReader.children(node);
-        var isMultiDevice = Array.isArray(childs) && nodeReader.tag(childs[0]) == "enc";
 
         // We temporarily don't support singal decyption because it may corrupt the signal DB
-        if (isMultiDevice) return true;
+        //if (isMultiDevice) return true;
 
-        var message = await getMessageFromNode(node);
-        
-        messages.push(message);
-
-        var remoteJid = null;
-        if (!isMultiDevice)
+        var nodeMessages = await getMessagesFromNode(node, isMultiDevice);
+        for (var message of nodeMessages)
         {
-            // non multi-device
-            remoteJid = message.key.remoteJid;
-            messageId = message.key.id;
-            message = message.message;
-        }
-        else if (node[1] != null)
-        {
-            remoteJid = node[1]["from"];
-            messageId = node[1]["id"];
-        }
-
-        //
-        // Check if this is a message deletion node
-        //
-        var messageRevokeValue = messageTypes.Message.ProtocolMessage.TYPE.REVOKE;
-        if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
-        {
-            var deletedMessageId = message.protocolMessage.key.id;
-            
-            // someone deleted a message, block
-            if (saveDeletedMsgsHookEnabled)
+            var remoteJid = null;
+            if (!isMultiDevice)
             {
-                var chat = getChatByJID(remoteJid);
-                if (chat)
-                {
-                    const msgs = chat.msgs.models;
+                // non multi-device
+                remoteJid = message.key.remoteJid;
+                messageId = message.key.id;
+                message = message.message;
+            }
+            else if (node[1] != null)
+            {
+                remoteJid = node[1]["from"];
+                messageId = node[1]["id"];
+            }
+
+            //
+            // Check if this is a message deletion node
+            //
+            var messageRevokeValue = ProtocolMessage.ProtocolMessageType.REVOKE.value;
+            if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
+            {
+                var deletedMessageId = message.protocolMessage.key.id;
                 
-                    for (let i = 0; i < msgs.length; i++)
+                // someone deleted a message, block
+                if (saveDeletedMsgsHookEnabled && messages.length == 1)
+                {
+                    var chat = getChatByJID(remoteJid);
+                    if (chat)
                     {
-                        if (msgs[i].id.id == deletedMessageId)
+                        const msgs = chat.msgs.models;
+                    
+                        for (let i = 0; i < msgs.length; i++)
                         {
-                            saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                            break;
+                            if (msgs[i].id.id == deletedMessageId)
+                            {
+                                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                                break;
+                            }
                         }
                     }
-                }
 
-                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                isAllowed = false;
-                break;
+                    console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+                    isAllowed = false;
+                    break;
+                }
             }
         }
+
+        messages = messages.concat(nodeMessages);
+        
     }
 
     if (WAdebugMode && messages.length > 0)
@@ -464,10 +469,8 @@ NodeHandler.manipulateReceivedNode = async function (node)
     return node;
 }
 
-async function getMessageFromNode(node)
+async function getMessagesFromNode(node, isMultiDevice)
 {
-    var children = nodeReader.children(node);
-    var isMultiDevice = Array.isArray(children) && nodeReader.tag(children[0]) == "enc";
 
     if (!isMultiDevice)
     {
@@ -475,15 +478,10 @@ async function getMessageFromNode(node)
         switch (nodeReader.tag(node))
         {
             case "message":
-                return messageTypes.WebMessageInfo.parse(nodeReader.children(node));
-            case "groups_v2":
-            case "broadcast":
-            case "notification":
-            case "call_log":
-            case "security":
-                return null;
+                var message = WebMessageInfo.read(new Pbf(nodeReader.children(node)));
+                return [message];
             default:
-                return null;
+                return [];
         }
     }
     else

@@ -2,8 +2,6 @@
 // UI Event handlers
 // ---------------------
 
-// TODO: exceptions get thrown silently inside event listeners. fix this
-
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
@@ -128,8 +126,10 @@ document.addEventListener('onDropdownOpened', function (e)
 
     var menuItems = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0].getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
     var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
+    if (reactResult == null) return;
     var reactMenuItems = reactResult.props.children[0].props.children;
     if (reactMenuItems.props == undefined) return;
+    
     reactMenuItems = reactMenuItems.props.children;
 
     var markAsReadButton = null;
@@ -297,6 +297,11 @@ function markChatAsPendingReciptsSending()
 
 function markChatAsBlocked(chat)
 {
+    if (chat.unreadCount == 0 && chat.pendingSeenCount == 0) 
+    {
+        return;
+    }
+
     //
     // turn the unread counter of the chat to red
     //
@@ -388,3 +393,17 @@ function markChatAsBlocked(chat)
     if (warningMessage)
         warningMessage.firstChild.textContent = "Read receipts were blocked.";
 }
+
+setTimeout(function() {
+    if (!window.onerror) return;
+
+    // WhatsApp hooks window.onerror in order to send log files back home. 
+    // This makes extension-related errors not printed out,
+    // so make a hook-on-hook to print those first
+    var originalOnError = window.onerror;
+    window.onerror = function(message, source, lineno, colno, error)
+    {
+        console.error(error);
+        originalOnError.call(window, message, source, lineno, colno, error);
+    }
+}, 1000);
