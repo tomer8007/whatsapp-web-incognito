@@ -309,7 +309,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
 
-    var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys);
+    var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
             
     var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperGroup");
     var key = new Uint8Array(32);
@@ -338,7 +338,7 @@ MultiDevice.calculateNewChainKey = async function(message, ratchet)
     return {key: keys[1], counter: -1};
 }
 
-MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageKeys={})
+MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageKeys={}, isSenderKey=false)
 {
     if (messageKeys && messageKeys[counter] != undefined) 
     {
@@ -347,14 +347,13 @@ MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageK
     }
 
     var messageKey = null; var chainKey = chainKeyData.key;
-    var i = chainKeyData.counter;
-    do
+    if (isSenderKey) counter++;
+    
+    for (var i = chainKeyData.counter; i < counter; i++)
     {
         messageKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x1])), chainKey);
         chainKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x2])), chainKey);
-        i++;
     }
-    while (i < counter);
 
     return messageKey;
 

@@ -178,6 +178,12 @@ document.addEventListener('sendReadConfirmation', async function (e)
     var chat = await getChatByJID(data.jid);
 
     exceptionsList.push(data.jid);
+    setTimeout(function()
+    {
+        // remove the exception after a short time at any case
+        exceptionsList = exceptionsList.filter(i => i !== data.jid);
+    }, 500);
+    
     WhatsAppAPI.Seen.sendSeen(chat).then(function (e)
     {
         if (data.jid in blinkingChats)
@@ -202,6 +208,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     if (warningMessage != null && warningMessage.messageID == messageID)
     {
         Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+        setTimeout(function() {warningMessage.remove();}, 300);
     }
 
     //var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
@@ -253,16 +260,24 @@ function markChatAsPendingReciptsSending()
         Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
             { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
-        // make the unread counter blink
-        var blockedChat = findChatEntryElementForJID(chat.id);
-        if (blockedChat != null)
+        var blockedChatElem = findChatEntryElementForJID(chat.id);
+
+        function makeUnreadCounterBlink()
         {
-            var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter != null)
+            chat.pendingSeenCount = 0;
+    
+            if (blockedChatElem != null)
             {
-                unreadCounter.classList.add("blinking");
+                var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
+                if (unreadCounter != null)
+                {
+                    unreadCounter.classList.add("blinking");
+                }
             }
         }
+    
+        makeUnreadCounterBlink();
+        setTimeout(makeUnreadCounterBlink, 200); // for multi-device pendingSeenCount
 
         var id = setInterval(function ()
         {
@@ -279,7 +294,7 @@ function markChatAsPendingReciptsSending()
                 var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
                 document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
 
-                var unreadCounter = blockedChat.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
+                var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
                 unreadCounter.className = unreadCounter.className.replace("blocked-color", "").replace("blinking", "");
             }
         }, 1000);

@@ -259,7 +259,7 @@ function generateDropContent(options)
                 </div> \
                 Don't send \"Last Seen\" and \"Online\" updates \
                 <div class='incognito-options-description'>" + presenceCaption + "</div> \
-            </div>" + (isMultiDevice ? "<div id='incognito-option-save-deleted-msgs'></div>" : (
+            </div>" + 
             "<div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
             <div class='checkbox-container-incognito' style=''> \
                 <div class='checkbox checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked incognito-checked'> \
@@ -268,7 +268,7 @@ function generateDropContent(options)
                 </div> \
             </div> \
             " + deletedMessagesTitle + " \
-            <div class='incognito-options-description'>" + deletedMessagesCaption + "</div>")) + 
+            <div class='incognito-options-description'>" + deletedMessagesCaption + "</div>" + 
         "</div> \
         </div>";
 
