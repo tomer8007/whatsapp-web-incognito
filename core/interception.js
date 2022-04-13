@@ -232,8 +232,10 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                         // this is the user trying to send out a read receipt.
                         console.log("WhatsIncongito: Allowing read receipt to " + jid);
 
-                        // exceptions are one-time operation, so remove it from the list
-                        exceptionsList = exceptionsList.filter(i => i !== jid);
+                        // exceptions are one-time operation, so remove it from the list after some time
+                        setTimeout(function() {
+                            exceptionsList = exceptionsList.filter(i => i !== jid);
+                        }, 2000);
 
                         return true;
                     }
@@ -471,7 +473,6 @@ NodeHandler.manipulateReceivedNode = async function (node)
 
 async function getMessagesFromNode(node, isMultiDevice)
 {
-
     if (!isMultiDevice)
     {
         // the message is not singal-encrypted, so just parse it
