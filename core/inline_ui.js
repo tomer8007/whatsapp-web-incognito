@@ -182,7 +182,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     {
         // remove the exception after a short time at any case
         exceptionsList = exceptionsList.filter(i => i !== data.jid);
-    }, 500);
+    }, 2000);
     
     WhatsAppAPI.Seen.sendSeen(chat).then(function (e)
     {

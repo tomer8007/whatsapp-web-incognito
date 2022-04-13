@@ -178,6 +178,11 @@ wsHook.after = function (messageEvent, url)
     catch (exception)
     {
         if (exception.message && exception.message.includes("stream end")) return messageEvent;
+        if (typeof(exception) == "string" && exception.includes("counter"))
+        {
+            console.warn(exception);
+            return messageEvent;
+        }
 
         console.error("Passing-through incoming packet due to error:");
         console.error(exception);
