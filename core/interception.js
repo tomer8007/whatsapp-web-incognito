@@ -406,17 +406,13 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
     var nodes = [node];
     if (Array.isArray(children)) nodes = nodes.concat(children);
 
-    for (var i = 0 ; i < nodes.length; i++)
+    var messageNodes = nodes.filter(node => node[0] == "message");
+
+    for (var i = 0 ; i < messageNodes.length; i++)
     {
-        var node = nodes[i];
-        if (nodeReader.tag(node) != "message") continue;
+        var currentNode = messageNodes[i];
 
-        var childs = nodeReader.children(node);
-
-        // We temporarily don't support singal decyption because it may corrupt the signal DB
-        //if (isMultiDevice) return true;
-
-        var nodeMessages = await getMessagesFromNode(node, isMultiDevice);
+        var nodeMessages = await getMessagesFromNode(currentNode, isMultiDevice);
         for (var message of nodeMessages)
         {
             var remoteJid = null;
@@ -427,47 +423,28 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
                 messageId = message.key.id;
                 message = message.message;
             }
-            else if (node[1] != null)
+            else if (currentNode[1] != null)
             {
-                remoteJid = node[1]["from"];
-                messageId = node[1]["id"];
+                remoteJid = currentNode[1]["from"];
+                messageId = currentNode[1]["id"];
             }
 
-            //
-            // Check if this is a message deletion node
-            //
-            var messageRevokeValue = ProtocolMessage.ProtocolMessageType.REVOKE.value;
-            if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
-            {
-                var deletedMessageId = message.protocolMessage.key.id;
-                
-                // someone deleted a message, block
-                if (saveDeletedMsgsHookEnabled && nodeMessages.length == 1)
-                {
-                    var chat = await getChatByJID(remoteJid);
-                    if (chat)
-                    {
-                        const msgs = chat.msgs.models;
-                    
-                        for (let i = 0; i < msgs.length; i++)
-                        {
-                            if (msgs[i].id.id == deletedMessageId)
-                            {
-                                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                                break;
-                            }
-                        }
-                    }
+            var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
 
-                    console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                    isAllowed = false;
-                    break;
-                }
+            if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
+            {
+                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+                isAllowed = false;
+                break;
+            }
+            else if (isRevokeMessage)
+            {
+                // TODO: edit the node to remove only the revoke messages
+                console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
             }
         }
 
         messages = messages.concat(nodeMessages);
-        
     }
 
     if (WAdebugMode && messages.length > 0)
@@ -477,6 +454,44 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
     }
 
     return isAllowed;
+}
+
+NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid)
+{
+    //
+    // Check if this is a message deletion node
+    //
+    var messageRevokeValue = ProtocolMessage.ProtocolMessageType.REVOKE.value;
+    if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
+    {
+        var deletedMessageId = message.protocolMessage.key.id;
+        
+        // someone deleted a message, block
+        if (saveDeletedMsgsHookEnabled)
+        {
+            setTimeout(async function() {
+                var chat = await getChatByJID(remoteJid);
+                if (chat)
+                {
+                    await chat.loadEarlierMsgs();
+                    var msgs = chat.msgs.models;
+                
+                    for (let i = 0; i < msgs.length; i++)
+                    {
+                        if (msgs[i].id.id == deletedMessageId)
+                        {
+                            saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                            break;
+                        }
+                    }
+                }
+            }, 3000);
+            
+            return true;
+        }
+    }
+
+    return false;
 }
 
 NodeHandler.manipulateReceivedNode = async function (node)
@@ -591,7 +606,7 @@ deletedDB.onsuccess = () =>
     
 }
 
-const saveDeletedMessage = async (retrievedMsg, deletedMessageKey, revokeMessageID) =>
+const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
     let author = "";
@@ -647,11 +662,11 @@ const saveDeletedMessage = async (retrievedMsg, deletedMessageKey, revokeMessage
         let request = transcation.objectStore("msgs").add(deletedMsgContents);
         request.onerror = (e) =>
         {
-
-            // ConstraintError occurs when an object with the same id already exists
             if (request.error.name == "ConstraintError")
             {
-                console.log("WhatsIncognito: Error saving message, message ID already exists");
+                // ConstraintError occurs when an object with the same id already exists
+                // This will happen when we get the revoke message again from the server
+                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
             } 
             else
             {

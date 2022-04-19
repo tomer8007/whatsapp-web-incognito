@@ -182,21 +182,25 @@ document.addEventListener('sendReadConfirmation', async function (e)
     exceptionsList.push(data.jid);
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
 
-    // clear expectations for acks that will never be received (becase we blocked them earlier)
-    WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
+    if (WhatsAppAPI.Communication)
+    {
+        // clear expectations for acks that will never be received (becase we blocked them earlier)
+        WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
                                                                                                 ack.stanza.attrs.to.toString() != data.jid);
-    
-    var sendSeenResult = await WhatsAppAPI.Seen.sendSeen(chat);
-    
-    if (data.jid in blinkingChats)
-    {
-        clearInterval(blinkingChats[data.jid]["timerID"]);
-        delete blinkingChats[data.jid];
     }
-    if (data.jid in blockedChats)
+    
+    WhatsAppAPI.Seen.sendSeen(chat).then(result =>
     {
-        delete blockedChats[data.jid];
-    }
+        if (data.jid in blinkingChats)
+        {
+            clearInterval(blinkingChats[data.jid]["timerID"]);
+            delete blinkingChats[data.jid];
+        }
+        if (data.jid in blockedChats)
+        {
+            delete blockedChats[data.jid];
+        }
+    });
 
     chat.unreadCount -= data.unreadCount;
 
