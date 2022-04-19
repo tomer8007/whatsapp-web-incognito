@@ -5,6 +5,7 @@
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
+    setTimeout(hookSendLogs, 1000);
 });
 
 document.addEventListener('onIncognitoOptionsOpened', function (e)
@@ -177,33 +178,29 @@ document.addEventListener('sendReadConfirmation', async function (e)
 
     var chat = await getChatByJID(data.jid);
 
+    // add an exception and remove it after a short time at any case
     exceptionsList.push(data.jid);
-    setTimeout(function()
-    {
-        // remove the exception after a short time at any case
-        exceptionsList = exceptionsList.filter(i => i !== data.jid);
-    }, 2000);
+    setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
+
+    // clear expectations for acks that will never be received (becase we blocked them earlier)
+    WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
+                                                                                                ack.stanza.attrs.to.toString() != data.jid);
     
-    WhatsAppAPI.Seen.sendSeen(chat).then(function (e)
+    var sendSeenResult = await WhatsAppAPI.Seen.sendSeen(chat);
+    
+    if (data.jid in blinkingChats)
     {
-        if (data.jid in blinkingChats)
-        {
-            clearInterval(blinkingChats[data.jid]["timerID"]);
-            delete blinkingChats[data.jid];
-        }
-        if (data.jid in blockedChats)
-        {
-            delete blockedChats[data.jid];
-        }
-
-        chat.unreadCount -= data.unreadCount;
-
-    }).catch((error) =>
+        clearInterval(blinkingChats[data.jid]["timerID"]);
+        delete blinkingChats[data.jid];
+    }
+    if (data.jid in blockedChats)
     {
-        console.error('Could not send read receipt');
-        console.error(error.stack);
-    });;
+        delete blockedChats[data.jid];
+    }
 
+    chat.unreadCount -= data.unreadCount;
+
+    // animate out the incognito message
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
     if (warningMessage != null && warningMessage.messageID == messageID)
     {

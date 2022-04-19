@@ -14,6 +14,7 @@ var chats = {};
 var blockedChats = {};
 
 var WAPassthrough = false;
+var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
  
 //
@@ -67,6 +68,8 @@ wsHook.before = function (originalData, url)
                 {
                     console.log("[Out] Sending binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted): ");
                     console.log(node);
+
+                    if (WAPassthroughWithDebug) return originalData;
                 }
 
                 var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
@@ -93,6 +96,12 @@ wsHook.before = function (originalData, url)
     }
     catch (exception)
     {
+        if (typeof(exception) == "string" && exception.includes("counter"))
+        {
+            console.warn(exception);
+            return originalData;
+        }
+        
         console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
         console.error(exception);
         return originalData;
@@ -146,10 +155,13 @@ wsHook.after = function (messageEvent, url)
                 {
                     console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
                     console.log(node);
+
+                    if (WAPassthroughWithDebug) return messageEvent;
                 }
 
                 var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, isMultiDevice);
                 var manipulatedNode = node.slice();
+
                 if (!isAllowed)
                 {
                     if (!isMultiDevice) return null;
@@ -533,10 +545,24 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1].default;
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
+    window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
 
     if (window.WhatsAppAPI.Seen == undefined)
     {
         console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Sending read receipts might not work.");
+    }
+}
+
+function hookSendLogs()
+{
+    // we don't want extension-related errors to be silently sent out
+    var moduleFinder = moduleRaid();
+    var sendLogsModule = moduleFinder.findModule("sendLogs")[0];
+    var originalSendLogs = sendLogsModule.sendLogs;
+    sendLogsModule.sendLogs = function(errorObject)
+    {
+        console.error(errorObject);
+        originalSendLogs.call(errorObject);
     }
 }
 
