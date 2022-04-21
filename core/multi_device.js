@@ -310,7 +310,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     }
     else
     {
-        // TODO: happens when a new member joins?   
+        // TODO: happens when a new member joins?
         debugger;
         throw "Can't find chainKey for " + senderKeyName;
     }
