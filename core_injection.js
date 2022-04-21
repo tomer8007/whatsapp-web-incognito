@@ -18,7 +18,7 @@ async function injectOtherScripts()
 	injectScript('core/wa_packet.js');
 	injectScript('core/crypto.js');
 	injectScript('core/ui_class_names.js');
-	injectScript('core/inline_ui.js');
+	injectScript('core/injected_ui.js');
 	
 	injectScript('lib/pako.js');
 	await injectScript('core/multi_device.js');

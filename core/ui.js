@@ -470,6 +470,8 @@ function restoreDeletedMessage(messageNode)
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (!messageText) return;
 
+    if (messageNode.classList.contains("message-out")) return;
+
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
 

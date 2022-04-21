@@ -485,7 +485,7 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
                         }
                     }
                 }
-            }, 3000);
+            }, 4000);
             
             return true;
         }

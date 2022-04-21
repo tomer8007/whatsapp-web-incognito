@@ -304,9 +304,15 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
                 session = senderKey.sessions[e]; break; 
             }
     }
-    else
+    else if (keyDistributionMessage)
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
+    }
+    else
+    {
+        // TODO: happens when a new member joins?   
+        debugger;
+        throw "Can't find chainKey for " + senderKeyName;
     }
 
     var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
