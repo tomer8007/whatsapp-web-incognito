@@ -301,7 +301,7 @@ document.addEventListener('onMarkAsReadClick', function (e)
                         document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
                         //swal("Sent!", "Messages were marked as read", "success");
 
-                        var shouldShowReadWarning = result.value == 1;
+                        var shouldShowReadWarning = result.value == 0;
                         browser.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
                         document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({ showReadWarning: shouldShowReadWarning }) }));
                     }

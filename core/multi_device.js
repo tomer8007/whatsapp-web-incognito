@@ -160,7 +160,6 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
     
         // decrypt the message
         var address = new libsignal.SignalProtocolAddress(fromJid.substring(0, fromJid.indexOf("@")), 0);
-        var sessionCipher = new libsignal.SessionCipher(storage, address);
         var message = null;
     
         switch (chiphertextType)
