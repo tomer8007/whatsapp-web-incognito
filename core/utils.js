@@ -79,6 +79,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
+    if (jid == undefined) debugger;
     if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
 
     if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)

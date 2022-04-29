@@ -193,7 +193,6 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
     }
 
     return decryptedMessages;
-    
 }
 
 //
@@ -303,16 +302,11 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
                 session = senderKey.sessions[e]; break; 
             }
     }
-    else if (keyDistributionMessage)
+    if (session == null && keyDistributionMessage) // && keyDistributionMessage.id == id
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
-    else
-    {
-        // TODO: happens when a new member joins?
-        debugger;
-        throw "Can't find chainKey for " + senderKeyName;
-    }
+    if (session == null) { debugger;}
 
     var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
             
