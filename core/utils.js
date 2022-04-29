@@ -83,13 +83,23 @@ async function getChatByJID(jid)
     if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
 
     if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
-        return WhatsAppAPI.Store.Chat.find(jid);
-
-    // fallback to old method
-    var chat = findChatEntryElementForJID(jid);
-    if (chat != null)
     {
-        var data = FindReact(chat).props.data;
+        try
+        {
+            var chat = await WhatsAppAPI.Store.Chat.find(jid);
+            return chat;
+        }
+        catch (e)
+        {
+            // fallback to old method
+        }
+    }
+
+    // try to get it thorugh GUI
+    var chatElem = findChatEntryElementForJID(jid);
+    if (chatElem != null)
+    {
+        var data = FindReact(chatElem).props.data;
         if (data.data) chat = data.data;
         else chat = data.chat;
     }
@@ -98,7 +108,7 @@ async function getChatByJID(jid)
         chat = chats[jid];
     }
 
-    return new Promise(function(resolve, reject) {resolve(chat);});
+    return chat;
 }
 
 const arrayBufferToBase64 = (buffer) =>
