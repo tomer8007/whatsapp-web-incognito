@@ -23,6 +23,11 @@ function initialize()
         {
             detail: JSON.stringify(options)
         }));
+
+        // ratify it
+        var optionsMessage = options;
+        optionsMessage.name = "setOptions";
+        browser.runtime.sendMessage(optionsMessage);
     });
 
     // initialize mutation observer

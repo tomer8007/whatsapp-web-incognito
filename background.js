@@ -33,7 +33,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
     else if (messageEvent.name == "getOptions")
     {
         // these are the default values. we will update them according to the storage
-		var presenceUpdatesHook = false;
+		var presenceUpdatesHook = true;
         var readConfirmationsHook = true;
         var showReadWarning = true;
 		var safetyDelay = 0;

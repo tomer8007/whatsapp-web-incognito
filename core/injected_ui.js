@@ -49,7 +49,7 @@ document.addEventListener('onIncognitoOptionsClosed', function (e)
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
-    // update options
+    // update enforcing globals locally
     var options = JSON.parse(e.detail);
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
