@@ -12,6 +12,8 @@ function findChatEntryElementForJID(jid)
         if (reactElement.props.data == undefined) continue;
 
         var data = reactElement.props.data;
+        if (data.data == undefined && data.chat == undefined) continue;
+
         var id = data.data ? data.data.id : data.chat.id;
 
         var matches = false;

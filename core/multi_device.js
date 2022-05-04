@@ -179,6 +179,7 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
         }
         
         // unpad the message
+        if (message == null) continue; 
         message = new Uint8Array(message);
         message = new Uint8Array(message.buffer, message.byteOffset, message.length - message[message.length - 1]);
     
@@ -306,7 +307,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
-    if (session == null) { debugger;}
+    if (session == null) { console.warn("Session not found for " + senderKeyName); return null;}
 
     var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
             

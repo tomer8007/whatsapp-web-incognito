@@ -333,12 +333,13 @@ document.addEventListener('onInterceptionWorking', function (e)
 function getTheme() 
 {
     // light/dark mode detection
-    if (localStorage["theme"] != "null") 
+    if (localStorage["theme"] != "null" && localStorage["theme"] != undefined) 
         return localStorage["theme"]
     else 
     {
         // this is if there is no theme selected by default (null)
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) 
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches || 
+            document.getElementsByClassName("web")[0].classList.contains("dark")) 
             return "\"dark\"";
         else 
             return "\"light\"";
@@ -507,7 +508,6 @@ function restoreDeletedMessage(messageNode)
         titleSpan.style.cssText = titleSpanStyle;
         if (request.result.isMedia)
         {
-
             titleSpan.textContent = "Restored media: \n";
             messageText.appendChild(titleSpan); // Top title span
 
