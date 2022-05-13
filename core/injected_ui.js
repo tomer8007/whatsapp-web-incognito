@@ -325,7 +325,7 @@ function markChatAsBlocked(chat)
     var currentChat = getCurrentChat();
     var messageID = chat.id + chat.lastReceivedKey.id;
 
-    if (currentChat.id == chat.id)
+    if (currentChat.id.user == chat.id.user)
     {
 
         //
