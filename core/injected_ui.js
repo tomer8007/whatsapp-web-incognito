@@ -100,9 +100,13 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     {
         setTimeout(markChatAsPendingReciptsSending, 250);
     }
-    else if (readConfirmationsHookEnabled && chat.id == blockedJid)
+    else if (readConfirmationsHookEnabled && chat.id.user == blockedJid.substring(0, blockedJid.indexOf("@")))
     {
         markChatAsBlocked(chat);
+    }
+    else
+    {
+        console.warn("WAIncognito: Could not find chat for JID " + blockedJid);
     }
 
     if (!(chat.id in blockedChats))
@@ -378,6 +382,10 @@ function markChatAsBlocked(chat)
             warningMessage.style = "padding-left: 9%; padding-right: 9%; margin-bottom: 12px; margin-top: 10px;";
             innerChatPanel.appendChild(warningMessage);
         }
+    }
+    else
+    {
+        console.warn("WAIncognito: Could not mark chat " + chat.id + " as blocked.");
     }
 
     //
