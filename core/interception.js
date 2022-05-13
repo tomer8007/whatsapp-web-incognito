@@ -16,6 +16,8 @@ var blockedChats = {};
 var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
+
+hookSendLogs();
  
 //
 // a WebSocket frame is about to be sent out.
@@ -98,7 +100,7 @@ wsHook.before = function (originalData, url)
     {
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
-            console.warn(exception);
+            console.log(exception);
             return originalData;
         }
         
@@ -192,7 +194,7 @@ wsHook.after = function (messageEvent, url)
         if (exception.message && exception.message.includes("stream end")) return messageEvent;
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
-            console.warn(exception);
+            console.log(exception);
             return messageEvent;
         }
 
@@ -554,7 +556,7 @@ var nodeReader =
 
 function exposeWhatsAppAPI()
 {
-    window.WhatsAppAPI = {}
+    window.WhatsAppAPI = {};
 
     var moduleFinder = moduleRaid();
     window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
@@ -571,10 +573,15 @@ function exposeWhatsAppAPI()
 function hookSendLogs()
 {
     // we don't want extension-related errors to be silently sent out
-    var moduleFinder = moduleRaid();
-    var sendLogsModule = moduleFinder.findModule("sendLogs")[0];
-    var originalSendLogs = sendLogsModule.sendLogs;
-    sendLogsModule.sendLogs = function(errorObject)
+    var originalSendLogs = window.SEND_LOGS;
+    if (!originalSendLogs)
+    {
+        Object.defineProperty(window, 'SEND_LOGS', {
+            set: function(value) { originalSendLogs = value; }
+          });
+    }
+
+    window.SEND_LOGS = function(errorObject)
     {
         console.error(errorObject);
         originalSendLogs.call(errorObject);

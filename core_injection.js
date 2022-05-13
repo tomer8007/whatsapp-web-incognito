@@ -1,6 +1,5 @@
 
 injectScript('core/ws_hook.js'); // important to inject as early as possible
-
 injectOtherScripts();
 
 async function injectOtherScripts() 

@@ -5,7 +5,6 @@
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
-    setTimeout(hookSendLogs, 1000);
 });
 
 document.addEventListener('onIncognitoOptionsOpened', function (e)
@@ -415,7 +414,7 @@ function markChatAsBlocked(chat)
 setTimeout(function() {
     if (!window.onerror) return;
 
-    // WhatsApp hooks window.onerror in order to send log files back home. 
+    // WhatsApp hooks window.onerror.
     // This makes extension-related errors not printed out,
     // so make a hook-on-hook to print those first
     var originalOnError = window.onerror;

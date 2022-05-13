@@ -102,7 +102,7 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         {
             // reverse the counter, in case this is another socket
             if (isIncoming) MultiDevice.readCounter--;
-            else MultiDevice.writeBuffer--;
+            else MultiDevice.writeCounter--;
             throw "Wrong counter in decryption";
         }
         else
@@ -307,7 +307,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
-    if (session == null) { console.warn("Session not found for " + senderKeyName); return null;}
+    if (session == null) { console.log("Session not found for " + senderKeyName); return null;}
 
     var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
             
@@ -376,6 +376,7 @@ MultiDevice.enqueuePromise = async function(promise, argument, isIncoming = fals
     return queue.enqueue(promise, argument);
 };
 
+MultiDevice.numPacketsSinceHandshake = 0;
 MultiDevice.looksLikeHandshakePacket = function(payload)
 {
     // Noise protocol handshake flow:
@@ -384,33 +385,34 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     //    --> s (encrypted public key), payload (encrypted ClientPayload)   [client finish]
     // https://noiseprotocol.org/noise.html#handshake-patterns
 
-    //
     if (payload.byteLength < 8)
     {
         console.log("WAIncognito: got small packet:");
         console.log(payload);
         return true;
     }
+
     var binaryReader = new BinaryReader();
     binaryReader.writeBuffer(payload);
-    binaryReader._readIndex = 0;
 
-    var firstShort = binaryReader.readUint16();
-    var secondShort = binaryReader.readUint16();
-    var secondDword = binaryReader.readUint32();
+    var startOffset = 3;
+    if (binaryReader._readIndex = 0, binaryReader.readUint16() == 0x5741) startOffset = 0x7; // chat
+    if (binaryReader._readIndex = 0xB, binaryReader.readUint16() == 0x5741) startOffset = 0x12; // chat?ED={routingToken}
 
-    var looksLikeClientHello = firstShort == 0x5741 || firstShort == 0x4544; // 'WA' || 'ED'       
-    var looksLikeServerHello = secondDword == 0xfa010a20;
-    var looksLikeClientFinish = secondDword == 0x8e010a30 || secondDword == 0x8c010a30;
+    if (startOffset > 3)  MultiDevice.numPacketsSinceHandshake = 0; // client hello
+    if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
+
+    var binary = payload.slice(startOffset, payload.length);
+    var handshakeMessage = HandshakeMessage.read(new Pbf(binary));
 
     if (window.WAdebugMode)
     {
-        if (looksLikeClientHello) console.log("WAIncognito: client hello");
-        if (looksLikeServerHello) console.log("WAIncognito: server hello");
-        if (looksLikeClientFinish) console.log("WAIncognito: client finish");
+        if (handshakeMessage.clientHello) console.log("WAIncognito: client hello", handshakeMessage.clientHello);
+        if (handshakeMessage.serverHello) console.log("WAIncognito: server hello", handshakeMessage.serverHello);
+        if (handshakeMessage.clientFinish) console.log("WAIncognito: client finish", handshakeMessage.clientFinish);
     }
 
-    return looksLikeClientHello || looksLikeServerHello || looksLikeClientFinish;
+    return handshakeMessage.clientHello || handshakeMessage.serverHello || handshakeMessage.clientFinish;
 };
 
 MultiDevice.counterToIV = function(counter)
