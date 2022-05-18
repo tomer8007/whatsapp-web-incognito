@@ -491,8 +491,8 @@ function restoreDeletedMessage(messageNode)
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
     
-    if (Allpsuedomsgskeys.has(msgID))
-        messageNode.setAttribute("data-isDeleted","true");
+    if (messageText || Allpsuedomsgskeys.has(msgID))
+        messageNode.setAttribute("data-deleted","true");
 
     if (!messageText) return;
     const transcation = deletedDB.result.transaction('msgs', "readonly");

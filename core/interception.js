@@ -481,7 +481,7 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
         {
             var msg = document.querySelector("[data-id*='" + deletedMessageId + "']");
             if (msg)
-                msg.setAttribute("data-isDeleted","true");
+                msg.setAttribute("data-deleted","true");
             document.dispatchEvent(new CustomEvent("pseudomsgs", {
                 detail: deletedMessageId
             }));
@@ -697,8 +697,8 @@ const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revok
             } 
             else
             {
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Unexpected error saving deleted message");
+                console.log(request2);
             }
         };
         request.onsuccess = (e) =>
@@ -719,8 +719,8 @@ const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revok
                 console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
             }
             else {
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Unexpected error saving deleted pseudomsgs");
+                console.log(request2);
             }
         };
         request2.onsuccess = (e) => {

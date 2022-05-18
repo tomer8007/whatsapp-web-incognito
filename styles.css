@@ -321,7 +321,7 @@ input[type=number]::-webkit-inner-spin-button {
 	margin-right: 7px;
 }
 
-[data-isDeleted="true"] {
+[data-deleted="true"] {
   --incoming-background: #920f0f;
   --incoming-background-rgb: #920f0f;
   --incoming-background-deeper: #8F0B0B;
