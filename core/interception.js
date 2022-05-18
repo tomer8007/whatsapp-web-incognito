@@ -101,6 +101,7 @@ wsHook.before = function (originalData, url)
     {
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
+            WADefaultdebugMode &&
             console.log(exception);
             return originalData;
         }
@@ -195,6 +196,7 @@ wsHook.after = function (messageEvent, url)
         if (exception.message && exception.message.includes("stream end")) return messageEvent;
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
+            WADefaultdebugMode &&
             console.log(exception);
             return messageEvent;
         }
