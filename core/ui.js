@@ -13,6 +13,7 @@ var isInterceptionWorking = false;
 var isMultiDevice = false;
 var isUIClassesWorking = true;
 var deletedDB = null;
+var Allpsuedomsgskeys = new Set();
 
 function initialize()
 {
@@ -327,7 +328,17 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
     isMultiDevice = data.isMultiDevice;
 
-    deletedDB = indexedDB.open("deletedMsgs", 1)
+    deletedDB = indexedDB.open("deletedMsgs", 2);
+    deletedDB.onsuccess = () => {
+        var keys = deletedDB.result.transaction('pseudomsgs', "readonly")
+            .objectStore("pseudomsgs").getAllKeys();
+        keys.onsuccess = () => {
+            keys.result.forEach(Allpsuedomsgskeys.add, Allpsuedomsgskeys);
+            document.addEventListener("pseudomsgs", (e) => {
+                Allpsuedomsgskeys.add(e.detail);
+            });
+        };
+    };
 });
 
 function getTheme() 
@@ -474,13 +485,16 @@ function restoreDeletedMessage(messageNode)
     if (deletedDB == null) return;
 
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
-    if (!messageText) return;
 
     if (messageNode.classList.contains("message-out")) return;
 
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
+    
+    if (Allpsuedomsgskeys.has(msgID))
+        messageNode.setAttribute("data-isDeleted","true");
 
+    if (!messageText) return;
     const transcation = deletedDB.result.transaction('msgs', "readonly");
     let request = transcation.objectStore("msgs").get(msgID);
 
