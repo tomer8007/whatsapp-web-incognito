@@ -16,6 +16,7 @@ var blockedChats = {};
 var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
+var WADefaultdebugMode = false;
 
 hookSendLogs();
  
@@ -249,6 +250,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     if (isReadReceiptAllowed)
                     {
                         // this is the user trying to send out a read receipt.
+                        WADefaultdebugMode &&
                         console.log("WhatsIncongito: Allowing read receipt to " + jid);
 
                         // exceptions are one-time operation, so remove it from the list after some time
@@ -282,7 +284,9 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     break;
             }
 
+            WADefaultdebugMode &&
             console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+            WADefaultdebugMode &&
             console.log(node);
 
             return false;
@@ -435,6 +439,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
 
             if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
             {
+                WADefaultdebugMode &&
                 console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
                 isAllowed = false;
                 break;
@@ -442,6 +447,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
             else if (isRevokeMessage)
             {
                 // TODO: edit the node to remove only the revoke messages
+                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
             }
         }
@@ -599,6 +605,7 @@ deletedDB.onupgradeneeded = function (e)
     {
         case 0:
             db.createObjectStore('msgs', { keyPath: 'id' });
+            WADefaultdebugMode &&
             console.log('WhatsIncognito: Deleted messages database generated');
             break;
     }
@@ -673,20 +680,24 @@ const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revok
             {
                 // ConstraintError occurs when an object with the same id already exists
                 // This will happen when we get the revoke message again from the server
+                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
             } 
             else
             {
+                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Unexpected error saving deleted message");
             }
         };
         request.onsuccess = (e) =>
         {
+            WADefaultdebugMode &&
             console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
         }
     }
     else
     {
+        WADefaultdebugMode &&
         console.log("WhatsIncognito: Deleted message contents not found");
     }
 

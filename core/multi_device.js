@@ -29,11 +29,13 @@ MultiDevice.initialize = function()
                 MultiDevice.writeKey = keyData;
                 MultiDevice.writeCounter = 0;
                 MultiDevice.writeKeyImported = key;
+                window.WADefaultdebugMode &&
                 console.log("WAIncognito: Noise encryption key has been replaced.");
                 
             }
             else if (keyUsages.includes("decrypt"))
             {
+                window.WADefaultdebugMode &&
                 console.log("WAIncognito: Noise decryption key has been replaced.");
                 MultiDevice.readKey = keyData;
                 MultiDevice.readKeyImported = key;
