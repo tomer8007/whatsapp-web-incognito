@@ -212,7 +212,7 @@ function generateDropContent(options)
     var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" : 
                                           "Blocks outgoing presence updates.";
     var deletedMessagesTitle = "Save deleted messages";
-    var deletedMessagesCaption = isMultiDevice ? "Prvents messages from getting deleted" : 
+    var deletedMessagesCaption = isMultiDevice ? "Prevents messages from getting deleted" : 
                                                  "Saves deleted messages and restores them later.";
 
     var dropContent = " \

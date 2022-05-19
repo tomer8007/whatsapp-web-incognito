@@ -60,15 +60,16 @@ document.addEventListener('onOptionsUpdate', function (e)
     var safetyDelayPanelExpectedHeight = 42; // be careful with this
     if (readConfirmationsHookEnabled)
     {
+        // set unread counters to transperent
         document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 0.3)');
         if (safetyDelayPanel != null)
         {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 },
-                { defaultDuration: 200, easing: [.1, .82, .25, 1] });
+            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
         }
     }
     else
     {
+        // set unread counters to solid
         document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 1)');
         if (safetyDelayPanel != null)
         {
@@ -78,8 +79,7 @@ document.addEventListener('onOptionsUpdate', function (e)
             document.getElementsByClassName("incognito-message")[0] : null;
         if (warningMessage != null)
         {
-            Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] },
-                { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+            Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
             setTimeout(function () { warningMessage.parentNode.removeChild(warningMessage); }, 300);
         }
     }
@@ -94,13 +94,14 @@ document.addEventListener('onOptionsUpdate', function (e)
 document.addEventListener('onReadConfirmationBlocked', async function (e)
 {
     var blockedJid = e.detail;
+    var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
     if (readConfirmationsHookEnabled && safetyDelay > 0)
     {
         setTimeout(markChatAsPendingReciptsSending, 250);
     }
-    else if (readConfirmationsHookEnabled && chat.id.user == blockedJid.substring(0, blockedJid.indexOf("@")))
+    else if (readConfirmationsHookEnabled && chat.id.user == blockedUser)
     {
         markChatAsBlocked(chat);
     }
@@ -258,7 +259,6 @@ function markChatAsPendingReciptsSending()
         else
         {
             warningMessage.setAttribute('class', 'incognito-message');
-            warningMessage.style = "padding-left: 9%; padding-right: 9%; margin-bottom: 12px; margin-top: 10px;";
             parent.appendChild(warningMessage);
         }
         Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
@@ -317,7 +317,7 @@ function markChatAsPendingReciptsSending()
 
 function markChatAsBlocked(chat)
 {
-    if (chat.unreadCount == 0 && chat.pendingSeenCount == 0) 
+    if (chat.unreadCount == 0 && chat.pendingSeenCount == 0)
     {
         return;
     }
@@ -327,7 +327,6 @@ function markChatAsBlocked(chat)
 
     if (currentChat.id.user == chat.id.user)
     {
-
         //
         // Create a "receipts blocked" warning if needed
         //
@@ -379,7 +378,6 @@ function markChatAsBlocked(chat)
         else
         {
             warningMessage.setAttribute('class', 'incognito-message');
-            warningMessage.style = "padding-left: 9%; padding-right: 9%; margin-bottom: 12px; margin-top: 10px;";
             innerChatPanel.appendChild(warningMessage);
         }
     }
