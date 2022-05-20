@@ -18,7 +18,7 @@ UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
 UIClassNames.CHAT_PANEL_CLASS_2 = "_2gzeB";
 UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
 
-UIClassNames.CHAT_ENTRY_CLASS = "_3m_Xw"; // the chat entry in the chats list
+UIClassNames.CHAT_ENTRY_CLASS = "rx9719la"; // the chat entry in the chats list
 UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM"; // the class inside the top-level item;
 
 UIClassNames.CHAT_MESSAGE = "_2wUmf";

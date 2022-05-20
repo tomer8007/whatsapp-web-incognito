@@ -327,7 +327,6 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
     isMultiDevice = data.isMultiDevice;
 
-    deletedDB = indexedDB.open("deletedMsgs", 1)
 });
 
 function getTheme() 

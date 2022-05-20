@@ -210,7 +210,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
 
     // animate out the incognito message
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-    if (warningMessage != null && warningMessage.messageID == messageID)
+    if (warningMessage != null && warningMessage.messageID.startsWith(data.jid))
     {
         Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
         setTimeout(function() {warningMessage.remove();}, 300);

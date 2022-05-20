@@ -17,7 +17,7 @@ var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
 
-hookSendLogs();
+initialize();
  
 //
 // a WebSocket frame is about to be sent out.
@@ -262,9 +262,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     {
                         // We do not allow sending this read receipt.
                         // invoke the callback and fake a failure response from server
-                        document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-                            detail: jid
-                        }));
+                        document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
 
                         if (action == "read" && wsHook.onMessage)
                         {
@@ -570,6 +568,12 @@ function exposeWhatsAppAPI()
     }
 }
 
+function initialize()
+{
+    hookSendLogs();
+    initializeDeletedMessagesDB();
+}
+
 function hookSendLogs()
 {
     // we don't want extension-related errors to be silently sent out
@@ -583,35 +587,42 @@ function hookSendLogs()
 
     window.SEND_LOGS = function(errorObject)
     {
+        debugger;
+        console.error("WhatsApp code throws error:")
         console.error(errorObject);
         originalSendLogs.call(errorObject);
     }
 }
 
-var deletedDB = indexedDB.open("deletedMsgs", 1);
+function initializeDeletedMessagesDB()
+{
+    window.deletedDB = indexedDB.open("deletedMsgs", 1);
 
-deletedDB.onupgradeneeded = function (e)
-{
-    // triggers if the client had no database
-    // ...perform initialization...
-    let db = deletedDB.result;
-    switch (e.oldVersion)
+    deletedDB.onupgradeneeded = function (e)
     {
-        case 0:
-            db.createObjectStore('msgs', { keyPath: 'id' });
-            console.log('WhatsIncognito: Deleted messages database generated');
-            break;
+        // triggers if the client had no database
+        // ...perform initialization...
+        let db = deletedDB.result;
+        switch (e.oldVersion)
+        {
+            case 0:
+                db.createObjectStore('msgs', { keyPath: 'id' });
+                console.log('WhatsIncognito: Deleted messages database generated');
+                break;
+        }
+    };
+    deletedDB.onerror = function ()
+    {
+        console.error("WhatsIncognito: Error opening database");
+        console.error("Error", deletedDB);
+    };
+    deletedDB.onsuccess = () =>
+    {
+        
     }
-};
-deletedDB.onerror = function ()
-{
-    console.error("WhatsIncognito: Error opening database");
-    console.error("Error", deletedDB);
-};
-deletedDB.onsuccess = () =>
-{
-    
 }
+
+
 
 const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
