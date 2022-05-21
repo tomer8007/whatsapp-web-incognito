@@ -571,27 +571,53 @@ function exposeWhatsAppAPI()
 
 function initialize()
 {
-    hookSendLogs();
+    hookLogs();
     initializeDeletedMessagesDB();
 }
 
-function hookSendLogs()
+function hookLogs()
 {
     // we don't want extension-related errors to be silently sent out
-    var originalSendLogs = window.SEND_LOGS;
-    if (!originalSendLogs)
-    {
-        Object.defineProperty(window, 'SEND_LOGS', {
-            set: function(value) { originalSendLogs = value; }
-          });
-    }
 
-    window.SEND_LOGS = function(errorObject)
+    var originalSendLogs = window.SEND_LOGS;
+    var originalOnUnhandledRejction = window.onunhandledrejection;
+    var originalLog = window.__LOG__;
+
+    Object.defineProperty(window, 'onunhandledrejection', {
+        set: function(value) { originalOnUnhandledRejction = value; },
+        get: function() {return hookedPromiseError;}
+    });
+    Object.defineProperty(window, '__LOG__', {
+        set: function(value) { originalLog = value; },
+        get: function() {return hookedLog;}
+    });
+
+    function hookedPromiseError(event)
     {
         debugger;
-        console.error("WhatsApp code throws error:")
+        console.error("Unhandled promise rejection:");
         console.error(errorObject);
-        originalSendLogs.call(errorObject);
+        return originalOnUnhandledRejction.call(event);
+    }
+
+    function hookedLog(errorLevel)
+    {        
+        return function(strings, values)
+        {
+            var message = "[WhatsApp][" + errorLevel + "] -- " + makeLogMessage(arguments);
+
+            if (errorLevel <= 2 && WAdebugMode)
+            {
+                console.log(message);
+            }
+            else if (errorLevel > 2)
+            {
+                console.error(message);
+            }
+
+            var test = originalLog(errorLevel);
+            return test.apply(null, arguments);
+        };
     }
 }
 
@@ -603,6 +629,7 @@ function initializeDeletedMessagesDB()
     {
         // triggers if the client had no database
         // ...perform initialization...
+        debugger;
         let db = deletedDB.result;
         switch (e.oldVersion)
         {
@@ -623,9 +650,7 @@ function initializeDeletedMessagesDB()
     }
 }
 
-
-
-const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revokeMessageID)
+async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
     let author = "";
