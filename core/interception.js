@@ -616,10 +616,8 @@ deletedDB.onupgradeneeded = function (e)
             db.createObjectStore('msgs', { keyPath: 'id' });
             WADefaultdebugMode &&
             console.log('WhatsIncognito: Deleted messages database generated');
-            break;
         case 1:
             db.createObjectStore('pseudomsgs', { keyPath: 'id' });
-            break;
     }
 };
 deletedDB.onerror = function ()
@@ -698,7 +696,7 @@ const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revok
             else
             {
                 console.log("WhatsIncognito: Unexpected error saving deleted message");
-                console.log(request2);
+                console.log(request);
             }
         };
         request.onsuccess = (e) =>
