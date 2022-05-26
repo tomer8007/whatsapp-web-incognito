@@ -1,57 +1,25 @@
 // Following code was copied from WhatsApp implementation.
 
-
-(function() {
-
-function NodeBinaryReader(e) 
-{
-	var t = new BinaryReader(e);
-	this.readByte = function() {
-		return t.readUint8()
-	}
-	,
-	this.readInt16 = function() {
-		return t.readUint16()
-	}
-	,
-	this.readInt20 = function() {
-		var e = 15 & t.readUint8()
-		  , r = t.readUint8()
-		  , n = t.readUint8();
-		return (e << 16) + (r << 8) + n
-	}
-	,
-	this.readInt32 = function() {
-		return t.readUint32()
-	}
-	,
-	this.readString = function(e) {
-		return t.readString(e)
-	}
-	,
-	this.readBytes = function(e) {
-		return t.readBuffer(e)
-	}
-	,
-	this.debugInfo = function() {
-		return "offset: " + t._readIndex + " byte: " + t._buffer[t._readIndex]
-	}
-}
-
-function NodeParser(isMultiDevice = false) 
-{
-        var t = [null,null,null,"200","400","404","500","501","502","action","add","after","archive","author","available","battery","before","body","broadcast","chat","clear","code","composing","contacts","count","create","debug","delete","demote","duplicate","encoding","error","false","filehash","from","g.us","group","groups_v2","height","id","image","in","index","invis","item","jid","kind","last","leave","live","log","media","message","mimetype","missing","modify","name","notification","notify","out","owner","participant","paused","picture","played","presence","preview","promote","query","raw","read","receipt","received","recipient","recording","relay","remove","response","resume","retry","s.whatsapp.net","seconds","set","size","status","subject","subscribe","t","text","to","true","type","unarchive","unavailable","url","user","value","web","width","mute","read_only","admin","creator","short","update","powersave","checksum","epoch","block","previous","409","replaced","reason","spam","modify_tag","message_info","delivery","emoji","title","description","canonical-url","matched-text","star","unstar","media_key","filename","identity","unread","page","page_count","search","media_message","security","call_log","profile","ciphertext","invite","gif","vcard","frequent","privacy","blacklist","whitelist","verify","location","document","elapsed","revoke_invite","expiration","unsubscribe","disable","vname","old_jid","new_jid","announcement","locked","prop","label","color","call","offer","call-id","quick_reply","sticker","pay_t","accept","reject","sticker_pack","invalid","canceled","missed","connected","result","audio","video","recent"];
-        if (isMultiDevice)
-        {
-            t = [null, "xmlstreamstart", "xmlstreamend", "s.whatsapp.net", "type", "participant", "from", "receipt", "id", "broadcast", "status", "message", "notification", "notify", "to", "jid", "user", "class", "offline", "g.us", "result", "mediatype", "enc", "skmsg", "off_cnt", "xmlns", "presence", "participants", "ack", "t", "iq", "device_hash", "read", "value", "media", "picture", "chatstate", "unavailable", "text", "urn:xmpp:whatsapp:push", "devices", "verified_name", "contact", "composing", "edge_routing", "routing_info", "item", "image", "verified_level", "get", "fallback_hostname", "2", "media_conn", "1", "v", "handshake", "fallback_class", "count", "config", "offline_preview", "download_buckets", "w:profile:picture", "set", "creation", "location", "fallback_ip4", "msg", "urn:xmpp:ping", "fallback_ip6", "call-creator", "relaylatency", "success", "subscribe", "video", "business_hours_config", "platform", "hostname", "version", "unknown", "0", "ping", "hash", "edit", "subject", "max_buckets", "download", "delivery", "props", "sticker", "name", "last", "contacts", "business", "primary", "preview", "w:p", "pkmsg", "call-id", "retry", "prop", "call", "auth_ttl", "available", "relay_id", "last_id", "day_of_week", "w", "host", "seen", "bits", "list", "atn", "upload", "is_new", "w:stats", "key", "paused", "specific_hours", "multicast", "stream:error", "mmg.whatsapp.net", "code", "deny", "played", "profile", "fna", "device-list", "close_time", "latency", "gcm", "pop", "audio", "26", "w:web", "open_time", "error", "auth", "ip4", "update", "profile_options", "config_value", "category", "catalog_not_created", "00", "config_code", "mode", "catalog_status", "ip6", "blocklist", "registration", "7", "web", "fail", "w:m", "cart_enabled", "ttl", "gif", "300", "device_orientation", "identity", "query", "401", "media-gig2-1.cdn.whatsapp.net", "in", "3", "te2", "add", "fallback", "categories", "ptt", "encrypt", "notice", "thumbnail-document", "item-not-found", "12", "thumbnail-image", "stage", "thumbnail-link", "usync", "out", "thumbnail-video", "8", "01", "context", "sidelist", "thumbnail-gif", "terminate", "not-authorized", "orientation", "dhash", "capability", "side_list", "md-app-state", "description", "serial", "readreceipts", "te", "business_hours", "md-msg-hist", "tag", "attribute_padding", "document", "open_24h", "delete", "expiration", "active", "prev_v_id", "true", "passive", "index", "4", "conflict", "remove", "w:gp2", "config_expo_key", "screen_height", "replaced", "02", "screen_width", "uploadfieldstat", "2:47DEQpj8", "media-bog1-1.cdn.whatsapp.net", "encopt", "url", "catalog_exists", "keygen", "rate", "offer", "opus", "media-mia3-1.cdn.whatsapp.net", "privacy", "media-mia3-2.cdn.whatsapp.net", "signature", "preaccept", "token_id", "media-eze1-1.cdn.whatsapp.net"];            
-        }
-        var r = ["media-for1-1.cdn.whatsapp.net", "relay", "media-gru2-2.cdn.whatsapp.net", "uncompressed", "medium", "voip_settings", "device", "reason", "media-lim1-1.cdn.whatsapp.net", "media-qro1-2.cdn.whatsapp.net", "media-gru1-2.cdn.whatsapp.net", "action", "features", "media-gru2-1.cdn.whatsapp.net", "media-gru1-1.cdn.whatsapp.net", "media-otp1-1.cdn.whatsapp.net", "kyc-id", "priority", "phash", "mute", "token", "100", "media-qro1-1.cdn.whatsapp.net", "none", "media-mrs2-2.cdn.whatsapp.net", "sign_credential", "03", "media-mrs2-1.cdn.whatsapp.net", "protocol", "timezone", "transport", "eph_setting", "1080", "original_dimensions", "media-frx5-1.cdn.whatsapp.net", "background", "disable", "original_image_url", "5", "transaction-id", "direct_path", "103", "appointment_only", "request_image_url", "peer_pid", "address", "105", "104", "102", "media-cdt1-1.cdn.whatsapp.net", "101", "109", "110", "106", "background_location", "v_id", "sync", "status-old", "111", "107", "ppic", "media-scl2-1.cdn.whatsapp.net", "business_profile", "108", "invite", "04", "audio_duration", "media-mct1-1.cdn.whatsapp.net", "media-cdg2-1.cdn.whatsapp.net", "media-los2-1.cdn.whatsapp.net", "invis", "net", "voip_payload_type", "status-revoke-delay", "404", "state", "use_correct_order_for_hmac_sha1", "ver", "media-mad1-1.cdn.whatsapp.net", "order", "540", "skey", "blinded_credential", "android", "contact_remove", "enable_downlink_relay_latency_only", "duration", "enable_vid_one_way_codec_nego", "6", "media-sof1-1.cdn.whatsapp.net", "accept", "all", "signed_credential", "media-atl3-1.cdn.whatsapp.net", "media-lhr8-1.cdn.whatsapp.net", "website", "05", "latitude", "media-dfw5-1.cdn.whatsapp.net", "forbidden", "enable_audio_piggyback_network_mtu_fix", "media-dfw5-2.cdn.whatsapp.net", "note.m4r", "media-atl3-2.cdn.whatsapp.net", "jb_nack_discard_count_fix", "longitude", "Opening.m4r", "media-arn2-1.cdn.whatsapp.net", "email", "timestamp", "admin", "media-pmo1-1.cdn.whatsapp.net", "America/Sao_Paulo", "contact_add", "media-sin6-1.cdn.whatsapp.net", "interactive", "8000", "acs_public_key", "sigquit_anr_detector_release_rollover_percent", "media.fmed1-2.fna.whatsapp.net", "groupadd", "enabled_for_video_upgrade", "latency_update_threshold", "media-frt3-2.cdn.whatsapp.net", "calls_row_constraint_layout", "media.fgbb2-1.fna.whatsapp.net", "mms4_media_retry_notification_encryption_enabled", "timeout", "media-sin6-3.cdn.whatsapp.net", "audio_nack_jitter_multiplier", "jb_discard_count_adjust_pct_rc", "audio_reserve_bps", "delta", "account_sync", "default", "media.fjed4-6.fna.whatsapp.net", "06", "lock_video_orientation", "media-frt3-1.cdn.whatsapp.net", "w:g2", "media-sin6-2.cdn.whatsapp.net", "audio_nack_algo_mask", "media.fgbb2-2.fna.whatsapp.net", "media.fmed1-1.fna.whatsapp.net", "cond_range_target_bitrate", "mms4_server_error_receipt_encryption_enabled", "vid_rc_dyn", "fri", "cart_v1_1_order_message_changes_enabled", "reg_push", "jb_hist_deposit_value", "privatestats", "media.fist7-2.fna.whatsapp.net", "thu", "jb_discard_count_adjust_pct", "mon", "group_call_video_maximization_enabled", "mms_cat_v1_forward_hot_override_enabled", "audio_nack_new_rtt", "media.fsub2-3.fna.whatsapp.net", "media_upload_aggressive_retry_exponential_backoff_enabled", "tue", "wed", "media.fruh4-2.fna.whatsapp.net", "audio_nack_max_seq_req", "max_rtp_audio_packet_resends", "jb_hist_max_cdf_value", "07", "audio_nack_max_jb_delay", "mms_forward_partially_downloaded_video", "media-lcy1-1.cdn.whatsapp.net", "resume", "jb_inband_fec_aware", "new_commerce_entry_point_enabled", "480", "payments_upi_generate_qr_amount_limit", "sigquit_anr_detector_rollover_percent", "media.fsdu2-1.fna.whatsapp.net", "fbns", "aud_pkt_reorder_pct", "dec", "stop_probing_before_accept_send", "media_upload_max_aggressive_retries", "edit_business_profile_new_mode_enabled", "media.fhex4-1.fna.whatsapp.net", "media.fjed4-3.fna.whatsapp.net", "sigquit_anr_detector_64bit_rollover_percent", "cond_range_ema_jb_last_delay", "watls_enable_early_data_http_get", "media.fsdu2-2.fna.whatsapp.net", "message_qr_disambiguation_enabled", "media-mxp1-1.cdn.whatsapp.net", "sat", "vertical", "media.fruh4-5.fna.whatsapp.net", "200", "media-sof1-2.cdn.whatsapp.net", "-1", "height", "product_catalog_hide_show_items_enabled", "deep_copy_frm_last", "tsoffline", "vp8/h.264", "media.fgye5-3.fna.whatsapp.net", "media.ftuc1-2.fna.whatsapp.net", "smb_upsell_chat_banner_enabled", "canonical", "08", "9", ".", "media.fgyd4-4.fna.whatsapp.net", "media.fsti4-1.fna.whatsapp.net", "mms_vcache_aggregation_enabled", "mms_hot_content_timespan_in_seconds", "nse_ver", "rte", "third_party_sticker_web_sync", "cond_range_target_total_bitrate", "media_upload_aggressive_retry_enabled", "instrument_spam_report_enabled", "disable_reconnect_tone", "move_media_folder_from_sister_app", "one_tap_calling_in_group_chat_size", "10", "storage_mgmt_banner_threshold_mb", "enable_backup_passive_mode", "sharechat_inline_player_enabled", "media.fcnq2-1.fna.whatsapp.net", "media.fhex4-2.fna.whatsapp.net", "media.fist6-3.fna.whatsapp.net", "ephemeral_drop_column_stage", "reconnecting_after_network_change_threshold_ms", "media-lhr8-2.cdn.whatsapp.net", "cond_jb_last_delay_ema_alpha", "entry_point_block_logging_enabled", "critical_event_upload_log_config", "respect_initial_bitrate_estimate", "smaller_image_thumbs_status_enabled", "media.fbtz1-4.fna.whatsapp.net", "media.fjed4-1.fna.whatsapp.net", "width", "720", "enable_frame_dropper", "enable_one_side_mode", "urn:xmpp:whatsapp:dirty", "new_sticker_animation_behavior_v2", "media.flim3-2.fna.whatsapp.net", "media.fuio6-2.fna.whatsapp.net", "skip_forced_signaling", "dleq_proof", "status_video_max_bitrate", "lazy_send_probing_req", "enhanced_storage_management", "android_privatestats_endpoint_dit_enabled", "media.fscl13-2.fna.whatsapp.net", "video_duration",
-                "group_call_discoverability_enabled", "media.faep9-2.fna.whatsapp.net", "msgr", "bloks_loggedin_access_app_id", "db_status_migration_step", "watls_prefer_ip6", "jabber:iq:privacy", "68", "media.fsaw1-11.fna.whatsapp.net", "mms4_media_conn_persist_enabled", "animated_stickers_thread_clean_up", "media.fcgk3-2.fna.whatsapp.net", "media.fcgk4-6.fna.whatsapp.net", "media.fgye5-2.fna.whatsapp.net", "media.flpb1-1.fna.whatsapp.net", "media.fsub2-1.fna.whatsapp.net", "media.fuio6-3.fna.whatsapp.net", "not-allowed", "partial_pjpeg_bw_threshold", "cap_estimated_bitrate", "mms_chatd_resume_check_over_thrift", "smb_upsell_business_profile_enabled", "product_catalog_webclient", "groups", "sigquit_anr_detector_release_updated_rollout", "syncd_key_rotation_enabled", "media.fdmm2-1.fna.whatsapp.net", "media-hou1-1.cdn.whatsapp.net", "remove_old_chat_notifications", "smb_biztools_deeplink_enabled", "use_downloadable_filters_int", "group_qr_codes_enabled", "max_receipt_processing_time", "optimistic_image_processing_enabled", "smaller_video_thumbs_status_enabled", "watls_early_data", "reconnecting_before_relay_failover_threshold_ms", "cond_range_packet_loss_pct", "groups_privacy_blacklist", "status-revoke-drop", "stickers_animated_thumbnail_download", "dedupe_transcode_shared_images", "dedupe_transcode_shared_videos", "media.fcnq2-2.fna.whatsapp.net", "media.fgyd4-1.fna.whatsapp.net", "media.fist7-1.fna.whatsapp.net", "media.flim3-3.fna.whatsapp.net", "add_contact_by_qr_enabled", "https://faq.whatsapp.com/payments", "multicast_limit_global", "sticker_notification_preview", "smb_better_catalog_list_adapters_enabled", "bloks_use_minscript_android", "pen_smoothing_enabled", "media.fcgk4-5.fna.whatsapp.net", "media.fevn1-3.fna.whatsapp.net", "media.fpoj7-1.fna.whatsapp.net", "media-arn2-2.cdn.whatsapp.net", "reconnecting_before_network_change_threshold_ms", "android_media_use_fresco_for_gifs", "cond_in_congestion", "status_image_max_edge", "sticker_search_enabled", "starred_stickers_web_sync", "db_blank_me_jid_migration_step", "media.fist6-2.fna.whatsapp.net", "media.ftuc1-1.fna.whatsapp.net", "09", "anr_fast_logs_upload_rollout", "camera_core_integration_enabled", "11", "third_party_sticker_caching", "thread_dump_contact_support", "wam_privatestats_enabled", "vcard_as_document_size_kb", "maxfpp", "fbip", "ephemeral_allow_group_members", "media-bom1-2.cdn.whatsapp.net", "media-xsp1-1.cdn.whatsapp.net", "disable_prewarm", "frequently_forwarded_max", "media.fbtz1-5.fna.whatsapp.net", "media.fevn7-1.fna.whatsapp.net", "media.fgyd4-2.fna.whatsapp.net", "sticker_tray_animation_fully_visible_items", "green_alert_banner_duration", "reconnecting_after_p2p_failover_threshold_ms", "connected", "share_biz_vcard_enabled", "stickers_animation", "0a", "1200", "WhatsApp", "group_description_length", "p_v_id", "payments_upi_intent_transaction_limit", "frequently_forwarded_messages", "media-xsp1-2.cdn.whatsapp.net", "media.faep8-1.fna.whatsapp.net", "media.faep8-2.fna.whatsapp.net", "media.faep9-1.fna.whatsapp.net", "media.fdmm2-2.fna.whatsapp.net", "media.fgzt3-1.fna.whatsapp.net", "media.flim4-2.fna.whatsapp.net", "media.frao1-1.fna.whatsapp.net", "media.fscl9-2.fna.whatsapp.net", "media.fsub2-2.fna.whatsapp.net", "superadmin", "media.fbog10-1.fna.whatsapp.net", "media.fcgh28-1.fna.whatsapp.net", "media.fjdo10-1.fna.whatsapp.net", "third_party_animated_sticker_import", "delay_fec", "attachment_picker_refresh", "android_linked_devices_re_auth_enabled", "rc_dyn", "green_alert_block_jitter", "add_contact_logging_enabled", "biz_message_logging_enabled", "conversation_media_preview_v2", "media-jnb1-1.cdn.whatsapp.net", "ab_key", "media.fcgk4-2.fna.whatsapp.net", "media.fevn1-1.fna.whatsapp.net", "media.fist6-1.fna.whatsapp.net", "media.fruh4-4.fna.whatsapp.net", "media.fsti4-2.fna.whatsapp.net", "mms_vcard_autodownload_size_kb", "watls_enabled", "notif_ch_override_off", "media.fsaw1-14.fna.whatsapp.net", "media.fscl13-1.fna.whatsapp.net", "db_group_participant_migration_step", "1020", "cond_range_sterm_rtt", "invites_logging_enabled", "triggered_block_enabled", "group_call_max_participants", "media-iad3-1.cdn.whatsapp.net", "product_catalog_open_deeplink", "shops_required_tos_version", "image_max_kbytes", "cond_low_quality_vid_mode", "db_receipt_migration_step", "jb_early_prob_hist_shrink", "media.fdmm2-3.fna.whatsapp.net", "media.fdmm2-4.fna.whatsapp.net", "media.fruh4-1.fna.whatsapp.net", "media.fsaw2-2.fna.whatsapp.net", "remove_geolocation_videos", "new_animation_behavior", "fieldstats_beacon_chance", "403", "authkey_reset_on_ban", "continuous_ptt_playback", "reconnecting_after_relay_failover_threshold_ms", "false", "group", "sun", "conversation_swipe_to_reply", "ephemeral_messages_setting", "smaller_video_thumbs_enabled", "md_device_sync_enabled", "bloks_shops_pdp_url_regex", "lasso_integration_enabled", "media-bom1-1.cdn.whatsapp.net", "new_backup_format_enabled", "256", "media.faep6-1.fna.whatsapp.net", "media.fasr1-1.fna.whatsapp.net", "media.fbtz1-7.fna.whatsapp.net", "media.fesb4-1.fna.whatsapp.net", "media.fjdo1-2.fna.whatsapp.net", "media.frba2-1.fna.whatsapp.net", "watls_no_dns", "600", "db_broadcast_me_jid_migration_step", "new_wam_runtime_enabled", "group_update", "enhanced_block_enabled", "sync_wifi_threshold_kb", "mms_download_nc_cat", "bloks_minification_enabled", "ephemeral_messages_enabled", "reject", "voip_outgoing_xml_signaling", "creator", "dl_bw", "payments_request_messages", "target_bitrate", "bloks_rendercore_enabled", "media-hbe1-1.cdn.whatsapp.net", "media-hel3-1.cdn.whatsapp.net", "media-kut2-2.cdn.whatsapp.net", "media-lax3-1.cdn.whatsapp.net", "media-lax3-2.cdn.whatsapp.net", "sticker_pack_deeplink_enabled", "hq_image_bw_threshold", "status_info", "voip", "dedupe_transcode_videos", "grp_uii_cleanup", "linked_device_max_count", "media.flim1-1.fna.whatsapp.net", "media.fsaw2-1.fna.whatsapp.net", "reconnecting_after_call_active_threshold_ms", "1140", "catalog_pdp_new_design", "media.fbtz1-10.fna.whatsapp.net", "media.fsaw1-15.fna.whatsapp.net", "0b", "consumer_rc_provider", "mms_async_fast_forward_ttl", "jb_eff_size_fix", "voip_incoming_xml_signaling", "media_provider_share_by_uuid", "suspicious_links", "dedupe_transcode_images", "green_alert_modal_start", "media-cgk1-1.cdn.whatsapp.net", "media-lga3-1.cdn.whatsapp.net", "template_doc_mime_types", "important_messages", "user_add", "vcard_max_size_kb", "media.fada2-1.fna.whatsapp.net", "media.fbog2-5.fna.whatsapp.net", "media.fbtz1-3.fna.whatsapp.net", "media.fcgk3-1.fna.whatsapp.net", "media.fcgk7-1.fna.whatsapp.net", "media.flim1-3.fna.whatsapp.net", "media.fscl9-1.fna.whatsapp.net", "ctwa_context_enterprise_enabled", "media.fsaw1-13.fna.whatsapp.net", "media.fuio11-2.fna.whatsapp.net", "status_collapse_muted", "db_migration_level_force", "recent_stickers_web_sync", "bloks_session_state", "bloks_shops_enabled", "green_alert_setting_deep_links_enabled", "restrict_groups", "battery", "green_alert_block_start", "refresh", "ctwa_context_enabled", "md_messaging_enabled", "status_image_quality", "md_blocklist_v2_server", "media-del1-1.cdn.whatsapp.net", "13", "userrate", "a_v_id", "cond_rtt_ema_alpha", "invalid",
-                "media.fada1-1.fna.whatsapp.net", "media.fadb3-2.fna.whatsapp.net", "media.fbhz2-1.fna.whatsapp.net", "media.fcor2-1.fna.whatsapp.net", "media.fjed4-2.fna.whatsapp.net", "media.flhe4-1.fna.whatsapp.net", "media.frak1-2.fna.whatsapp.net", "media.fsub6-3.fna.whatsapp.net", "media.fsub6-7.fna.whatsapp.net", "media.fvvi1-1.fna.whatsapp.net", "search_v5_eligible", "wam_real_time_enabled", "report_disk_event", "max_tx_rott_based_bitrate", "product", "media.fjdo10-2.fna.whatsapp.net", "video_frame_crc_sample_interval", "media_max_autodownload", "15", "h.264", "wam_privatestats_buffer_count", "md_phash_v2_enabled", "account_transfer_enabled", "business_product_catalog", "enable_non_dyn_codec_param_fix", "is_user_under_epd_jurisdiction", "media.fbog2-4.fna.whatsapp.net", "media.fbtz1-2.fna.whatsapp.net", "media.fcfc1-1.fna.whatsapp.net", "media.fjed4-5.fna.whatsapp.net", "media.flhe4-2.fna.whatsapp.net", "media.flim1-2.fna.whatsapp.net", "media.flos5-1.fna.whatsapp.net", "android_key_store_auth_ver", "010", "anr_process_monitor", "delete_old_auth_key", "media.fcor10-3.fna.whatsapp.net", "storage_usage_enabled", "android_camera2_support_level", "dirty", "consumer_content_provider", "status_video_max_duration", "0c", "bloks_cache_enabled", "media.fadb2-2.fna.whatsapp.net", "media.fbko1-1.fna.whatsapp.net", "media.fbtz1-9.fna.whatsapp.net", "media.fcgk4-4.fna.whatsapp.net", "media.fesb4-2.fna.whatsapp.net", "media.fevn1-2.fna.whatsapp.net", "media.fist2-4.fna.whatsapp.net", "media.fjdo1-1.fna.whatsapp.net", "media.fruh4-6.fna.whatsapp.net", "media.fsrg5-1.fna.whatsapp.net", "media.fsub6-6.fna.whatsapp.net", "minfpp", "5000", "locales", "video_max_bitrate", "use_new_auth_key", "bloks_http_enabled", "heartbeat_interval", "media.fbog11-1.fna.whatsapp.net", "ephemeral_group_query_ts", "fec_nack", "search_in_storage_usage", "c", "media-amt2-1.cdn.whatsapp.net", "linked_devices_ui_enabled", "14", "async_data_load_on_startup", "voip_incoming_xml_ack", "16", "db_migration_step", "init_bwe", "max_participants", "wam_buffer_count", "media.fada2-2.fna.whatsapp.net", "media.fadb3-1.fna.whatsapp.net", "media.fcor2-2.fna.whatsapp.net", "media.fdiy1-2.fna.whatsapp.net", "media.frba3-2.fna.whatsapp.net", "media.fsaw2-3.fna.whatsapp.net", "1280", "status_grid_enabled", "w:biz", "product_catalog_deeplink", "media.fgye10-2.fna.whatsapp.net", "media.fuio11-1.fna.whatsapp.net", "optimistic_upload", "work_manager_init", "lc", "catalog_message", "cond_net_medium", "enable_periodical_aud_rr_processing", "cond_range_ema_rtt", "media-tir2-1.cdn.whatsapp.net", "frame_ms", "group_invite_sending", "payments_web_enabled", "wallpapers_v2", "0d", "browser", "hq_image_max_edge", "image_edit_zoom", "linked_devices_re_auth_enabled", "media.faly3-2.fna.whatsapp.net", "media.fdoh5-3.fna.whatsapp.net", "media.fesb3-1.fna.whatsapp.net", "media.fknu1-1.fna.whatsapp.net", "media.fmex3-1.fna.whatsapp.net", "media.fruh4-3.fna.whatsapp.net", "255", "web_upgrade_to_md_modal", "audio_piggyback_timeout_msec", "enable_audio_oob_fec_feature", "from_ip", "image_max_edge", "message_qr_enabled", "powersave", "receipt_pre_acking", "video_max_edge", "full", "011", "012", "enable_audio_oob_fec_for_sender", "md_voip_enabled", "enable_privatestats", "max_fec_ratio", "payments_cs_faq_url", "media-xsp1-3.cdn.whatsapp.net", "hq_image_quality", "media.fasr1-2.fna.whatsapp.net", "media.fbog3-1.fna.whatsapp.net", "media.ffjr1-6.fna.whatsapp.net", "media.fist2-3.fna.whatsapp.net", "media.flim4-3.fna.whatsapp.net", "media.fpbc2-4.fna.whatsapp.net", "media.fpku1-1.fna.whatsapp.net", "media.frba1-1.fna.whatsapp.net", "media.fudi1-1.fna.whatsapp.net", "media.fvvi1-2.fna.whatsapp.net", "gcm_fg_service", "enable_dec_ltr_size_check", "clear", "lg", "media.fgru11-1.fna.whatsapp.net", "18", "media-lga3-2.cdn.whatsapp.net", "pkey", "0e", "max_subject", "cond_range_lterm_rtt", "announcement_groups", "biz_profile_options", "s_t", "media.fabv2-1.fna.whatsapp.net", "media.fcai3-1.fna.whatsapp.net", "media.fcgh1-1.fna.whatsapp.net", "media.fctg1-4.fna.whatsapp.net", "media.fdiy1-1.fna.whatsapp.net", "media.fisb4-1.fna.whatsapp.net", "media.fpku1-2.fna.whatsapp.net", "media.fros9-1.fna.whatsapp.net", "status_v3_text", "usync_sidelist", "17", "announcement", "...", "md_group_notification", "0f", "animated_pack_in_store", "013", "America/Mexico_City", "1260", "media-ams4-1.cdn.whatsapp.net", "media-cgk1-2.cdn.whatsapp.net", "media-cpt1-1.cdn.whatsapp.net", "media-maa2-1.cdn.whatsapp.net", "media.fgye10-1.fna.whatsapp.net", "e", "catalog_cart", "hfm_string_changes", "init_bitrate", "packless_hsm", "group_info", "America/Belem", "50", "960", "cond_range_bwe", "decode", "encode", "media.fada1-8.fna.whatsapp.net", "media.fadb1-2.fna.whatsapp.net", "media.fasu6-1.fna.whatsapp.net", "media.fbog4-1.fna.whatsapp.net", "media.fcgk9-2.fna.whatsapp.net", "media.fdoh5-2.fna.whatsapp.net", "media.ffjr1-2.fna.whatsapp.net", "media.fgua1-1.fna.whatsapp.net", "media.fgye1-1.fna.whatsapp.net", "media.fist1-4.fna.whatsapp.net", "media.fpbc2-2.fna.whatsapp.net", "media.fres2-1.fna.whatsapp.net", "media.fsdq1-2.fna.whatsapp.net", "media.fsub6-5.fna.whatsapp.net", "profilo_enabled", "template_hsm", "use_disorder_prefetching_timer", "video_codec_priority", "vpx_max_qp", "ptt_reduce_recording_delay", "25", "iphone", "Windows", "s_o", "Africa/Lagos", "abt", "media-kut2-1.cdn.whatsapp.net", "media-mba1-1.cdn.whatsapp.net", "media-mxp1-2.cdn.whatsapp.net", "md_blocklist_v2", "url_text", "enable_short_offset", "group_join_permissions", "enable_audio_piggyback_feature", "image_quality", "media.fcgk7-2.fna.whatsapp.net", "media.fcgk8-2.fna.whatsapp.net", "media.fclo7-1.fna.whatsapp.net", "media.fcmn1-1.fna.whatsapp.net", "media.feoh1-1.fna.whatsapp.net", "media.fgyd4-3.fna.whatsapp.net", "media.fjed4-4.fna.whatsapp.net", "media.flim1-4.fna.whatsapp.net", "media.flim2-4.fna.whatsapp.net", "media.fplu6-1.fna.whatsapp.net", "media.frak1-1.fna.whatsapp.net", "media.fsdq1-1.fna.whatsapp.net", "to_ip", "015", "vp8", "19", "21", "1320", "auth_key_ver", "message_processing_dedup", "server-error", "wap4_enabled", "420", "014", "cond_range_rtt", "ptt_fast_lock_enabled", "media-ort2-1.cdn.whatsapp.net", "fwd_ui_start_ts",
-                "contact_blacklist", "Asia/Jakarta", "media.fepa10-1.fna.whatsapp.net", "media.fmex10-3.fna.whatsapp.net", "disorder_prefetching_start_when_empty", "America/Bogota", "use_local_probing_rx_bitrate", "America/Argentina/Buenos_Aires", "cross_post", "media.fabb1-1.fna.whatsapp.net", "media.fbog4-2.fna.whatsapp.net", "media.fcgk9-1.fna.whatsapp.net", "media.fcmn2-1.fna.whatsapp.net", "media.fdel3-1.fna.whatsapp.net", "media.ffjr1-1.fna.whatsapp.net", "media.fgdl5-1.fna.whatsapp.net", "media.flpb1-2.fna.whatsapp.net", "media.fmex2-1.fna.whatsapp.net", "media.frba2-2.fna.whatsapp.net", "media.fros2-2.fna.whatsapp.net", "media.fruh2-1.fna.whatsapp.net", "media.fybz2-2.fna.whatsapp.net", "options", "20", "a", "017", "018", "mute_always", "user_notice", "Asia/Kolkata", "gif_provider", "locked", "media-gua1-1.cdn.whatsapp.net", "piggyback_exclude_force_flush", "24", "media.frec39-1.fna.whatsapp.net", "user_remove", "file_max_size", "cond_packet_loss_pct_ema_alpha", "media.facc1-1.fna.whatsapp.net", "media.fadb2-1.fna.whatsapp.net", "media.faly3-1.fna.whatsapp.net", "media.fbdo6-2.fna.whatsapp.net", "media.fcmn2-2.fna.whatsapp.net", "media.fctg1-3.fna.whatsapp.net", "media.ffez1-2.fna.whatsapp.net", "media.fist1-3.fna.whatsapp.net", "media.fist2-2.fna.whatsapp.net", "media.flim2-2.fna.whatsapp.net", "media.fmct2-3.fna.whatsapp.net", "media.fpei3-1.fna.whatsapp.net", "media.frba3-1.fna.whatsapp.net", "media.fsdu8-2.fna.whatsapp.net", "media.fstu2-1.fna.whatsapp.net", "media_type", "receipt_agg", "016", "enable_pli_for_crc_mismatch", "live", "enc_rekey", "frskmsg", "d", "media.fdel11-2.fna.whatsapp.net", "proto", "2250", "audio_piggyback_enable_cache", "skip_nack_if_ltrp_sent", "mark_dtx_jb_frames", "web_service_delay", "7282", "catalog_send_all", "outgoing", "360", "30", "LIMITED", "019", "audio_picker", "bpv2_phase", "media.fada1-7.fna.whatsapp.net", "media.faep7-1.fna.whatsapp.net", "media.fbko1-2.fna.whatsapp.net", "media.fbni1-2.fna.whatsapp.net", "media.fbtz1-1.fna.whatsapp.net", "media.fbtz1-8.fna.whatsapp.net", "media.fcjs3-1.fna.whatsapp.net", "media.fesb3-2.fna.whatsapp.net", "media.fgdl5-4.fna.whatsapp.net", "media.fist2-1.fna.whatsapp.net", "media.flhe2-2.fna.whatsapp.net", "media.flim2-1.fna.whatsapp.net", "media.fmex1-1.fna.whatsapp.net", "media.fpat3-2.fna.whatsapp.net", "media.fpat3-3.fna.whatsapp.net", "media.fros2-1.fna.whatsapp.net", "media.fsdu8-1.fna.whatsapp.net", "media.fsub3-2.fna.whatsapp.net", "payments_chat_plugin", "cond_congestion_no_rtcp_thr", "green_alert", "not-a-biz", "..", "shops_pdp_urls_config", "source", "media-dus1-1.cdn.whatsapp.net", "mute_video", "01b", "currency", "max_keys", "resume_check", "contact_array", "qr_scanning", "23", "b", "media.fbfh15-1.fna.whatsapp.net", "media.flim22-1.fna.whatsapp.net", "media.fsdu11-1.fna.whatsapp.net", "media.fsdu15-1.fna.whatsapp.net", "Chrome", "fts_version", "60", "media.fada1-6.fna.whatsapp.net", "media.faep4-2.fna.whatsapp.net", "media.fbaq5-1.fna.whatsapp.net", "media.fbni1-1.fna.whatsapp.net", "media.fcai3-2.fna.whatsapp.net", "media.fdel3-2.fna.whatsapp.net", "media.fdmm3-2.fna.whatsapp.net", "media.fhex3-1.fna.whatsapp.net", "media.fisb4-2.fna.whatsapp.net", "media.fkhi5-2.fna.whatsapp.net", "media.flos2-1.fna.whatsapp.net", "media.fmct2-1.fna.whatsapp.net", "media.fntr7-1.fna.whatsapp.net", "media.frak3-1.fna.whatsapp.net", "media.fruh5-2.fna.whatsapp.net", "media.fsub6-1.fna.whatsapp.net", "media.fuab1-2.fna.whatsapp.net", "media.fuio1-1.fna.whatsapp.net", "media.fver1-1.fna.whatsapp.net", "media.fymy1-1.fna.whatsapp.net", "product_catalog", "1380", "audio_oob_fec_max_pkts", "22", "254", "media-ort2-2.cdn.whatsapp.net", "media-sjc3-1.cdn.whatsapp.net", "1600", "01a", "01c", "405", "key_frame_interval", "body", "media.fcgh20-1.fna.whatsapp.net", "media.fesb10-2.fna.whatsapp.net", "125", "2000", "media.fbsb1-1.fna.whatsapp.net", "media.fcmn3-2.fna.whatsapp.net", "media.fcpq1-1.fna.whatsapp.net", "media.fdel1-2.fna.whatsapp.net", "media.ffor2-1.fna.whatsapp.net", "media.fgdl1-4.fna.whatsapp.net", "media.fhex2-1.fna.whatsapp.net", "media.fist1-2.fna.whatsapp.net", "media.fjed5-2.fna.whatsapp.net", "media.flim6-4.fna.whatsapp.net", "media.flos2-2.fna.whatsapp.net", "media.fntr6-2.fna.whatsapp.net", "media.fpku3-2.fna.whatsapp.net", "media.fros8-1.fna.whatsapp.net", "media.fymy1-2.fna.whatsapp.net", "ul_bw", "ltrp_qp_offset", "request", "nack", "dtx_delay_state_reset", "timeoffline", "28", "01f", "32", "enable_ltr_pool", "wa_msys_crypto", "01d", "58", "dtx_freeze_hg_update", "nack_if_rpsi_throttled", "253", "840", "media.famd15-1.fna.whatsapp.net", "media.fbog17-2.fna.whatsapp.net", "media.fcai19-2.fna.whatsapp.net", "media.fcai21-4.fna.whatsapp.net", "media.fesb10-4.fna.whatsapp.net", "media.fesb10-5.fna.whatsapp.net", "media.fmaa12-1.fna.whatsapp.net", "media.fmex11-3.fna.whatsapp.net", "media.fpoa33-1.fna.whatsapp.net", "1050", "021", "clean", "cond_range_ema_packet_loss_pct", "media.fadb6-5.fna.whatsapp.net", "media.faqp4-1.fna.whatsapp.net", "media.fbaq3-1.fna.whatsapp.net", "media.fbel2-1.fna.whatsapp.net", "media.fblr4-2.fna.whatsapp.net", "media.fclo8-1.fna.whatsapp.net", "media.fcoo1-2.fna.whatsapp.net", "media.ffjr1-4.fna.whatsapp.net", "media.ffor9-1.fna.whatsapp.net", "media.fisb3-1.fna.whatsapp.net", "media.fkhi2-2.fna.whatsapp.net", "media.fkhi4-1.fna.whatsapp.net", "media.fpbc1-2.fna.whatsapp.net", "media.fruh2-2.fna.whatsapp.net", "media.fruh5-1.fna.whatsapp.net", "media.fsub3-1.fna.whatsapp.net", "payments_transaction_limit", "252", "27", "29", "tintagel", "01e", "237", "780", "callee_updated_payload", "020", "257", "price", "025", "239", "payments_cs_phone_number", "mediaretry", "w:auth:backup:token", "Glass.caf", "max_bitrate", "240", "251", "660", "media.fbog16-1.fna.whatsapp.net", "media.fcgh21-1.fna.whatsapp.net", "media.fkul19-2.fna.whatsapp.net", "media.flim21-2.fna.whatsapp.net", "media.fmex10-4.fna.whatsapp.net", "64", "33", "34", "35", "interruption", "media.fabv3-1.fna.whatsapp.net", "media.fadb6-1.fna.whatsapp.net", "media.fagr1-1.fna.whatsapp.net", "media.famd1-1.fna.whatsapp.net", "media.famm6-1.fna.whatsapp.net", "media.faqp2-3.fna.whatsapp.net"];
-
-          var n = 
-		  {
+function NodePacker(isMultiDevice) {
+	var e = {
+        singleByte: [void 0, void 0, void 0, "200", "400", "404", "500", "501", "502", "action", "add", "after", "archive", "author", "available", "battery", "before", "body", "broadcast", "chat", "clear", "code", "composing", "contacts", "count", "create", "debug", "delete", "demote", "duplicate", "encoding", "error", "false", "filehash", "from", "g.us", "group", "groups_v2", "height", "id", "image", "in", "index", "invis", "item", "jid", "kind", "last", "leave", "live", "log", "media", "message", "mimetype", "missing", "modify", "name", "notification", "notify", "out", "owner", "participant", "paused", "picture", "played", "presence", "preview", "promote", "query", "raw", "read", "receipt", "received", "recipient", "recording", "relay", "remove", "response", "resume", "retry", "s.whatsapp.net", "seconds", "set", "size", "status", "subject", "subscribe", "t", "text", "to", "true", "type", "unarchive", "unavailable", "url", "user", "value", "web", "width", "mute", "read_only", "admin", "creator", "short", "update", "powersave", "checksum", "epoch", "block", "previous", "409", "replaced", "reason", "spam", "modify_tag", "message_info", "delivery", "emoji", "title", "description", "canonical-url", "matched-text", "star", "unstar", "media_key", "filename", "identity", "unread", "page", "page_count", "search", "media_message", "security", "call_log", "profile", "ciphertext", "invite", "gif", "vcard", "frequent", "privacy", "blacklist", "whitelist", "verify"],
+        doubleByte: [],
+        nibbleEncode: {
+            0: 0,
+            1: 1,
+            2: 2,
+            3: 3,
+            4: 4,
+            5: 5,
+            6: 6,
+            7: 7,
+            8: 8,
+            9: 9,
+            "-": 10,
+            ".": 11,
+            "\0": 15
+        },
+        nibbleDecode: {
             0: "0",
             1: "1",
             2: "2",
@@ -65,8 +33,17 @@ function NodeParser(isMultiDevice = false)
             10: "-",
             11: ".",
             15: "\0"
-		   };
-		var o = 
+        }
+    };
+    if (isMultiDevice)
+    {
+        e.singleByte = [null, "xmlstreamstart", "xmlstreamend", "s.whatsapp.net", "type", "participant", "from", "receipt", "id", "broadcast", "status", "message", "notification", "notify", "to", "jid", "user", "class", "offline", "g.us", "result", "mediatype", "enc", "skmsg", "off_cnt", "xmlns", "presence", "participants", "ack", "t", "iq", "device_hash", "read", "value", "media", "picture", "chatstate", "unavailable", "text", "urn:xmpp:whatsapp:push", "devices", "verified_name", "contact", "composing", "edge_routing", "routing_info", "item", "image", "verified_level", "get", "fallback_hostname", "2", "media_conn", "1", "v", "handshake", "fallback_class", "count", "config", "offline_preview", "download_buckets", "w:profile:picture", "set", "creation", "location", "fallback_ip4", "msg", "urn:xmpp:ping", "fallback_ip6", "call-creator", "relaylatency", "success", "subscribe", "video", "business_hours_config", "platform", "hostname", "version", "unknown", "0", "ping", "hash", "edit", "subject", "max_buckets", "download", "delivery", "props", "sticker", "name", "last", "contacts", "business", "primary", "preview", "w:p", "pkmsg", "call-id", "retry", "prop", "call", "auth_ttl", "available", "relay_id", "last_id", "day_of_week", "w", "host", "seen", "bits", "list", "atn", "upload", "is_new", "w:stats", "key", "paused", "specific_hours", "multicast", "stream:error", "mmg.whatsapp.net", "code", "deny", "played", "profile", "fna", "device-list", "close_time", "latency", "gcm", "pop", "audio", "26", "w:web", "open_time", "error", "auth", "ip4", "update", "profile_options", "config_value", "category", "catalog_not_created", "00", "config_code", "mode", "catalog_status", "ip6", "blocklist", "registration", "7", "web", "fail", "w:m", "cart_enabled", "ttl", "gif", "300", "device_orientation", "identity", "query", "401", "media-gig2-1.cdn.whatsapp.net", "in", "3", "te2", "add", "fallback", "categories", "ptt", "encrypt", "notice", "thumbnail-document", "item-not-found", "12", "thumbnail-image", "stage", "thumbnail-link", "usync", "out", "thumbnail-video", "8", "01", "context", "sidelist", "thumbnail-gif", "terminate", "not-authorized", "orientation", "dhash", "capability", "side_list", "md-app-state", "description", "serial", "readreceipts", "te", "business_hours", "md-msg-hist", "tag", "attribute_padding", "document", "open_24h", "delete", "expiration", "active", "prev_v_id", "true", "passive", "index", "4", "conflict", "remove", "w:gp2", "config_expo_key", "screen_height", "replaced", "02", "screen_width", "uploadfieldstat", "2:47DEQpj8", "media-bog1-1.cdn.whatsapp.net", "encopt", "url", "catalog_exists", "keygen", "rate", "offer", "opus", "media-mia3-1.cdn.whatsapp.net", "privacy", "media-mia3-2.cdn.whatsapp.net", "signature", "preaccept", "token_id", "media-eze1-1.cdn.whatsapp.net"];            
+        e.doubleByte = ["media-for1-1.cdn.whatsapp.net", "relay", "media-gru2-2.cdn.whatsapp.net", "uncompressed", "medium", "voip_settings", "device", "reason", "media-lim1-1.cdn.whatsapp.net", "media-qro1-2.cdn.whatsapp.net", "media-gru1-2.cdn.whatsapp.net", "action", "features", "media-gru2-1.cdn.whatsapp.net", "media-gru1-1.cdn.whatsapp.net", "media-otp1-1.cdn.whatsapp.net", "kyc-id", "priority", "phash", "mute", "token", "100", "media-qro1-1.cdn.whatsapp.net", "none", "media-mrs2-2.cdn.whatsapp.net", "sign_credential", "03", "media-mrs2-1.cdn.whatsapp.net", "protocol", "timezone", "transport", "eph_setting", "1080", "original_dimensions", "media-frx5-1.cdn.whatsapp.net", "background", "disable", "original_image_url", "5", "transaction-id", "direct_path", "103", "appointment_only", "request_image_url", "peer_pid", "address", "105", "104", "102", "media-cdt1-1.cdn.whatsapp.net", "101", "109", "110", "106", "background_location", "v_id", "sync", "status-old", "111", "107", "ppic", "media-scl2-1.cdn.whatsapp.net", "business_profile", "108", "invite", "04", "audio_duration", "media-mct1-1.cdn.whatsapp.net", "media-cdg2-1.cdn.whatsapp.net", "media-los2-1.cdn.whatsapp.net", "invis", "net", "voip_payload_type", "status-revoke-delay", "404", "state", "use_correct_order_for_hmac_sha1", "ver", "media-mad1-1.cdn.whatsapp.net", "order", "540", "skey", "blinded_credential", "android", "contact_remove", "enable_downlink_relay_latency_only", "duration", "enable_vid_one_way_codec_nego", "6", "media-sof1-1.cdn.whatsapp.net", "accept", "all", "signed_credential", "media-atl3-1.cdn.whatsapp.net", "media-lhr8-1.cdn.whatsapp.net", "website", "05", "latitude", "media-dfw5-1.cdn.whatsapp.net", "forbidden", "enable_audio_piggyback_network_mtu_fix", "media-dfw5-2.cdn.whatsapp.net", "note.m4r", "media-atl3-2.cdn.whatsapp.net", "jb_nack_discard_count_fix", "longitude", "Opening.m4r", "media-arn2-1.cdn.whatsapp.net", "email", "timestamp", "admin", "media-pmo1-1.cdn.whatsapp.net", "America/Sao_Paulo", "contact_add", "media-sin6-1.cdn.whatsapp.net", "interactive", "8000", "acs_public_key", "sigquit_anr_detector_release_rollover_percent", "media.fmed1-2.fna.whatsapp.net", "groupadd", "enabled_for_video_upgrade", "latency_update_threshold", "media-frt3-2.cdn.whatsapp.net", "calls_row_constraint_layout", "media.fgbb2-1.fna.whatsapp.net", "mms4_media_retry_notification_encryption_enabled", "timeout", "media-sin6-3.cdn.whatsapp.net", "audio_nack_jitter_multiplier", "jb_discard_count_adjust_pct_rc", "audio_reserve_bps", "delta", "account_sync", "default", "media.fjed4-6.fna.whatsapp.net", "06", "lock_video_orientation", "media-frt3-1.cdn.whatsapp.net", "w:g2", "media-sin6-2.cdn.whatsapp.net", "audio_nack_algo_mask", "media.fgbb2-2.fna.whatsapp.net", "media.fmed1-1.fna.whatsapp.net", "cond_range_target_bitrate", "mms4_server_error_receipt_encryption_enabled", "vid_rc_dyn", "fri", "cart_v1_1_order_message_changes_enabled", "reg_push", "jb_hist_deposit_value", "privatestats", "media.fist7-2.fna.whatsapp.net", "thu", "jb_discard_count_adjust_pct", "mon", "group_call_video_maximization_enabled", "mms_cat_v1_forward_hot_override_enabled", "audio_nack_new_rtt", "media.fsub2-3.fna.whatsapp.net", "media_upload_aggressive_retry_exponential_backoff_enabled", "tue", "wed", "media.fruh4-2.fna.whatsapp.net", "audio_nack_max_seq_req", "max_rtp_audio_packet_resends", "jb_hist_max_cdf_value", "07", "audio_nack_max_jb_delay", "mms_forward_partially_downloaded_video", "media-lcy1-1.cdn.whatsapp.net", "resume", "jb_inband_fec_aware", "new_commerce_entry_point_enabled", "480", "payments_upi_generate_qr_amount_limit", "sigquit_anr_detector_rollover_percent", "media.fsdu2-1.fna.whatsapp.net", "fbns", "aud_pkt_reorder_pct", "dec", "stop_probing_before_accept_send", "media_upload_max_aggressive_retries", "edit_business_profile_new_mode_enabled", "media.fhex4-1.fna.whatsapp.net", "media.fjed4-3.fna.whatsapp.net", "sigquit_anr_detector_64bit_rollover_percent", "cond_range_ema_jb_last_delay", "watls_enable_early_data_http_get", "media.fsdu2-2.fna.whatsapp.net", "message_qr_disambiguation_enabled", "media-mxp1-1.cdn.whatsapp.net", "sat", "vertical", "media.fruh4-5.fna.whatsapp.net", "200", "media-sof1-2.cdn.whatsapp.net", "-1", "height", "product_catalog_hide_show_items_enabled", "deep_copy_frm_last", "tsoffline", "vp8/h.264", "media.fgye5-3.fna.whatsapp.net", "media.ftuc1-2.fna.whatsapp.net", "smb_upsell_chat_banner_enabled", "canonical", "08", "9", ".", "media.fgyd4-4.fna.whatsapp.net", "media.fsti4-1.fna.whatsapp.net", "mms_vcache_aggregation_enabled", "mms_hot_content_timespan_in_seconds", "nse_ver", "rte", "third_party_sticker_web_sync", "cond_range_target_total_bitrate", "media_upload_aggressive_retry_enabled", "instrument_spam_report_enabled", "disable_reconnect_tone", "move_media_folder_from_sister_app", "one_tap_calling_in_group_chat_size", "10", "storage_mgmt_banner_threshold_mb", "enable_backup_passive_mode", "sharechat_inline_player_enabled", "media.fcnq2-1.fna.whatsapp.net", "media.fhex4-2.fna.whatsapp.net", "media.fist6-3.fna.whatsapp.net", "ephemeral_drop_column_stage", "reconnecting_after_network_change_threshold_ms", "media-lhr8-2.cdn.whatsapp.net", "cond_jb_last_delay_ema_alpha", "entry_point_block_logging_enabled", "critical_event_upload_log_config", "respect_initial_bitrate_estimate", "smaller_image_thumbs_status_enabled", "media.fbtz1-4.fna.whatsapp.net", "media.fjed4-1.fna.whatsapp.net", "width", "720", "enable_frame_dropper", "enable_one_side_mode", "urn:xmpp:whatsapp:dirty", "new_sticker_animation_behavior_v2", "media.flim3-2.fna.whatsapp.net", "media.fuio6-2.fna.whatsapp.net", "skip_forced_signaling", "dleq_proof", "status_video_max_bitrate", "lazy_send_probing_req", "enhanced_storage_management", "android_privatestats_endpoint_dit_enabled", "media.fscl13-2.fna.whatsapp.net", "video_duration",
+                "group_call_discoverability_enabled", "media.faep9-2.fna.whatsapp.net", "msgr", "bloks_loggedin_access_app_id", "db_status_migration_step", "watls_prefer_ip6", "jabber:iq:privacy", "68", "media.fsaw1-11.fna.whatsapp.net", "mms4_media_conn_persist_enabled", "animated_stickers_thread_clean_up", "media.fcgk3-2.fna.whatsapp.net", "media.fcgk4-6.fna.whatsapp.net", "media.fgye5-2.fna.whatsapp.net", "media.flpb1-1.fna.whatsapp.net", "media.fsub2-1.fna.whatsapp.net", "media.fuio6-3.fna.whatsapp.net", "not-allowed", "partial_pjpeg_bw_threshold", "cap_estimated_bitrate", "mms_chatd_resume_check_over_thrift", "smb_upsell_business_profile_enabled", "product_catalog_webclient", "groups", "sigquit_anr_detector_release_updated_rollout", "syncd_key_rotation_enabled", "media.fdmm2-1.fna.whatsapp.net", "media-hou1-1.cdn.whatsapp.net", "remove_old_chat_notifications", "smb_biztools_deeplink_enabled", "use_downloadable_filters_int", "group_qr_codes_enabled", "max_receipt_processing_time", "optimistic_image_processing_enabled", "smaller_video_thumbs_status_enabled", "watls_early_data", "reconnecting_before_relay_failover_threshold_ms", "cond_range_packet_loss_pct", "groups_privacy_blacklist", "status-revoke-drop", "stickers_animated_thumbnail_download", "dedupe_transcode_shared_images", "dedupe_transcode_shared_videos", "media.fcnq2-2.fna.whatsapp.net", "media.fgyd4-1.fna.whatsapp.net", "media.fist7-1.fna.whatsapp.net", "media.flim3-3.fna.whatsapp.net", "add_contact_by_qr_enabled", "https://faq.whatsapp.com/payments", "multicast_limit_global", "sticker_notification_preview", "smb_better_catalog_list_adapters_enabled", "bloks_use_minscript_android", "pen_smoothing_enabled", "media.fcgk4-5.fna.whatsapp.net", "media.fevn1-3.fna.whatsapp.net", "media.fpoj7-1.fna.whatsapp.net", "media-arn2-2.cdn.whatsapp.net", "reconnecting_before_network_change_threshold_ms", "android_media_use_fresco_for_gifs", "cond_in_congestion", "status_image_max_edge", "sticker_search_enabled", "starred_stickers_web_sync", "db_blank_me_jid_migration_step", "media.fist6-2.fna.whatsapp.net", "media.ftuc1-1.fna.whatsapp.net", "09", "anr_fast_logs_upload_rollout", "camera_core_integration_enabled", "11", "third_party_sticker_caching", "thread_dump_contact_support", "wam_privatestats_enabled", "vcard_as_document_size_kb", "maxfpp", "fbip", "ephemeral_allow_group_members", "media-bom1-2.cdn.whatsapp.net", "media-xsp1-1.cdn.whatsapp.net", "disable_prewarm", "frequently_forwarded_max", "media.fbtz1-5.fna.whatsapp.net", "media.fevn7-1.fna.whatsapp.net", "media.fgyd4-2.fna.whatsapp.net", "sticker_tray_animation_fully_visible_items", "green_alert_banner_duration", "reconnecting_after_p2p_failover_threshold_ms", "connected", "share_biz_vcard_enabled", "stickers_animation", "0a", "1200", "WhatsApp", "group_description_length", "p_v_id", "payments_upi_intent_transaction_limit", "frequently_forwarded_messages", "media-xsp1-2.cdn.whatsapp.net", "media.faep8-1.fna.whatsapp.net", "media.faep8-2.fna.whatsapp.net", "media.faep9-1.fna.whatsapp.net", "media.fdmm2-2.fna.whatsapp.net", "media.fgzt3-1.fna.whatsapp.net", "media.flim4-2.fna.whatsapp.net", "media.frao1-1.fna.whatsapp.net", "media.fscl9-2.fna.whatsapp.net", "media.fsub2-2.fna.whatsapp.net", "superadmin", "media.fbog10-1.fna.whatsapp.net", "media.fcgh28-1.fna.whatsapp.net", "media.fjdo10-1.fna.whatsapp.net", "third_party_animated_sticker_import", "delay_fec", "attachment_picker_refresh", "android_linked_devices_re_auth_enabled", "rc_dyn", "green_alert_block_jitter", "add_contact_logging_enabled", "biz_message_logging_enabled", "conversation_media_preview_v2", "media-jnb1-1.cdn.whatsapp.net", "ab_key", "media.fcgk4-2.fna.whatsapp.net", "media.fevn1-1.fna.whatsapp.net", "media.fist6-1.fna.whatsapp.net", "media.fruh4-4.fna.whatsapp.net", "media.fsti4-2.fna.whatsapp.net", "mms_vcard_autodownload_size_kb", "watls_enabled", "notif_ch_override_off", "media.fsaw1-14.fna.whatsapp.net", "media.fscl13-1.fna.whatsapp.net", "db_group_participant_migration_step", "1020", "cond_range_sterm_rtt", "invites_logging_enabled", "triggered_block_enabled", "group_call_max_participants", "media-iad3-1.cdn.whatsapp.net", "product_catalog_open_deeplink", "shops_required_tos_version", "image_max_kbytes", "cond_low_quality_vid_mode", "db_receipt_migration_step", "jb_early_prob_hist_shrink", "media.fdmm2-3.fna.whatsapp.net", "media.fdmm2-4.fna.whatsapp.net", "media.fruh4-1.fna.whatsapp.net", "media.fsaw2-2.fna.whatsapp.net", "remove_geolocation_videos", "new_animation_behavior", "fieldstats_beacon_chance", "403", "authkey_reset_on_ban", "continuous_ptt_playback", "reconnecting_after_relay_failover_threshold_ms", "false", "group", "sun", "conversation_swipe_to_reply", "ephemeral_messages_setting", "smaller_video_thumbs_enabled", "md_device_sync_enabled", "bloks_shops_pdp_url_regex", "lasso_integration_enabled", "media-bom1-1.cdn.whatsapp.net", "new_backup_format_enabled", "256", "media.faep6-1.fna.whatsapp.net", "media.fasr1-1.fna.whatsapp.net", "media.fbtz1-7.fna.whatsapp.net", "media.fesb4-1.fna.whatsapp.net", "media.fjdo1-2.fna.whatsapp.net", "media.frba2-1.fna.whatsapp.net", "watls_no_dns", "600", "db_broadcast_me_jid_migration_step", "new_wam_runtime_enabled", "group_update", "enhanced_block_enabled", "sync_wifi_threshold_kb", "mms_download_nc_cat", "bloks_minification_enabled", "ephemeral_messages_enabled", "reject", "voip_outgoing_xml_signaling", "creator", "dl_bw", "payments_request_messages", "target_bitrate", "bloks_rendercore_enabled", "media-hbe1-1.cdn.whatsapp.net", "media-hel3-1.cdn.whatsapp.net", "media-kut2-2.cdn.whatsapp.net", "media-lax3-1.cdn.whatsapp.net", "media-lax3-2.cdn.whatsapp.net", "sticker_pack_deeplink_enabled", "hq_image_bw_threshold", "status_info", "voip", "dedupe_transcode_videos", "grp_uii_cleanup", "linked_device_max_count", "media.flim1-1.fna.whatsapp.net", "media.fsaw2-1.fna.whatsapp.net", "reconnecting_after_call_active_threshold_ms", "1140", "catalog_pdp_new_design", "media.fbtz1-10.fna.whatsapp.net", "media.fsaw1-15.fna.whatsapp.net", "0b", "consumer_rc_provider", "mms_async_fast_forward_ttl", "jb_eff_size_fix", "voip_incoming_xml_signaling", "media_provider_share_by_uuid", "suspicious_links", "dedupe_transcode_images", "green_alert_modal_start", "media-cgk1-1.cdn.whatsapp.net", "media-lga3-1.cdn.whatsapp.net", "template_doc_mime_types", "important_messages", "user_add", "vcard_max_size_kb", "media.fada2-1.fna.whatsapp.net", "media.fbog2-5.fna.whatsapp.net", "media.fbtz1-3.fna.whatsapp.net", "media.fcgk3-1.fna.whatsapp.net", "media.fcgk7-1.fna.whatsapp.net", "media.flim1-3.fna.whatsapp.net", "media.fscl9-1.fna.whatsapp.net", "ctwa_context_enterprise_enabled", "media.fsaw1-13.fna.whatsapp.net", "media.fuio11-2.fna.whatsapp.net", "status_collapse_muted", "db_migration_level_force", "recent_stickers_web_sync", "bloks_session_state", "bloks_shops_enabled", "green_alert_setting_deep_links_enabled", "restrict_groups", "battery", "green_alert_block_start", "refresh", "ctwa_context_enabled", "md_messaging_enabled", "status_image_quality", "md_blocklist_v2_server", "media-del1-1.cdn.whatsapp.net", "13", "userrate", "a_v_id", "cond_rtt_ema_alpha", "invalid",
+                "media.fada1-1.fna.whatsapp.net", "media.fadb3-2.fna.whatsapp.net", "media.fbhz2-1.fna.whatsapp.net", "media.fcor2-1.fna.whatsapp.net", "media.fjed4-2.fna.whatsapp.net", "media.flhe4-1.fna.whatsapp.net", "media.frak1-2.fna.whatsapp.net", "media.fsub6-3.fna.whatsapp.net", "media.fsub6-7.fna.whatsapp.net", "media.fvvi1-1.fna.whatsapp.net", "search_v5_eligible", "wam_real_time_enabled", "report_disk_event", "max_tx_rott_based_bitrate", "product", "media.fjdo10-2.fna.whatsapp.net", "video_frame_crc_sample_interval", "media_max_autodownload", "15", "h.264", "wam_privatestats_buffer_count", "md_phash_v2_enabled", "account_transfer_enabled", "business_product_catalog", "enable_non_dyn_codec_param_fix", "is_user_under_epd_jurisdiction", "media.fbog2-4.fna.whatsapp.net", "media.fbtz1-2.fna.whatsapp.net", "media.fcfc1-1.fna.whatsapp.net", "media.fjed4-5.fna.whatsapp.net", "media.flhe4-2.fna.whatsapp.net", "media.flim1-2.fna.whatsapp.net", "media.flos5-1.fna.whatsapp.net", "android_key_store_auth_ver", "010", "anr_process_monitor", "delete_old_auth_key", "media.fcor10-3.fna.whatsapp.net", "storage_usage_enabled", "android_camera2_support_level", "dirty", "consumer_content_provider", "status_video_max_duration", "0c", "bloks_cache_enabled", "media.fadb2-2.fna.whatsapp.net", "media.fbko1-1.fna.whatsapp.net", "media.fbtz1-9.fna.whatsapp.net", "media.fcgk4-4.fna.whatsapp.net", "media.fesb4-2.fna.whatsapp.net", "media.fevn1-2.fna.whatsapp.net", "media.fist2-4.fna.whatsapp.net", "media.fjdo1-1.fna.whatsapp.net", "media.fruh4-6.fna.whatsapp.net", "media.fsrg5-1.fna.whatsapp.net", "media.fsub6-6.fna.whatsapp.net", "minfpp", "5000", "locales", "video_max_bitrate", "use_new_auth_key", "bloks_http_enabled", "heartbeat_interval", "media.fbog11-1.fna.whatsapp.net", "ephemeral_group_query_ts", "fec_nack", "search_in_storage_usage", "c", "media-amt2-1.cdn.whatsapp.net", "linked_devices_ui_enabled", "14", "async_data_load_on_startup", "voip_incoming_xml_ack", "16", "db_migration_step", "init_bwe", "max_participants", "wam_buffer_count", "media.fada2-2.fna.whatsapp.net", "media.fadb3-1.fna.whatsapp.net", "media.fcor2-2.fna.whatsapp.net", "media.fdiy1-2.fna.whatsapp.net", "media.frba3-2.fna.whatsapp.net", "media.fsaw2-3.fna.whatsapp.net", "1280", "status_grid_enabled", "w:biz", "product_catalog_deeplink", "media.fgye10-2.fna.whatsapp.net", "media.fuio11-1.fna.whatsapp.net", "optimistic_upload", "work_manager_init", "lc", "catalog_message", "cond_net_medium", "enable_periodical_aud_rr_processing", "cond_range_ema_rtt", "media-tir2-1.cdn.whatsapp.net", "frame_ms", "group_invite_sending", "payments_web_enabled", "wallpapers_v2", "0d", "browser", "hq_image_max_edge", "image_edit_zoom", "linked_devices_re_auth_enabled", "media.faly3-2.fna.whatsapp.net", "media.fdoh5-3.fna.whatsapp.net", "media.fesb3-1.fna.whatsapp.net", "media.fknu1-1.fna.whatsapp.net", "media.fmex3-1.fna.whatsapp.net", "media.fruh4-3.fna.whatsapp.net", "255", "web_upgrade_to_md_modal", "audio_piggyback_timeout_msec", "enable_audio_oob_fec_feature", "from_ip", "image_max_edge", "message_qr_enabled", "powersave", "receipt_pre_acking", "video_max_edge", "full", "011", "012", "enable_audio_oob_fec_for_sender", "md_voip_enabled", "enable_privatestats", "max_fec_ratio", "payments_cs_faq_url", "media-xsp1-3.cdn.whatsapp.net", "hq_image_quality", "media.fasr1-2.fna.whatsapp.net", "media.fbog3-1.fna.whatsapp.net", "media.ffjr1-6.fna.whatsapp.net", "media.fist2-3.fna.whatsapp.net", "media.flim4-3.fna.whatsapp.net", "media.fpbc2-4.fna.whatsapp.net", "media.fpku1-1.fna.whatsapp.net", "media.frba1-1.fna.whatsapp.net", "media.fudi1-1.fna.whatsapp.net", "media.fvvi1-2.fna.whatsapp.net", "gcm_fg_service", "enable_dec_ltr_size_check", "clear", "lg", "media.fgru11-1.fna.whatsapp.net", "18", "media-lga3-2.cdn.whatsapp.net", "pkey", "0e", "max_subject", "cond_range_lterm_rtt", "announcement_groups", "biz_profile_options", "s_t", "media.fabv2-1.fna.whatsapp.net", "media.fcai3-1.fna.whatsapp.net", "media.fcgh1-1.fna.whatsapp.net", "media.fctg1-4.fna.whatsapp.net", "media.fdiy1-1.fna.whatsapp.net", "media.fisb4-1.fna.whatsapp.net", "media.fpku1-2.fna.whatsapp.net", "media.fros9-1.fna.whatsapp.net", "status_v3_text", "usync_sidelist", "17", "announcement", "...", "md_group_notification", "0f", "animated_pack_in_store", "013", "America/Mexico_City", "1260", "media-ams4-1.cdn.whatsapp.net", "media-cgk1-2.cdn.whatsapp.net", "media-cpt1-1.cdn.whatsapp.net", "media-maa2-1.cdn.whatsapp.net", "media.fgye10-1.fna.whatsapp.net", "e", "catalog_cart", "hfm_string_changes", "init_bitrate", "packless_hsm", "group_info", "America/Belem", "50", "960", "cond_range_bwe", "decode", "encode", "media.fada1-8.fna.whatsapp.net", "media.fadb1-2.fna.whatsapp.net", "media.fasu6-1.fna.whatsapp.net", "media.fbog4-1.fna.whatsapp.net", "media.fcgk9-2.fna.whatsapp.net", "media.fdoh5-2.fna.whatsapp.net", "media.ffjr1-2.fna.whatsapp.net", "media.fgua1-1.fna.whatsapp.net", "media.fgye1-1.fna.whatsapp.net", "media.fist1-4.fna.whatsapp.net", "media.fpbc2-2.fna.whatsapp.net", "media.fres2-1.fna.whatsapp.net", "media.fsdq1-2.fna.whatsapp.net", "media.fsub6-5.fna.whatsapp.net", "profilo_enabled", "template_hsm", "use_disorder_prefetching_timer", "video_codec_priority", "vpx_max_qp", "ptt_reduce_recording_delay", "25", "iphone", "Windows", "s_o", "Africa/Lagos", "abt", "media-kut2-1.cdn.whatsapp.net", "media-mba1-1.cdn.whatsapp.net", "media-mxp1-2.cdn.whatsapp.net", "md_blocklist_v2", "url_text", "enable_short_offset", "group_join_permissions", "enable_audio_piggyback_feature", "image_quality", "media.fcgk7-2.fna.whatsapp.net", "media.fcgk8-2.fna.whatsapp.net", "media.fclo7-1.fna.whatsapp.net", "media.fcmn1-1.fna.whatsapp.net", "media.feoh1-1.fna.whatsapp.net", "media.fgyd4-3.fna.whatsapp.net", "media.fjed4-4.fna.whatsapp.net", "media.flim1-4.fna.whatsapp.net", "media.flim2-4.fna.whatsapp.net", "media.fplu6-1.fna.whatsapp.net", "media.frak1-1.fna.whatsapp.net", "media.fsdq1-1.fna.whatsapp.net", "to_ip", "015", "vp8", "19", "21", "1320", "auth_key_ver", "message_processing_dedup", "server-error", "wap4_enabled", "420", "014", "cond_range_rtt", "ptt_fast_lock_enabled", "media-ort2-1.cdn.whatsapp.net", "fwd_ui_start_ts",
+                "contact_blacklist", "Asia/Jakarta", "media.fepa10-1.fna.whatsapp.net", "media.fmex10-3.fna.whatsapp.net", "disorder_prefetching_start_when_empty", "America/Bogota", "use_local_probing_rx_bitrate", "America/Argentina/Buenos_Aires", "cross_post", "media.fabb1-1.fna.whatsapp.net", "media.fbog4-2.fna.whatsapp.net", "media.fcgk9-1.fna.whatsapp.net", "media.fcmn2-1.fna.whatsapp.net", "media.fdel3-1.fna.whatsapp.net", "media.ffjr1-1.fna.whatsapp.net", "media.fgdl5-1.fna.whatsapp.net", "media.flpb1-2.fna.whatsapp.net", "media.fmex2-1.fna.whatsapp.net", "media.frba2-2.fna.whatsapp.net", "media.fros2-2.fna.whatsapp.net", "media.fruh2-1.fna.whatsapp.net", "media.fybz2-2.fna.whatsapp.net", "options", "20", "a", "017", "018", "mute_always", "user_notice", "Asia/Kolkata", "gif_provider", "locked", "media-gua1-1.cdn.whatsapp.net", "piggyback_exclude_force_flush", "24", "media.frec39-1.fna.whatsapp.net", "user_remove", "file_max_size", "cond_packet_loss_pct_ema_alpha", "media.facc1-1.fna.whatsapp.net", "media.fadb2-1.fna.whatsapp.net", "media.faly3-1.fna.whatsapp.net", "media.fbdo6-2.fna.whatsapp.net", "media.fcmn2-2.fna.whatsapp.net", "media.fctg1-3.fna.whatsapp.net", "media.ffez1-2.fna.whatsapp.net", "media.fist1-3.fna.whatsapp.net", "media.fist2-2.fna.whatsapp.net", "media.flim2-2.fna.whatsapp.net", "media.fmct2-3.fna.whatsapp.net", "media.fpei3-1.fna.whatsapp.net", "media.frba3-1.fna.whatsapp.net", "media.fsdu8-2.fna.whatsapp.net", "media.fstu2-1.fna.whatsapp.net", "media_type", "receipt_agg", "016", "enable_pli_for_crc_mismatch", "live", "enc_rekey", "frskmsg", "d", "media.fdel11-2.fna.whatsapp.net", "proto", "2250", "audio_piggyback_enable_cache", "skip_nack_if_ltrp_sent", "mark_dtx_jb_frames", "web_service_delay", "7282", "catalog_send_all", "outgoing", "360", "30", "LIMITED", "019", "audio_picker", "bpv2_phase", "media.fada1-7.fna.whatsapp.net", "media.faep7-1.fna.whatsapp.net", "media.fbko1-2.fna.whatsapp.net", "media.fbni1-2.fna.whatsapp.net", "media.fbtz1-1.fna.whatsapp.net", "media.fbtz1-8.fna.whatsapp.net", "media.fcjs3-1.fna.whatsapp.net", "media.fesb3-2.fna.whatsapp.net", "media.fgdl5-4.fna.whatsapp.net", "media.fist2-1.fna.whatsapp.net", "media.flhe2-2.fna.whatsapp.net", "media.flim2-1.fna.whatsapp.net", "media.fmex1-1.fna.whatsapp.net", "media.fpat3-2.fna.whatsapp.net", "media.fpat3-3.fna.whatsapp.net", "media.fros2-1.fna.whatsapp.net", "media.fsdu8-1.fna.whatsapp.net", "media.fsub3-2.fna.whatsapp.net", "payments_chat_plugin", "cond_congestion_no_rtcp_thr", "green_alert", "not-a-biz", "..", "shops_pdp_urls_config", "source", "media-dus1-1.cdn.whatsapp.net", "mute_video", "01b", "currency", "max_keys", "resume_check", "contact_array", "qr_scanning", "23", "b", "media.fbfh15-1.fna.whatsapp.net", "media.flim22-1.fna.whatsapp.net", "media.fsdu11-1.fna.whatsapp.net", "media.fsdu15-1.fna.whatsapp.net", "Chrome", "fts_version", "60", "media.fada1-6.fna.whatsapp.net", "media.faep4-2.fna.whatsapp.net", "media.fbaq5-1.fna.whatsapp.net", "media.fbni1-1.fna.whatsapp.net", "media.fcai3-2.fna.whatsapp.net", "media.fdel3-2.fna.whatsapp.net", "media.fdmm3-2.fna.whatsapp.net", "media.fhex3-1.fna.whatsapp.net", "media.fisb4-2.fna.whatsapp.net", "media.fkhi5-2.fna.whatsapp.net", "media.flos2-1.fna.whatsapp.net", "media.fmct2-1.fna.whatsapp.net", "media.fntr7-1.fna.whatsapp.net", "media.frak3-1.fna.whatsapp.net", "media.fruh5-2.fna.whatsapp.net", "media.fsub6-1.fna.whatsapp.net", "media.fuab1-2.fna.whatsapp.net", "media.fuio1-1.fna.whatsapp.net", "media.fver1-1.fna.whatsapp.net", "media.fymy1-1.fna.whatsapp.net", "product_catalog", "1380", "audio_oob_fec_max_pkts", "22", "254", "media-ort2-2.cdn.whatsapp.net", "media-sjc3-1.cdn.whatsapp.net", "1600", "01a", "01c", "405", "key_frame_interval", "body", "media.fcgh20-1.fna.whatsapp.net", "media.fesb10-2.fna.whatsapp.net", "125", "2000", "media.fbsb1-1.fna.whatsapp.net", "media.fcmn3-2.fna.whatsapp.net", "media.fcpq1-1.fna.whatsapp.net", "media.fdel1-2.fna.whatsapp.net", "media.ffor2-1.fna.whatsapp.net", "media.fgdl1-4.fna.whatsapp.net", "media.fhex2-1.fna.whatsapp.net", "media.fist1-2.fna.whatsapp.net", "media.fjed5-2.fna.whatsapp.net", "media.flim6-4.fna.whatsapp.net", "media.flos2-2.fna.whatsapp.net", "media.fntr6-2.fna.whatsapp.net", "media.fpku3-2.fna.whatsapp.net", "media.fros8-1.fna.whatsapp.net", "media.fymy1-2.fna.whatsapp.net", "ul_bw", "ltrp_qp_offset", "request", "nack", "dtx_delay_state_reset", "timeoffline", "28", "01f", "32", "enable_ltr_pool", "wa_msys_crypto", "01d", "58", "dtx_freeze_hg_update", "nack_if_rpsi_throttled", "253", "840", "media.famd15-1.fna.whatsapp.net", "media.fbog17-2.fna.whatsapp.net", "media.fcai19-2.fna.whatsapp.net", "media.fcai21-4.fna.whatsapp.net", "media.fesb10-4.fna.whatsapp.net", "media.fesb10-5.fna.whatsapp.net", "media.fmaa12-1.fna.whatsapp.net", "media.fmex11-3.fna.whatsapp.net", "media.fpoa33-1.fna.whatsapp.net", "1050", "021", "clean", "cond_range_ema_packet_loss_pct", "media.fadb6-5.fna.whatsapp.net", "media.faqp4-1.fna.whatsapp.net", "media.fbaq3-1.fna.whatsapp.net", "media.fbel2-1.fna.whatsapp.net", "media.fblr4-2.fna.whatsapp.net", "media.fclo8-1.fna.whatsapp.net", "media.fcoo1-2.fna.whatsapp.net", "media.ffjr1-4.fna.whatsapp.net", "media.ffor9-1.fna.whatsapp.net", "media.fisb3-1.fna.whatsapp.net", "media.fkhi2-2.fna.whatsapp.net", "media.fkhi4-1.fna.whatsapp.net", "media.fpbc1-2.fna.whatsapp.net", "media.fruh2-2.fna.whatsapp.net", "media.fruh5-1.fna.whatsapp.net", "media.fsub3-1.fna.whatsapp.net", "payments_transaction_limit", "252", "27", "29", "tintagel", "01e", "237", "780", "callee_updated_payload", "020", "257", "price", "025", "239", "payments_cs_phone_number", "mediaretry", "w:auth:backup:token", "Glass.caf", "max_bitrate", "240", "251", "660", "media.fbog16-1.fna.whatsapp.net", "media.fcgh21-1.fna.whatsapp.net", "media.fkul19-2.fna.whatsapp.net", "media.flim21-2.fna.whatsapp.net", "media.fmex10-4.fna.whatsapp.net", "64", "33", "34", "35", "interruption", "media.fabv3-1.fna.whatsapp.net", "media.fadb6-1.fna.whatsapp.net", "media.fagr1-1.fna.whatsapp.net", "media.famd1-1.fna.whatsapp.net", "media.famm6-1.fna.whatsapp.net", "media.faqp2-3.fna.whatsapp.net"];
+    }
+	var p = 
 		{
 			STREAM_END: 2,
 			LIST_EMPTY: 0,
@@ -87,200 +64,249 @@ function NodeParser(isMultiDevice = false)
 			SINGLE_BYTE_MAX: 256,
 			PACKED_MAX: 254
     	};
-        this.readNode = function(e) 
-        {
-            var t = e.readByte(), r = this.readListSize(e, t);
-            if (t = e.readByte(), t === o.STREAM_END)
-            {
-                throw new Error("unexpected stream end " + e.debugInfo());
-            }
-            var n = this.readString(e, t);
-            if (0 === r || !n)
-                throw new Error("invalid node. 0 list or empty tag" + e.debugInfo());
-            var a = r - 2 + r % 2 >> 1;
-            var i = this.readAttributes(e, a);
-            if (r % 2 === 1)
-                return [n, i, void 0];
-            var d;
-            if (t = e.readByte(),
-            this.isListTag(t))
-                d = this.readList(e, t);
-            else if (t === o.BINARY_8) {
-                var s = e.readByte();
-                d = e.readBytes(s)
-            } else if (t === o.BINARY_20) {
-                var c = e.readInt20();
-                d = e.readBytes(c)
-            } else if (t === o.BINARY_32) {
-                var p = e.readInt32();
-                d = e.readBytes(p)
-            } else
-                d = this.readString(e, t);
+        var t, n = {}, r = e.nibbleEncode;
+        for (t = 0; t < e.singleByte.length; t++)
+            e.singleByte[t] && (n[e.singleByte[t]] = t);
+        for (t = 0; t < e.doubleByte.length; t++)
+            e.doubleByte[t] && (n[e.doubleByte[t]] = t + p.SINGLE_BYTE_MAX);
 
-            return [n, i, d];
-        }
-        ,
-        this.isListTag = function(e) {
-            return e === o.LIST_EMPTY || e === o.LIST_8 || e === o.LIST_16
-        }
-        ,
-        this.readListSize = function(e, t) {
-            if (t === o.LIST_EMPTY)
-                return 0;
-            if (t === o.LIST_8)
-                return e.readByte();
-            if (t === o.LIST_16)
-                return e.readInt16();
-            throw new Error("invalid list size " + e.debugInfo())
-        }
-        ,
-        this.readString = function(e, t) {
-            if (t === -1)
-                throw new Error("invalid start token readString" + e.debugInfo());
-            if (t > 2 && t < 236) {
-                var r = this.getToken(t);
-                return "s.whatsapp.net" === r && (r = "c.us"),
-                r
-            }
-            switch (t) 
-            {
-                case o.DICTIONARY_0:
-                case o.DICTIONARY_1:
-                case o.DICTIONARY_2:
-                case o.DICTIONARY_3:
-                    var n = e.readByte();
-                    return this.getTokenDouble(t - o.DICTIONARY_0, n);
-                case o.LIST_EMPTY:
-                    return;
-                case o.BINARY_8:
-                    return e.readString(e.readByte());
-                case o.BINARY_20:
-                    return e.readString(e.readInt20());
-                case o.BINARY_32:
-                    return e.readString(e.readInt32());
-                case o.JID_PAIR:
-                    var a = this.readString(e, e.readByte());
-                    var i = this.readString(e, e.readByte());
-                    if ("undefined" != typeof a && "undefined" != typeof i)
-                        return a + "@" + i;
-                    if ("undefined" != typeof i)
-                        return i;
-                    throw new Error("invalid jid " + a + "," + i + " " + e.debugInfo());
-                case o.JID_AD:
-                    t = e.readByte();
-                    var a = e.readByte();
-                    var s = this.readString(e, e.readByte());
-                        if (void 0 !== s)
-                            return t && a ? s + "." + t + ":" + a + "@c.us" : 
-                                t ? s + "." + t + "@c.us" : a ? s + ":" + a + "@c.us" : s + "@c.us";
-                        throw new Error(`invalid JID_AD agent:${t} device:${a} user:${s}`);
-                case o.JID_FB:
-                    debugger;
-                case o.NIBBLE_8:
-                case o.HEX_8:
-                    return this.readPacked8(t, e);
-                default:
-                    throw new Error("invalid string " + e.debugInfo())
+        this.writeNode = function(e, node) {
+            if (node) {
+                if (3 !== Object.keys(node).length)
+                    throw new Error("invalid node");
+				var n = 0;
+				if (node.attrs)
+				{
+					var result = {}, key;
+					var counter = 0;
+					for (key in node.attrs) 
+					{
+						if (node.attrs.hasOwnProperty(key) && !!node.attrs[key]) 
+						{
+							result[key] = node.attrs[key];
+							counter++;
+						}
+					}
+					n = 2 * counter;
+				}
+                this.writeListStart(e, 1 + n + (node.content ? 1 : 0)),
+                this.writeString(e, node.tag),
+                this.writeAttributes(e, node.attrs),
+                this.writeChildren(e, node.content)
             }
         }
         ,
-        this.getToken = function(e) {
-            var token;
-            if (e >= 0 && e < t.length)
-            {
-                token = t[e]
-            }
+        this.writeString = function(e, t, r) {
+            if ("string" != typeof t)
+                throw new Error("invalid string");
+            var a, i, o = n[t];
+            if ("c.us" !== t || r)
+                if ("undefined" == typeof o) {
+                    var s = t.indexOf("@");
+                    if (s < 1)
+                        this.writeStringRaw(e, t);
+                    else {
+                        var c = t.substring(0, s)
+                          , d = t.substring(s + 1);
+                        this.writeJid(e, c, d)
+                    }
+                } else {
+                    if (o < p.SINGLE_BYTE_MAX)
+                        this.writeToken(e, o);
+                    else {
+                        var u = o - p.SINGLE_BYTE_MAX
+                          , f = u >> 8;
+                        switch (i = u % 256, f) 
+                        {
+                            case 0:
+                                a = p.DICTIONARY_0;
+                                break;
+                            case 1:
+                                a = p.DICTIONARY_1;
+                                break;
+                            case 2:
+                                a = p.DICTIONARY_2;
+                                break;
+                            case 3:
+                                a = p.DICTIONARY_3;
+                                break;
+                            default:
+                                throw new Error("double byte dictionary token out of range: " + t + " " + o)
+                        }
+
+                        this.writeToken(e, a),
+                        this.writeToken(e, i)
+                    }
+                }
             else
-                throw new Error("invalid token " + token);
+                this.writeToken(e, n["s.whatsapp.net"])
+        }
+        ,
+        this.writeStringRaw = function(e, t) {
+            var n = BinaryReader.numUtf8Bytes(t);
+            if (n >= 4294967296)
+                throw new Error("string too large to encode (len = " + n + "): " + t);
+            n >= 1 << 20 ? (e.pushByte(p.BINARY_32),
+            e.pushInt32(n)) : n >= 256 ? (e.pushByte(p.BINARY_20),
+            e.pushInt20(n)) : (e.pushByte(p.BINARY_8),
+            e.pushByte(n)),
+            e.pushString(t)
+        }
+        ,
+        this.writeJid = function(e, jidUser, jidServer) {
+            var jidDecoded = this.jidUserDecode(jidUser);
 
-            return token
-        }
-        ,
-        this.getTokenDouble = function(e, t) {
-            var n, o = 256 * e + t;
-            if (o >= 0 && o < r.length && (n = r[o]),
-            "undefined" == typeof n)
-                throw new Error("invalid double byte token " + e + " " + t);
-            return n
-        }
-        ,
-        this.readAttributes = function(e, t) {
-            for (var r, n, o = t ? {} : void 0, a = 0; a < t; a++)
-                r = this.readString(e, e.readByte()),
-                n = this.readString(e, e.readByte()),
-                o[r] = n;
-            return o
-        }
-        ,
-        this.readList = function(e, t) {
-            for (var r = [], n = this.readListSize(e, t), o = 0; o < n; o++)
-                r.push(this.readNode(e));
-            return r
-        }
-        ,
-		this.readPacked8 = function(e, t) {
-            for (var n = t.readByte(), r = n >> 7, a = 127 & n, i = "", o = 0; o < a; o++) {
-                var s = t.readByte();
-                i += this.unpackByte(e, (240 & s) >> 4),
-                i += this.unpackByte(e, 15 & s)
+            try
+            {
+                if (jidDecoded.device == undefined)
+                {
+                    e.pushByte(p.JID_PAIR), jidUser;
+                    this.writePackedBytes(e, jidUser);
+                    this.writeString(e, jidServer);
+                }
+                else
+                {
+                    e.pushByte(p.JID_AD);
+                    e.pushByte(jidDecoded.agent || 0);
+                    e.pushByte(jidDecoded.device || 0);
+                    this.writePackedBytes(e, jidDecoded.user);
+                }
+            } 
+            catch (r) 
+            {
+                //s.warnVerbose("writer:encode-fallback " + r.message, t)(),
+                this.writeString(e, jidUser);
+                this.writeString(e, jidServer);
             }
-            return r && (i = i.substring(0, i.length - 1)),
-            i
         }
         ,
-        this.unpackByte = function(e, t) {
+        this.writeToken = function(e, t) {
+            e.pushByte(t);
+        }
+        ,
+        this.writeAttributes = function(e, t) {
+            if (t)
+                for (var n in t)
+                    t[n] && (this.writeString(e, n),
+                    this.writeString(e, t[n]))
+        }
+        ,
+        this.writeChildren = function(e, t) {
+            var n;
+            if (t)
+                if ("string" == typeof t)
+                    this.writeString(e, t, !0);
+                else if (t instanceof ArrayBuffer) {
+                    if (n = t.byteLength,
+                    n >= 4294967296)
+                        throw new Error("invalid children; too long (len = " + n);
+                    n >= 1 << 20 ? (e.pushByte(p.BINARY_32),
+                    e.pushInt32(n)) : n >= 256 ? (e.pushByte(p.BINARY_20),
+                    e.pushInt20(n)) : (e.pushByte(p.BINARY_8),
+                    e.pushByte(n)),
+                    e.pushBytes(t)
+                } else {
+                    if (!Array.isArray(t))
+                        throw new Error("invalid children");
+                    n = t.length,
+                    this.writeListStart(e, n);
+                    for (var r = 0; r < n; r++)
+                        this.writeNode(e, t[r])
+                }
+        }
+        ,
+        this.writeListStart = function(e, t) {
+            0 === t ? e.pushByte(p.LIST_EMPTY) : t < 256 ? (e.pushByte(p.LIST_8),
+            e.pushByte(t)) : (e.pushByte(p.LIST_16),
+            e.pushInt16(t))
+        }
+        ,
+        this.writePackedBytes = function(e, t) {
+            try {
+                this.writePackedBytesImpl(e, t, p.NIBBLE_8)
+            } catch (n) {
+                s.warn("writer:enc nib fail, try hex " + n.message, t)(),
+                this.writePackedBytesImpl(e, t, p.HEX_8)
+            }
+        }
+        ,
+        this.writePackedBytesImpl = function(e, t, n) {
+            var r = BinaryReader.numUtf8Bytes(t);
+            if (r > p.PACKED_MAX)
+                throw new Error("too many bytes to nibble-encode: len = " + r);
+            var a, i = Math.ceil(r / 2), o = [], s = 0;
+            r % 2 > 0 && (s = 128);
+            var d = s | i;
+            o.push(n),
+            o.push(d);
+            for (var u = Math.floor(r / 2), f = 0; f < u; f++)
+                a = this.packBytePair(n, t[2 * f], t[2 * f + 1]),
+                o.push(a);
+            s > 0 && (a = this.packBytePair(n, t[r - 1], "\0"),
+            o.push(a));
+            var l = new Uint8Array(o);
+            e.pushUint8Array(l)
+        }
+        ,
+        this.packBytePair = function(e, t, n) {
+            var r, a;
             switch (e) {
-            case o.NIBBLE_8:
-                return this.unpackNibble(t);
-            case o.HEX_8:
-                return this.unpackHex(t);
+            case p.NIBBLE_8:
+                r = this.packNibble(t),
+                a = this.packNibble(n);
+                break;
+            case p.HEX_8:
+                r = this.packHex(t),
+                a = this.packHex(n);
+                break;
             default:
-                throw new Error("unpack non-nibble/hex type: " + e)
+                throw new Error("invalid byte pack type: " + e)
+            }
+            return r << 4 | a
+        }
+        ,
+        this.packNibble = function(e) {
+            if (!r.hasOwnProperty(e))
+                throw new Error("invalid byte to nibble-pack: " + e);
+            return r[e]
+        }
+        ,
+        this.packHex = function(e) {
+            switch (e) {
+            case "0":
+            case "1":
+            case "2":
+            case "3":
+            case "4":
+            case "5":
+            case "6":
+            case "7":
+            case "8":
+            case "9":
+            case "A":
+            case "B":
+            case "C":
+            case "D":
+            case "E":
+            case "F":
+                return parseInt(e, 16);
+            case "\0":
+                return 15;
+            default:
+                throw new Error("packHex:invalid byte: " + e)
             }
         }
-        ,
-        this.unpackNibble = function(e) {
-            if (!n.hasOwnProperty(e))
-                throw new Error("invalid nibble to unpack: " + e);
-            return n[e]
-        }
-        ,
-        this.unpackHex = function(e) {
-            if (e >= 0 && e <= 15)
-                return e.toString(16).toUpperCase();
-            throw new Error("invalid hex to unpack: " + e)
-        },
-        this.nibblesToBytes = function(e) {
-            for (var t = e.readByte(), r = t >> 7, n = 127 & t, o = "", a = 0; a < n; a++) {
-                var i = e.readByte()
-                  , d = this.unpackBytePair(i);
-                o += d[0],
-                o += d[1]
+
+        this.jidUserDecode = function(jidUser) {
+            // https://github.com/adiwajshing/Baileys/blob/183a1c6ad04f0d8031ccf295d08de986583d7bca/src/WABinary/JidUtils.ts#L13
+        
+            var [userAgent, device] = jidUser.split(':')
+            var [user, agent] = userAgent.split('_')
+        
+            return {
+                user,
+                agent: agent ? +agent : undefined,
+                device: device ? +device : undefined
             }
-            return r && (o = o.substring(0, o.length - 1)),
-            o
-        }
-        ,
-        this.unpackBytePair = function(e) {
-            var t = (240 & e) >> 4
-              , r = 15 & e;
-            if (!n.hasOwnProperty(t))
-                throw new Error("invalid nibble to unpack: " + t);
-            if (!n.hasOwnProperty(r))
-                throw new Error("invalid nibble to unpack: " + r);
-            var o = n[t]
-              , a = n[r];
-            return [o, a]
-        }
-        ,
-        this.bytesToString = function(e) {
-            for (var t = "", r = 0; r < e.length; r++)
-                t += String.fromCharCode(e[r]);
-            return t
         }
     }
-	
-	window.NodeParser = NodeParser;
-	window.NodeBinaryReader = NodeBinaryReader;
-	
-})();

@@ -174,10 +174,12 @@
 
 .incognito-message
 {
-    position: relative;
+  position: relative;
 	font-size: 12px;
 	transform-origin: left top 0px;
 	text-transform: none !important;
+  padding-left: 9%; padding-right: 9%;
+  margin-bottom: 12px;
 }
 
 .incognito-message.middle

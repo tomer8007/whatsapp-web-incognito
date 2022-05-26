@@ -300,3 +300,22 @@ function getCSSRule(ruleName)
     }
     return rules[ruleName];
 }
+
+function makeLogMessage(args) 
+{
+    function mergeArrays(e, t)  {
+        const n = [] , r = e.length , i = t.length , a = Math.max(r, i);
+        for (let o = 0; o < a; o++)
+            o < r && n.push(e[o]),
+            o < i && n.push(t[o]);
+        return n
+    }
+
+    for (var l = new Array(args.length > 1 ? args.length - 1 : 0), d = 1; d < args.length; d++)
+        l[d - 1] = args[d];
+
+    var strings = args[0]; var params = l;
+
+    var message = mergeArrays(strings, params.map(String)).join("");
+    return message;
+}

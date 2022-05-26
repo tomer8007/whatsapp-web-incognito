@@ -18,7 +18,7 @@ var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
 var WADefaultdebugMode = false;
 
-hookSendLogs();
+initialize();
  
 //
 // a WebSocket frame is about to be sent out.
@@ -76,11 +76,11 @@ wsHook.before = function (originalData, url)
                 }
 
                 var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
-                var manipulatedNode = node.slice();
+                var manipulatedNode = structuredClone(node);
                 if (!isAllowed)
                 {
                     if (!isMultiDevice) return null;
-                    manipulatedNode[0] = "blocked_node";
+                    manipulatedNode.tag = "blocked_node";
                 }
 
                 manipulatedNode = await NodeHandler.manipulateSentNode(manipulatedNode, isMultiDevice);
@@ -164,12 +164,12 @@ wsHook.after = function (messageEvent, url)
                 }
 
                 var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, isMultiDevice);
-                var manipulatedNode = node.slice();
+                var manipulatedNode = structuredClone(node);
 
                 if (!isAllowed)
                 {
                     if (!isMultiDevice) return null;
-                    manipulatedNode[0] = "blocked_node";
+                    manipulatedNode.tag = "blocked_node";
                 }
 
                 manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
@@ -220,26 +220,27 @@ var NodeHandler = {};
 NodeHandler.isSentNodeAllowed = function (node, tag)
 {
     var subNodes = [node];
-    if (Array.isArray(nodeReader.children(node))) 
+    if (Array.isArray(node.content)) 
     {
-        subNodes = subNodes.concat(nodeReader.children(node));
+        subNodes = subNodes.concat(node.content);
     }
 
     for (var i = 0; i < subNodes.length; i++)
     {
         var child = subNodes[i];
 
-        var action = child[0];
-        var data = child[1];
+        var action = child.tag;
+        var data = child.attrs;
         var shouldBlock = 
             (readConfirmationsHookEnabled && action === "read") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
+            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
             (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
             (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-            (presenceUpdatesHookEnabled && action == "chatstate" && child[2][0][0] == "composing");
+            (presenceUpdatesHookEnabled && action == "chatstate" && child.content[0].tag == "composing");
 
         if (shouldBlock)
         {
@@ -266,9 +267,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     {
                         // We do not allow sending this read receipt.
                         // invoke the callback and fake a failure response from server
-                        document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', {
-                            detail: jid
-                        }));
+                        document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
 
                         if (action == "read" && wsHook.onMessage)
                         {
@@ -302,34 +301,34 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
 {
     try
     {
-        if (node[0] == "message" || node[0] == "action")
+        if (node.tag == "message" || node.tag == "action")
         {
             // manipulating a message node
 
             if (isMultiDevice)
             {
-                var participants = nodeReader.children(node)[0];
-                var children = nodeReader.children(participants);
+                var participants = node.content[0];
+                var children = participants.content;
                 for (var i = 0; i < children.length; i++)
                 {
                     var childNode = children[i];
-                    if (nodeReader.tag(childNode) != "to") continue;
+                    if (childNode.tag != "to") continue;
     
-                    var messageNode = nodeReader.children(childNode)[0];
-                    if (nodeReader.tag(messageNode) == "enc")
+                    var messageNode = childNode.content[0];
+                    if (messageNode.tag == "enc")
                     {
                         childNode = await this.manipulateSentMessageNode(childNode, isMultiDevice);
                         children[i] = childNode;
                     }
                 }
             }
-            else if (nodeReader.tag(node) == "action")
+            else if (node.tag == "action")
             {
-                var children = nodeReader.children(node);
+                var children = node.content;
                 for (var i = 0; i < children.length; i++)
                 {
                     var child = children[i];
-                    if (nodeReader.tag(child) == "message")
+                    if (child.tag == "message")
                     {
                         var messageNode = await this.manipulateSentMessageNode(child, isMultiDevice);
                         children[i] = messageNode;
@@ -353,7 +352,6 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
 NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevice)
 {
     var remoteJid = null;
-    var isMultiDevice = messageNode[1];
 
     if (!isMultiDevice)
     {
@@ -370,8 +368,8 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevi
     else
     {
         // multi device
-        if (nodeReader.tag(messageNode) != "to") debugger;
-        remoteJid = messageNode[1]["jid"] ? messageNode[1]["jid"]: messageNode[1]["from"];
+        if (messageNode.tag != "to") debugger;
+        remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"]: messageNode.attrs["from"];
     }
 
     if (remoteJid && isChatBlocked(remoteJid))
@@ -393,7 +391,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevi
         // TODO: following lines are commented out due to non-complete message types
         // re-assmble everything
         //messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-        //messageNode[2] = messageBuffer;
+        //messageNode.content = messageBuffer;
     }
 
     return messageNode;
@@ -403,8 +401,8 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
 {
     var isAllowed = true;
 
-    var nodeTag = nodeReader.tag(node);
-    var children = nodeReader.children(node);
+    var nodeTag = node.tag;
+    var children = node.content;
 
     // if this node does not contain a message, it's allowed
     if (nodeTag != "action" && nodeTag != "message") return true;
@@ -414,7 +412,7 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
     var nodes = [node];
     if (Array.isArray(children)) nodes = nodes.concat(children);
 
-    var messageNodes = nodes.filter(node => node[0] == "message");
+    var messageNodes = nodes.filter(node => node.tag == "message");
 
     for (var i = 0 ; i < messageNodes.length; i++)
     {
@@ -431,10 +429,10 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
                 messageId = message.key.id;
                 message = message.message;
             }
-            else if (currentNode[1] != null)
+            else if (currentNode.attrs != null)
             {
-                remoteJid = currentNode[1]["from"];
-                messageId = currentNode[1]["id"];
+                remoteJid = currentNode.attrs["from"];
+                messageId = currentNode.attrs["id"];
             }
 
             var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
@@ -514,8 +512,8 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
 NodeHandler.manipulateReceivedNode = async function (node)
 {
     var messages = [];
-    var children = nodeReader.children(node);
-    var type = nodeReader.attr("type", node);
+    var children = node.content;
+    var type = node.attrs["type"];
 
     return node;
 }
@@ -525,10 +523,10 @@ async function getMessagesFromNode(node, isMultiDevice)
     if (!isMultiDevice)
     {
         // the message is not singal-encrypted, so just parse it
-        switch (nodeReader.tag(node))
+        switch (node.tag)
         {
             case "message":
-                var message = WebMessageInfo.read(new Pbf(nodeReader.children(node)));
+                var message = WebMessageInfo.read(new Pbf(node.content));
                 return [message];
             default:
                 return [];
@@ -541,33 +539,9 @@ async function getMessagesFromNode(node, isMultiDevice)
     }
 }
 
-var nodeReader =
-{
-    tag: function (e) { return e && e[0] },
-    attr: function (e, t) { return t && t[1] ? t[1][e] : void 0 },
-    attrs: function (e) { return e[1] },
-    child: function s(e, t)
-    {
-        var r = t[2];
-        if (Array.isArray(r))
-            for (var n = r.length, o = 0; o < n; o++)
-            {
-                var s = r[o];
-                if (Array.isArray(s) && s[0] === e)
-                    return s
-            }
-    },
-    children: function (e)
-    {
-        return e && e[2]
-    },
-    dataStr: function (e)
-    {
-        if (!e) return "";
-        var t = e[2];
-        return "string" == typeof t ? t : t instanceof ArrayBuffer ? new BinaryReader(t).readString(t.byteLength) : void 0
-    }
-}
+//
+// Miscellaneous 
+//
 
 function exposeWhatsAppAPI()
 {
@@ -585,52 +559,89 @@ function exposeWhatsAppAPI()
     }
 }
 
-function hookSendLogs()
+function initialize()
+{
+    hookLogs();
+    initializeDeletedMessagesDB();
+}
+
+function hookLogs()
 {
     // we don't want extension-related errors to be silently sent out
+
     var originalSendLogs = window.SEND_LOGS;
-    if (!originalSendLogs)
-    {
-        Object.defineProperty(window, 'SEND_LOGS', {
-            set: function(value) { originalSendLogs = value; }
-          });
-    }
+    var originalOnUnhandledRejction = window.onunhandledrejection;
+    var originalLog = window.__LOG__;
 
-    window.SEND_LOGS = function(errorObject)
+    Object.defineProperty(window, 'onunhandledrejection', {
+        set: function(value) { originalOnUnhandledRejction = value; },
+        get: function() {return hookedPromiseError;}
+    });
+    Object.defineProperty(window, '__LOG__', {
+        set: function(value) { originalLog = value; },
+        get: function() {return hookedLog;}
+    });
+
+    function hookedPromiseError(event)
     {
+        debugger;
+        console.error("Unhandled promise rejection:");
         console.error(errorObject);
-        originalSendLogs.call(errorObject);
+        return originalOnUnhandledRejction.call(event);
+    }
+
+    function hookedLog(errorLevel)
+    {        
+        return function(strings, values)
+        {
+            var message = "[WhatsApp][" + errorLevel + "] -- " + makeLogMessage(arguments);
+
+            if (errorLevel <= 2 && WAdebugMode)
+            {
+                console.log(message);
+            }
+            else if (errorLevel > 2)
+            {
+                console.error(message);
+            }
+
+            var test = originalLog(errorLevel);
+            return test.apply(null, arguments);
+        };
     }
 }
 
-var deletedDB = indexedDB.open("deletedMsgs", 2);
-
-deletedDB.onupgradeneeded = function (e)
+function initializeDeletedMessagesDB()
 {
-    // triggers if the client had no database
-    // ...perform initialization...
-    let db = deletedDB.result;
-    switch (e.oldVersion)
+    window.deletedDB = indexedDB.open("deletedMsgs", 2);
+
+    deletedDB.onupgradeneeded = function (e)
     {
-        case 0:
-            db.createObjectStore('msgs', { keyPath: 'id' });
-            WADefaultdebugMode &&
-            console.log('WhatsIncognito: Deleted messages database generated');
-        case 1:
-            db.createObjectStore('pseudomsgs', { keyPath: 'id' });
+        // triggers if the client had no database
+        // ...perform initialization...
+        debugger;
+        let db = deletedDB.result;
+        switch (e.oldVersion)
+        {
+            case 0:
+                db.createObjectStore('msgs', { keyPath: 'id' });
+                console.log('WhatsIncognito: Deleted messages database generated');
+            case 1:
+                db.createObjectStore('pseudomsgs', { keyPath: 'id' });
+        }
+    };
+    deletedDB.onerror = function ()
+    {
+        console.error("WhatsIncognito: Error opening database");
+        console.error("Error", deletedDB);
+    };
+    deletedDB.onsuccess = () =>
+    {
+        
     }
-};
-deletedDB.onerror = function ()
-{
-    console.error("WhatsIncognito: Error opening database");
-    console.error("Error", deletedDB);
-};
-deletedDB.onsuccess = () =>
-{
-    
 }
 
-const saveDeletedMessage = async function(retrievedMsg, deletedMessageKey, revokeMessageID)
+async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
     let author = "";

@@ -143,20 +143,20 @@ MultiDevice.sizeOfPacket = function(payload)
 
 MultiDevice.decryptE2EMessage = async function(messageNode)
 {
-    var remoteJid = messageNode[1]["jid"] ? messageNode[1]["jid"] : messageNode[1]["from"];
-    var participant = messageNode[1]["participant"];
+    var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
+    var participant = messageNode.attrs["participant"];
     var fromJid = participant ? participant : remoteJid;
 
     var decryptedMessages = [];
     var keyDistributionMessage = null;
 
-    var childMessages = messageNode[2];
+    var childMessages = messageNode.content;
     for (var message of childMessages)
     {
-        if (message[0] != "enc") continue;
+        if (message.tag != "enc") continue;
 
-        var ciphertext = message[2];
-        var chiphertextType = message[1]["type"];
+        var ciphertext = message.content;
+        var chiphertextType = message.attrs["type"];
     
         var storage = new moduleRaid().findModule("getSignalProtocolStore")[0].getSignalProtocolStore();
     
