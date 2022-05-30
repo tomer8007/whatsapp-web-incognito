@@ -220,6 +220,23 @@ document.addEventListener('sendReadConfirmation', async function (e)
     //WACrypto.sendNode(node);
 });
 
+document.addEventListener("getDeletedMessageByID", async function(e) 
+{
+    var data = JSON.parse(e.detail);
+    var msgID = data.messageID;
+
+    if (window.deletedMessagesDB == null) return;
+
+    var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
+    let request = transcation.objectStore("msgs").get(msgID);
+
+    request.onsuccess = (e) =>
+    {
+        var messageData = request.result;
+        document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+    }
+});
+
 function markChatAsPendingReciptsSending()
 {
     var chatWindow = getCurrentChatPanel();
