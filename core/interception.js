@@ -598,14 +598,14 @@ function hookLogs()
 
 function initializeDeletedMessagesDB()
 {
-    window.deletedDB = indexedDB.open("deletedMsgs", 1);
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
 
-    deletedDB.onupgradeneeded = function (e)
+    deletedDBOpenRequest.onupgradeneeded = function (e)
     {
         // triggers if the client had no database
         // ...perform initialization...
         debugger;
-        let db = deletedDB.result;
+        let db = deletedDBOpenRequest.result;
         switch (e.oldVersion)
         {
             case 0:
@@ -614,14 +614,14 @@ function initializeDeletedMessagesDB()
                 break;
         }
     };
-    deletedDB.onerror = function ()
+    deletedDBOpenRequest.onerror = function ()
     {
         console.error("WhatsIncognito: Error opening database");
-        console.error("Error", deletedDB);
+        console.error("Error", deletedDBOpenRequest);
     };
-    deletedDB.onsuccess = () =>
+    deletedDBOpenRequest.onsuccess = () =>
     {
-        
+        window.deletedMessagesDB = deletedDBOpenRequest.result;
     }
 }
 
@@ -646,10 +646,9 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
         try
         {
             const decryptedData = await WhatsAppAPI.downloadManager.downloadAndDecrypt({ directPath: retrievedMsg.directPath, 
-                                                                                            encFilehash: retrievedMsg.encFilehash, 
-                                                                                            filehash: retrievedMsg.filehash, 
-                                                                                            mediaKey: retrievedMsg.mediaKey, 
-                                                                                            type: retrievedMsg.type, signal: (new AbortController).signal });
+                encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, 
+                type: retrievedMsg.type, signal: (new AbortController).signal });
+
             body = arrayBufferToBase64(decryptedData);
 
         }
@@ -677,7 +676,7 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
 
     if ("id" in deletedMsgContents)
     {
-        const transcation = deletedDB.result.transaction('msgs', "readwrite");
+        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
         let request = transcation.objectStore("msgs").add(deletedMsgContents);
         request.onerror = (e) =>
         {
@@ -701,5 +700,5 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
     {
         console.log("WhatsIncognito: Deleted message contents not found");
     }
-
 }
+

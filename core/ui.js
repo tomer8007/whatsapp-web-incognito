@@ -12,7 +12,7 @@ initialize();
 var isInterceptionWorking = false;
 var isMultiDevice = false;
 var isUIClassesWorking = true;
-var deletedDB = null;
+var deletedMessagesDB = null;
 
 function initialize()
 {
@@ -458,10 +458,7 @@ function onSafetyDelayEnabled()
     document.getElementById("incognito-option-safety-delay").disabled = false;
     document.getElementById("incognito-radio-disable-safety-delay").checked = false;
     browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ safetyDelay: delay })
-    }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {detail: JSON.stringify({ safetyDelay: delay })}));
 }
 
 //
@@ -470,8 +467,6 @@ function onSafetyDelayEnabled()
 
 function restoreDeletedMessage(messageNode) 
 {
-    if (deletedDB == null) return;
-
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (!messageText) return;
 
@@ -480,17 +475,21 @@ function restoreDeletedMessage(messageNode)
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
 
-    const transcation = deletedDB.result.transaction('msgs', "readonly");
-    let request = transcation.objectStore("msgs").get(msgID);
-
-    const span = document.createElement("span");
-    const textSpan = document.createElement("span");
-    span.className = UIClassNames.DELETED_MESSAGE_SPAN;
-
-    request.onsuccess = (e) =>
+    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
+    document.addEventListener("onDeletedMessageReceived", function(e)
     {
+        var data = JSON.parse(e.detail);
+        var messageID = data.messageID;
+        var messageData = data.messageData;
+
+        if (messageID != msgID) return;
+
+        const span = document.createElement("span");
+        const textSpan = document.createElement("span");
+        span.className = UIClassNames.DELETED_MESSAGE_SPAN;
+    
         messageText.textContent = "";
-        if (!request.result)
+        if (!messageData)
         {
             textSpan.textContent = "Failed to restore message";
             messageText.appendChild(textSpan);
@@ -505,64 +504,62 @@ function restoreDeletedMessage(messageNode)
         textSpan.className = "copyable-text selectable-text";
         const titleSpan = document.createElement("span");
         titleSpan.style.cssText = titleSpanStyle;
-        if (request.result.isMedia)
+        if (messageData.isMedia)
         {
             titleSpan.textContent = "Restored media: \n";
             messageText.appendChild(titleSpan); // Top title span
 
-            if (request.result.mediaText) textSpan.textContent = "\n" + request.result.mediaText; //caption text span
-            if (request.result.type === "image")
+            if (messageData.mediaText) textSpan.textContent = "\n" + messageData.mediaText; //caption text span
+            if (messageData.type === "image")
             {
                 const imgTag = document.createElement("img");
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
-                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageText.appendChild(imgTag);
             }
-            else if (request.result.type === "sticker")
+            else if (messageData.type === "sticker")
             {
                 const imgTag = document.createElement("img");
                 imgTag.className = UIClassNames.STICKER_MESSAGE_TAG;
-                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageText.appendChild(imgTag);
             }
-            else if (request.result.type === "video")
+            else if (messageData.type === "video")
             {
                 const vidTag = document.createElement("video");
                 vidTag.controls = true;
                 vidTag.style.cssText = "width: 100%;";
                 const sourceTag = document.createElement("source");
-                sourceTag.type = request.result.mimetype;
-                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                sourceTag.type = messageData.mimetype;
+                sourceTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 vidTag.appendChild(sourceTag);
                 messageText.appendChild(vidTag);
             }
-            else if (request.result.type === "document")
+            else if (messageData.type === "document")
             {
                 const aTag = document.createElement("a");
-                aTag.download = request.result.fileName;
-                aTag.href = "data:" + request.result.mimetype + ";base64," + request.result.body;
-                aTag.textContent = "Download \"" + request.result.fileName + "\"";
+                aTag.download = messageData.fileName;
+                aTag.href = "data:" + messageData.mimetype + ";base64," + messageData.body;
+                aTag.textContent = "Download \"" + messageData.fileName + "\"";
                 messageText.appendChild(aTag);
             }
-            else if (request.result.type === "ptt") // audio file
+            else if (messageData.type === "ptt") // audio file
             {
                 const audioTag = document.createElement("audio");
                 audioTag.controls = true;
                 const sourceTag = document.createElement("source");
-                sourceTag.type = request.result.mimetype;
-                sourceTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                sourceTag.type = messageData.mimetype;
+                sourceTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 audioTag.appendChild(sourceTag);
                 messageText.appendChild(audioTag);
             }
-
-
         }
         else
         {
-            if (request.result.type === "vcard") // contact cards
+            if (messageData.type === "vcard") // contact cards
             {
-                let vcardBody = request.result.body;
+                let vcardBody = messageData.body;
                 vcardBody = vcardBody.split(":");
                 const phone = vcardBody[vcardBody.length - 2].slice(0, -4);
                 const aTagPhone = document.createElement("a");
@@ -579,27 +576,27 @@ function restoreDeletedMessage(messageNode)
                 textSpan.appendChild(aTagPhone);
 
             }
-            else if (request.result.type === "location")
+            else if (messageData.type === "location")
             {
                 titleSpan.textContent = "Restored location: \n";
                 const imgTag = document.createElement("img");
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
-                imgTag.src = "data:" + request.result.mimetype + ";base64," + request.result.body;
+                imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageText.appendChild(imgTag);
 
                 const locationLink = document.createElement("a");
                 locationLink.target = "_blank";
                 locationLink.rel = "noopener noreferrer";
                 locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
-                                        encodeURIComponent(request.result.lat + " " + request.result.lng);
+                                        encodeURIComponent(messageData.lat + " " + messageData.lng);
                 locationLink.textContent = "Google Maps Link"
                 messageText.appendChild(locationLink);
             }
             else
             {
                 titleSpan.textContent = "Restored message: \n";
-                textSpan.textContent = request.result.body;
+                textSpan.textContent = messageData.body;
                 messageText.appendChild(titleSpan);
             }
 
@@ -607,8 +604,7 @@ function restoreDeletedMessage(messageNode)
             
         messageText.appendChild(textSpan);
         messageText.appendChild(span);
-
-    }
+    })    
 }
 
 function tickCheckbox(checkbox, checkmark)
