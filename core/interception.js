@@ -16,7 +16,6 @@ var blockedChats = {};
 var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
 var WAdebugMode = false;
-var WADefaultdebugMode = false;
 
 initialize();
  
@@ -101,7 +100,6 @@ wsHook.before = function (originalData, url)
     {
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
-            WADefaultdebugMode &&
             console.log(exception);
             return originalData;
         }
@@ -196,7 +194,6 @@ wsHook.after = function (messageEvent, url)
         if (exception.message && exception.message.includes("stream end")) return messageEvent;
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
-            WADefaultdebugMode &&
             console.log(exception);
             return messageEvent;
         }
@@ -253,7 +250,6 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     if (isReadReceiptAllowed)
                     {
                         // this is the user trying to send out a read receipt.
-                        WADefaultdebugMode &&
                         console.log("WhatsIncongito: Allowing read receipt to " + jid);
 
                         // exceptions are one-time operation, so remove it from the list after some time
@@ -285,9 +281,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                     break;
             }
 
-            WADefaultdebugMode &&
             console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-            WADefaultdebugMode &&
             console.log(node);
 
             return false;
@@ -439,7 +433,6 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
 
             if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
             {
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
                 isAllowed = false;
                 break;
@@ -447,7 +440,6 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
             else if (isRevokeMessage)
             {
                 // TODO: edit the node to remove only the revoke messages
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
             }
         }
@@ -602,7 +594,6 @@ function hookLogs()
             }
             else if (errorLevel > 2)
             {
-                WADefaultdebugMode &&
                 console.error(message);
             }
 
@@ -701,22 +692,19 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
             {
                 // ConstraintError occurs when an object with the same id already exists
                 // This will happen when we get the revoke message again from the server
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
             } 
             else
             {
                 console.log("WhatsIncognito: Unexpected error saving deleted message");
-                console.log(request);
             }
         };
         request.onsuccess = (e) =>
         {
-            WADefaultdebugMode &&
             console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
         };
         
-        const transcation2 = deletedDB.result.transaction('pseudomsgs', "readwrite");
+        const transcation2 = window.deletedMessagesDB.transaction('pseudomsgs', "readwrite");
         let request2 = transcation2.objectStore("pseudomsgs").add({
             id: retrievedMsg.id.id
         });
@@ -724,22 +712,18 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
             if (request2.error.name == "ConstraintError") {
                 // ConstraintError occurs when an object with the same id already exists
                 // This will happen when we get the revoke message again from the server
-                WADefaultdebugMode &&
                 console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
             }
             else {
                 console.log("WhatsIncognito: Unexpected error saving deleted pseudomsgs");
-                console.log(request2);
             }
         };
         request2.onsuccess = (e) => {
-            WADefaultdebugMode &&
             console.log("WhatsIncognito: Saved deleted pseudomsgs with ID " + retrievedMsg.id.id + " successfully.");
         };
     }
     else
     {
-        WADefaultdebugMode &&
         console.log("WhatsIncognito: Deleted message contents not found");
     }
 }

@@ -400,7 +400,6 @@ function markChatAsBlocked(chat)
     }
     else
     {
-        window.WADefaultdebugMode &&
         console.warn("WAIncognito: Could not mark chat " + chat.id + " as blocked.");
     }
 
