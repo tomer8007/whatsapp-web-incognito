@@ -2,8 +2,9 @@
 This is a content script responsible for some UI.
 */
 
-if (chrome != undefined) {
-    var browser = chrome;
+if (chrome != undefined) 
+{
+	var browser = chrome;
 }
 
 initialize();
@@ -11,16 +12,18 @@ initialize();
 var isInterceptionWorking = false;
 var isMultiDevice = false;
 var isUIClassesWorking = true;
-var Allpsuedomsgskeys = new Set();
 var deletedMessagesDB = null;
+var Allpsuedomsgskeys = new Set();
 
-function initialize() {
+function initialize()
+{
     // load saved settings
-    browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    {
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-            {
-                detail: JSON.stringify(options)
-            }));
+        {
+            detail: JSON.stringify(options)
+        }));
 
         // ratify it
         var optionsMessage = options;
@@ -30,18 +33,23 @@ function initialize() {
 
     // initialize mutation observer
     var appElem = document.getElementById("app");
-    if (appElem != undefined) {
-        var mutationObserver = new MutationObserver(function (mutations) {
+    if (appElem != undefined)
+    {
+        var mutationObserver = new MutationObserver(function (mutations)
+        {
             var found = false;
-            for (var i = 0; i < mutations.length; i++) {
+            for (var i = 0; i < mutations.length; i++)
+            {
                 var addedNodes = mutations[i].addedNodes;
                 var removedNodes = mutations[i].removedNodes;
 
-                for (var j = 0; j < addedNodes.length; j++) {
+                for (var j = 0; j < addedNodes.length; j++)
+                {
                     var addedNode = addedNodes[j];
                     if (addedNode.classList == undefined) continue;
 
-                    if (addedNode.getElementsByClassName("two").length > 0) {
+                    if (addedNode.getElementsByClassName("two").length > 0)
+                    {
                         // main app was added, UI is ready
                         addIconIfNeeded();
                         setTimeout(function () { onMainUIReady(); }, 100);
@@ -49,31 +57,38 @@ function initialize() {
                         found = true;
                         break;
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS)) {
-                        setTimeout(function () {
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
+                    {
+                        setTimeout(function ()
+                        {
                             document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
 
                         }, 200);
                     }
 
                     // Scan for deleted messages and replace the text
-                    if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main") {
-                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." +
-                            UIClassNames.CHAT_MESSAGE + ".message-out");
-                        for (let i = 0; i < msgNodes.length; i++) {
+                    if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main")
+                    {
+                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + 
+                                                                    UIClassNames.CHAT_MESSAGE + ".message-out");
+                        for (let i = 0; i < msgNodes.length; i++)
+                        {
                             const currentNode = msgNodes[i];
                             restoreDeletedMessage(currentNode);
                         }
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE)
-                        && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out"))) {
+                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) 
+                            && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out")))
+                    {
                         restoreDeletedMessage(addedNode);
                     }
                 }
-                for (var j = 0; j < removedNodes.length; j++) {
+                for (var j = 0; j < removedNodes.length; j++)
+                {
                     var removedNode = removedNodes[j];
                     if (removedNode.classList == undefined) continue;
-                    if (removedNode.classList.contains("two")) {
+                    if (removedNode.classList.contains("two"))
+                    {
                         // main app was removed, remove our artifacts
                         var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
                         var dropItem = document.getElementsByClassName("drop")[0];
@@ -94,7 +109,8 @@ function initialize() {
 
 }
 
-function onMainUIReady() {
+function onMainUIReady()
+{
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
 
     setTimeout(checkInterception, 1000);
@@ -103,11 +119,13 @@ function onMainUIReady() {
     setTimeout(addIconIfNeeded, 1000);
 }
 
-async function addIconIfNeeded() {
+async function addIconIfNeeded()
+{
     if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
 
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
-    if (firstMenuItem != undefined) {
+    if (firstMenuItem != undefined)
+    {
         var menuItemElem = document.createElement("div");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
@@ -118,35 +136,38 @@ async function addIconIfNeeded() {
         var svg = menuItemElem.getElementsByTagName("svg")[0];
 
         var response = await fetch(chrome.runtime.getURL("images/incognito_gray_24.svg"));
-        var text = await response.text();
+		var text = await response.text();
         var dom = new DOMParser().parseFromString(text, 'text/html');
         var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;
         svg.innerHTML = svgHtml;
 
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 
-        browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+        browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+        {
             document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
 
             var dropContent = generateDropContent(options);
             var drop = new Drop(
+            {
+                target: menuItemElem,
+                content: dropContent,
+                position: "bottom left",
+                classes: "drop-theme-incognito",
+                openOn: "click",
+                tetherOptions:
                 {
-                    target: menuItemElem,
-                    content: dropContent,
-                    position: "bottom left",
-                    classes: "drop-theme-incognito",
-                    openOn: "click",
-                    tetherOptions:
-                    {
-                        offset: "-4px -4px 0 0"
-                    },
-                });
+                    offset: "-4px -4px 0 0"
+                },
+            });
             var originalCloseFunction = drop.close;
-            drop.close = function () {
+            drop.close = function ()
+            {
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
                 setTimeout(function () { originalCloseFunction.apply(drop, arguments); }, 100);
-            };
-            drop.on("open", function () {
+            }
+            drop.on("open", function ()
+            {
                 if (!checkInterception()) return;
                 var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
@@ -161,7 +182,8 @@ async function addIconIfNeeded() {
 
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
             });
-            drop.on("close", function () {
+            drop.on("close", function ()
+            {
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
@@ -171,7 +193,8 @@ async function addIconIfNeeded() {
             });
         });
     }
-    else if (isUIClassesWorking) {
+    else if (isUIClassesWorking)
+    {
         isUIClassesWorking = false;
         Swal.fire({
             title: "WAIncognito is temporarily broken",
@@ -185,12 +208,13 @@ async function addIconIfNeeded() {
     }
 }
 
-function generateDropContent(options) {
-    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" :
-        "Blocks outgoing presence updates.";
+function generateDropContent(options)
+{
+    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" : 
+                                          "Blocks outgoing presence updates.";
     var deletedMessagesTitle = "Save deleted messages";
-    var deletedMessagesCaption = isMultiDevice ? "Prevents messages from getting deleted" :
-        "Saves deleted messages and restores them later.";
+    var deletedMessagesCaption = isMultiDevice ? "Prevents messages from getting deleted" : 
+                                                 "Saves deleted messages and restores them later.";
 
     var dropContent = " \
         <div class='incognito-options-container' dir='ltr'> \
@@ -202,7 +226,7 @@ function generateDropContent(options) {
                     <div class='checkbox-container-incognito' style=''> \
                         <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
                         <div class='checkmark incognito-mark incognito-marked'> </div>" :
-            "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
+                        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                         </div> \
                     </div> \
                     Don't send read confirmations \
@@ -216,15 +240,15 @@ function generateDropContent(options) {
                     <div style='margin-top: 7px'> \
                         <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
                             <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
-        + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
+                                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
                             Never \
                         </div> \
                         <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
                             <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
-        + (options.safetyDelay > 0 ? "checked" : "") + "/> \
+                                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
                             After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
                             step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
-        + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
+                                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
                         </div> \
                     </div> \
                 </div> \
@@ -235,36 +259,40 @@ function generateDropContent(options) {
                 <div class='checkbox-container-incognito' style=''> \
                     <div class='checkbox checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked incognito-checked'> \
                     <div class='checkmark incognito-mark incognito-marked'> </div>" :
-            "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
+                    "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                     </div> \
                 </div> \
                 Don't send \"Last Seen\" and \"Online\" updates \
                 <div class='incognito-options-description'>" + presenceCaption + "</div> \
-            </div>" +
-        "<div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
+            </div>" + 
+            "<div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
             <div class='checkbox-container-incognito' style=''> \
                 <div class='checkbox checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked incognito-checked'> \
                 <div class='checkmark incognito-mark incognito-marked'> </div>" :
-            "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
+                    "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                 </div> \
             </div> \
             " + deletedMessagesTitle + " \
-            <div class='incognito-options-description'>" + deletedMessagesCaption + "</div>" +
+            <div class='incognito-options-description'>" + deletedMessagesCaption + "</div>" + 
         "</div> \
         </div>";
 
     return dropContent;
 }
 
-document.addEventListener('onMarkAsReadClick', function (e) {
+document.addEventListener('onMarkAsReadClick', function (e)
+{
     var data = JSON.parse(e.detail);
-    browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
-        if (options.readConfirmationsHook) {
-            if (options.showReadWarning) {
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    {
+        if (options.readConfirmationsHook)
+        {
+            if (options.showReadWarning)
+            {
                 Swal.fire({
                     title: "Mark as read?",
-                    text: data.formattedName + " will be able to tell you read the last " +
-                        (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
+                    text: data.formattedName + " will be able to tell you read the last " + 
+                            (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
                     input: 'checkbox',
                     inputValue: 0,
                     inputPlaceholder: "Don't show this warning again",
@@ -272,8 +300,10 @@ document.addEventListener('onMarkAsReadClick', function (e) {
                     showCancelButton: true,
                     confirmButtonColor: "#DD6B55",
                     confirmButtonText: "Yes, send receipt",
-                }).then(result => {
-                    if (result.isConfirmed) {
+                }).then(result =>
+                {
+                    if (result.isConfirmed)
+                    {
                         document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
                         //swal("Sent!", "Messages were marked as read", "success");
 
@@ -283,7 +313,8 @@ document.addEventListener('onMarkAsReadClick', function (e) {
                     }
                 });
             }
-            else {
+            else
+            {
                 // just send it withoung warning
                 document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
             }
@@ -291,7 +322,8 @@ document.addEventListener('onMarkAsReadClick', function (e) {
     });
 });
 
-document.addEventListener('onInterceptionWorking', function (e) {
+document.addEventListener('onInterceptionWorking', function (e)
+{
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
     isMultiDevice = data.isMultiDevice;
@@ -310,16 +342,18 @@ document.addEventListener('onInterceptionWorking', function (e) {
     };
 });
 
-function getTheme() {
+function getTheme() 
+{
     // light/dark mode detection
-    if (localStorage["theme"] != "null" && localStorage["theme"] != undefined)
-        return localStorage["theme"];
-    else {
+    if (localStorage["theme"] != "null" && localStorage["theme"] != undefined) 
+        return localStorage["theme"]
+    else 
+    {
         // this is if there is no theme selected by default (null)
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
-            document.getElementsByClassName("web")[0].classList.contains("dark"))
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches || 
+            document.getElementsByClassName("web")[0].classList.contains("dark")) 
             return "\"dark\"";
-        else
+        else 
             return "\"light\"";
     }
 }
@@ -328,109 +362,124 @@ function getTheme() {
 // Drop handlers
 //
 
-function onReadConfirmaionsTick() {
+function onReadConfirmaionsTick()
+{
     var readConfirmationsHook = false;
     var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
-
+    
     var checkmark = checkbox.firstElementChild;
-
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1) {
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
         tickCheckbox(checkbox, checkmark);
         readConfirmationsHook = true;
     }
-    else {
+    else
+    {
         untickCheckbox(checkbox, checkmark);
         readConfirmationsHook = false;
         var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
-        for (var i = 0; i < redChats.length; i++) {
+        for (var i = 0; i < redChats.length; i++)
+        {
             redChats[i].className = 'icon-meta unread-count';
         }
     }
     browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
-        }));
+    {
+        detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
+    }));
 }
 
-function onPresenseUpdatesTick() {
+function onPresenseUpdatesTick()
+{
     var presenceUpdatesHook = false;
     var checkbox = document.querySelector("#incognito-option-presence-updates .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1) {
+    if (checkboxClass.indexOf("unchecked") > -1)
+    {
         tickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = true;
     }
-    else {
+    else
+    {
         untickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = false;
     }
     browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ presenceUpdatesHook: presenceUpdatesHook })
-        }));
+    {
+        detail: JSON.stringify({ presenceUpdatesHook: presenceUpdatesHook })
+    }));
 }
 
-function onSaveDeletedMsgsTick() {
+function onSaveDeletedMsgsTick()
+{
     var saveDeletedMsgsHook = false;
     var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1) {
+    if (checkboxClass.indexOf("unchecked") > -1)
+    {
         tickCheckbox(checkbox, checkmark);
         saveDeletedMsgsHook = true;
     }
-    else {
+    else
+    {
         untickCheckbox(checkbox, checkmark);
         saveDeletedMsgsHook = false;
     }
     browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
-        }));
+    {
+        detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
+    }));
 }
 
-function onSafetyDelayChanged(event) {
-    if (isSafetyDelayValid(event.srcElement.value)) {
+function onSafetyDelayChanged(event)
+{
+    if (isSafetyDelayValid(event.srcElement.value))
+    {
         var delay = parseInt(event.srcElement.value);
         document.getElementById("incognito-option-safety-delay").disabled = false;
         browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-            {
-                detail: JSON.stringify({ safetyDelay: delay })
-            }));
+        {
+            detail: JSON.stringify({ safetyDelay: delay })
+        }));
     }
 }
 
-function onSafetyDelayDisabled() {
+function onSafetyDelayDisabled()
+{
     document.getElementById("incognito-option-safety-delay").disabled = true;
     document.getElementById("incognito-radio-enable-safety-delay").checked = false;
     browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ safetyDelay: 0 })
-        }));
+    {
+        detail: JSON.stringify({ safetyDelay: 0 })
+    }));
 }
 
-function onSafetyDelayEnabled() {
+function onSafetyDelayEnabled()
+{
     var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
-    if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder);
+    if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
     document.getElementById("incognito-option-safety-delay").disabled = false;
     document.getElementById("incognito-radio-disable-safety-delay").checked = false;
     browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({ safetyDelay: delay }) }));
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {detail: JSON.stringify({ safetyDelay: delay })}));
 }
 
 //
 // Utils
 //
 
-function restoreDeletedMessage(messageNode) {
+function restoreDeletedMessage(messageNode) 
+{
     const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
 
     if (messageNode.classList.contains("message-out")) return;
@@ -439,10 +488,12 @@ function restoreDeletedMessage(messageNode) {
     const msgID = data_id.split("_")[2];
 
     if (messageText || Allpsuedomsgskeys.has(msgID))
-        messageNode.setAttribute("data-deleted", "true");
+    messageNode.setAttribute("data-deleted", "true");
+    if (!messageText) return;
 
-    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", { detail: JSON.stringify({ messageID: msgID }) }));
-    document.addEventListener("onDeletedMessageReceived", function (e) {
+    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
+    document.addEventListener("onDeletedMessageReceived", function(e)
+    {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
         var messageData = data.messageData;
@@ -452,41 +503,46 @@ function restoreDeletedMessage(messageNode) {
         const span = document.createElement("span");
         const textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
-
+    
         messageText.textContent = "";
-        if (!messageData) {
+        if (!messageData)
+        {
             textSpan.textContent = "Failed to restore message";
             messageText.appendChild(textSpan);
             messageText.appendChild(span);
             return;
         }
 
-        const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" :
-            "font-style: normal; color: rgb(48, 48, 48)";
+        const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : 
+                                                            "font-style: normal; color: rgb(48, 48, 48)";
         const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
         textSpan.style.cssText = textSpanStyle;
         textSpan.className = "copyable-text selectable-text";
         const titleSpan = document.createElement("span");
         titleSpan.style.cssText = titleSpanStyle;
-        if (messageData.isMedia) {
+        if (messageData.isMedia)
+        {
             titleSpan.textContent = "Restored media: \n";
             messageText.appendChild(titleSpan); // Top title span
 
             if (messageData.mediaText) textSpan.textContent = "\n" + messageData.mediaText; //caption text span
-            if (messageData.type === "image") {
+            if (messageData.type === "image")
+            {
                 const imgTag = document.createElement("img");
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageText.appendChild(imgTag);
             }
-            else if (messageData.type === "sticker") {
+            else if (messageData.type === "sticker")
+            {
                 const imgTag = document.createElement("img");
                 imgTag.className = UIClassNames.STICKER_MESSAGE_TAG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageText.appendChild(imgTag);
             }
-            else if (messageData.type === "video") {
+            else if (messageData.type === "video")
+            {
                 const vidTag = document.createElement("video");
                 vidTag.controls = true;
                 vidTag.style.cssText = "width: 100%;";
@@ -496,7 +552,8 @@ function restoreDeletedMessage(messageNode) {
                 vidTag.appendChild(sourceTag);
                 messageText.appendChild(vidTag);
             }
-            else if (messageData.type === "document") {
+            else if (messageData.type === "document")
+            {
                 const aTag = document.createElement("a");
                 aTag.download = messageData.fileName;
                 aTag.href = "data:" + messageData.mimetype + ";base64," + messageData.body;
@@ -514,7 +571,8 @@ function restoreDeletedMessage(messageNode) {
                 messageText.appendChild(audioTag);
             }
         }
-        else {
+        else
+        {
             if (messageData.type === "vcard") // contact cards
             {
                 let vcardBody = messageData.body;
@@ -534,7 +592,8 @@ function restoreDeletedMessage(messageNode) {
                 textSpan.appendChild(aTagPhone);
 
             }
-            else if (messageData.type === "location") {
+            else if (messageData.type === "location")
+            {
                 titleSpan.textContent = "Restored location: \n";
                 const imgTag = document.createElement("img");
                 imgTag.style.cssText = "width: 100%;";
@@ -545,44 +604,50 @@ function restoreDeletedMessage(messageNode) {
                 const locationLink = document.createElement("a");
                 locationLink.target = "_blank";
                 locationLink.rel = "noopener noreferrer";
-                locationLink.href = "https://www.google.com/maps/search/?api=1&query=" +
-                    encodeURIComponent(messageData.lat + " " + messageData.lng);
-                locationLink.textContent = "Google Maps Link";
+                locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
+                                        encodeURIComponent(messageData.lat + " " + messageData.lng);
+                locationLink.textContent = "Google Maps Link"
                 messageText.appendChild(locationLink);
             }
-            else {
+            else
+            {
                 titleSpan.textContent = "Restored message: \n";
                 textSpan.textContent = messageData.body;
                 messageText.appendChild(titleSpan);
             }
 
         }
-
+            
         messageText.appendChild(textSpan);
         messageText.appendChild(span);
-    });
+    })    
 }
 
-function tickCheckbox(checkbox, checkmark) {
+function tickCheckbox(checkbox, checkmark)
+{
     var checkboxClass = checkbox.getAttribute("class");
     checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " incognito-checked");
     checkmark.classList.add("incognito-marked");
 }
 
-function untickCheckbox(checkbox, checkmark) {
+function untickCheckbox(checkbox, checkmark)
+{
     var checkboxClass = checkbox.getAttribute("class");
     var chekmarkClass = checkmark.getAttribute("class");
     checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("incognito-checked").join(" "));
     checkmark.setAttribute("class", chekmarkClass.replace("incognito-marked", ""));
 }
 
-function isSafetyDelayValid(string) {
+function isSafetyDelayValid(string)
+{
     var number = Math.floor(Number(string));
-    return (String(number) === string && number >= 1 && number <= 30) || string == "";
+    return (String(number) === string && number >= 1 && number <= 30) || string == ""
 }
 
-function checkInterception() {
-    if (!isInterceptionWorking) {
+function checkInterception()
+{
+    if (!isInterceptionWorking)
+    {
         Swal.fire({
             title: "Oops...",
             html: "WhatsApp Web Incognito has detected that interception is not working. \
@@ -598,8 +663,9 @@ function checkInterception() {
     return true;
 }
 
-function isNumberKey(evt) {
-    var charCode = (evt.which) ? evt.which : event.keyCode;
+function isNumberKey(evt)
+{
+    var charCode = (evt.which) ? evt.which : event.keyCode
     if (charCode > 31 && (charCode < 48 || charCode > 57))
         return false;
     return true;
