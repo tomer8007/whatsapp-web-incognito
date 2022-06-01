@@ -13,7 +13,7 @@ var isInterceptionWorking = false;
 var isMultiDevice = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
-var psaeudoMsgsIDs = new Set();
+var pseudoMsgsIDs = new Set();
 
 function initialize()
 {
@@ -334,10 +334,10 @@ document.addEventListener('onInterceptionWorking', function (e)
             .objectStore("msgs").getAll();
         keys.onsuccess = () => {
             keys.result.forEach((v) => {
-                psaeudoMsgsIDs.add(v.originalID);
+                pseudoMsgsIDs.add(v.originalID);
             });
             document.addEventListener("pseudoMsgs", (e) => {
-                psaeudoMsgsIDs.add(e.detail);
+                pseudoMsgsIDs.add(e.detail);
             });
         };
         deletedDB.result.close();
@@ -489,7 +489,7 @@ function restoreDeletedMessage(messageNode)
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
 
-    if (messageText || psaeudoMsgsIDs.has(msgID))
+    if (messageText || pseudoMsgsIDs.has(msgID))
         messageNode.setAttribute("data-deleted", "true");
     if (!messageText) return;
 
