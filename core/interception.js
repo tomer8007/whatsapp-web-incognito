@@ -472,7 +472,7 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
             var msg = document.querySelector("[data-id*='" + deletedMessageId + "']");
             if (msg)
                 msg.setAttribute("data-deleted","true");
-            document.dispatchEvent(new CustomEvent("pseudomsgs", {
+            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
                 detail: deletedMessageId
             }));
 
@@ -605,7 +605,7 @@ function hookLogs()
 
 function initializeDeletedMessagesDB()
 {
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 2);
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
 
     deletedDBOpenRequest.onupgradeneeded = function (e)
     {
@@ -618,8 +618,7 @@ function initializeDeletedMessagesDB()
             case 0:
                 db.createObjectStore('msgs', { keyPath: 'id' });
                 console.log('WhatsIncognito: Deleted messages database generated');
-            case 1:
-                db.createObjectStore('pseudomsgs', { keyPath: 'id' });
+                break;
         }
     };
     deletedDBOpenRequest.onerror = function ()
@@ -702,25 +701,7 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
         request.onsuccess = (e) =>
         {
             console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
-        };
-        
-        const transcation2 = window.deletedMessagesDB.transaction('pseudomsgs', "readwrite");
-        let request2 = transcation2.objectStore("pseudomsgs").add({
-            id: retrievedMsg.id.id
-        });
-        request2.onerror = (e) => {
-            if (request2.error.name == "ConstraintError") {
-                // ConstraintError occurs when an object with the same id already exists
-                // This will happen when we get the revoke message again from the server
-                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-            }
-            else {
-                console.log("WhatsIncognito: Unexpected error saving deleted pseudomsgs");
-            }
-        };
-        request2.onsuccess = (e) => {
-            console.log("WhatsIncognito: Saved deleted pseudomsgs with ID " + retrievedMsg.id.id + " successfully.");
-        };
+        }
     }
     else
     {

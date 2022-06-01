@@ -13,7 +13,7 @@ var isInterceptionWorking = false;
 var isMultiDevice = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
-var Allpsuedomsgskeys = new Set();
+var psaeudoMsgsIDs = new Set();
 
 function initialize()
 {
@@ -328,14 +328,16 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
     isMultiDevice = data.isMultiDevice;
 
-    var deletedDB = indexedDB.open("deletedMsgs", 2);
+    var deletedDB = indexedDB.open("deletedMsgs", 1);
     deletedDB.onsuccess = () => {
-        var keys = deletedDB.result.transaction('pseudomsgs', "readonly")
-            .objectStore("pseudomsgs").getAllKeys();
+        var keys = deletedDB.result.transaction('msgs', "readonly")
+            .objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach(Allpsuedomsgskeys.add, Allpsuedomsgskeys);
-            document.addEventListener("pseudomsgs", (e) => {
-                Allpsuedomsgskeys.add(e.detail);
+            keys.result.forEach((v) => {
+                psaeudoMsgsIDs.add(v.originalID);
+            });
+            document.addEventListener("pseudoMsgs", (e) => {
+                psaeudoMsgsIDs.add(e.detail);
             });
         };
         deletedDB.result.close();
@@ -487,8 +489,8 @@ function restoreDeletedMessage(messageNode)
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
 
-    if (messageText || Allpsuedomsgskeys.has(msgID))
-    messageNode.setAttribute("data-deleted", "true");
+    if (messageText || psaeudoMsgsIDs.has(msgID))
+        messageNode.setAttribute("data-deleted", "true");
     if (!messageText) return;
 
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
