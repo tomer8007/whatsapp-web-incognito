@@ -129,7 +129,10 @@ document.addEventListener('onDropdownOpened', function (e)
 {
     // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
 
-    var menuItems = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0].getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
+    var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
+    if (dropdown == undefined) return;
+
+    var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
     var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
     if (reactResult == null) return;
     var reactMenuItems = reactResult.props.children[0].props.children;
