@@ -469,6 +469,13 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
         // someone deleted a message, block
         if (saveDeletedMsgsHookEnabled)
         {
+            var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
+            if (messageNode)
+                messageNode.setAttribute("data-deleted", "true");
+            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
+                detail: deletedMessageId
+            }));
+
             setTimeout(async function() {
                 var chat = await getChatByJID(remoteJid);
                 if (chat)
