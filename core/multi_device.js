@@ -1,5 +1,5 @@
 // 
-// Noise protocol handling
+// Noise & Signal protocol handling
 //
 
 var MultiDevice = {};
@@ -30,7 +30,6 @@ MultiDevice.initialize = function()
                 MultiDevice.writeCounter = 0;
                 MultiDevice.writeKeyImported = key;
                 console.log("WAIncognito: Noise encryption key has been replaced.");
-                
             }
             else if (keyUsages.includes("decrypt"))
             {
@@ -38,7 +37,6 @@ MultiDevice.initialize = function()
                 MultiDevice.readKey = keyData;
                 MultiDevice.readKeyImported = key;
                 MultiDevice.readCounter = 0;
-
             }
         }
 
@@ -415,7 +413,15 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
 
     var binary = payload.slice(startOffset, payload.length);
-    var handshakeMessage = HandshakeMessage.read(new Pbf(binary));
+    try
+    {
+        var handshakeMessage = HandshakeMessage.read(new Pbf(binary));
+    }
+    catch
+    {
+        debugger;
+        return false;
+    }
 
     if (window.WAdebugMode)
     {
