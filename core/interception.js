@@ -465,40 +465,48 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
     {
         var deletedMessageId = message.protocolMessage.key.id;
-        
-        // someone deleted a message, block
         if (saveDeletedMsgsHookEnabled)
         {
-            var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
-            if (messageNode)
-                messageNode.setAttribute("data-deleted", "true");
-            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-                detail: deletedMessageId
-            }));
-
-            setTimeout(async function() {
-                var chat = await getChatByJID(remoteJid);
-                if (chat)
-                {
-                    await chat.loadEarlierMsgs();
-                    var msgs = chat.msgs.models;
-                
-                    for (let i = 0; i < msgs.length; i++)
-                    {
-                        if (msgs[i].id.id == deletedMessageId)
-                        {
-                            saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                            break;
-                        }
-                    }
-                }
-            }, 4000);
-            
-            return true;
+            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId);
         }
+
+        return true;
     }
 
     return false;
+}
+
+function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
+{
+    // someone deleted a message, block
+    var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
+    if (messageNode)
+        messageNode.setAttribute("data-deleted", "true");
+    document.dispatchEvent(new CustomEvent("pseudoMsgs", {
+        detail: deletedMessageId
+    }));
+
+    setTimeout(async function() {
+        var chat = await getChatByJID(remoteJid);
+        if (chat)
+        {
+            if (chat.loadEarlierMsgs)
+                await chat.loadEarlierMsgs();
+            else
+                await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs(chat);
+
+            var msgs = chat.msgs.getModelsArray();
+        
+            for (let i = 0; i < msgs.length; i++)
+            {
+                if (msgs[i].id.id == deletedMessageId)
+                {
+                    saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                    break;
+                }
+            }
+        }
+    }, 4000);
 }
 
 NodeHandler.manipulateReceivedNode = async function (node)
@@ -544,6 +552,7 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1].default;
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
     window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
+    window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
 
     if (window.WhatsAppAPI.Seen == undefined)
     {

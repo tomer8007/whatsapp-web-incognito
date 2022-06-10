@@ -18,7 +18,7 @@ document.addEventListener('onIncognitoOptionsOpened', function (e)
     {
         safetyDelayPanel.style.opacity = 0;
         safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px"
+        safetyDelayPanel.style.marginTop = "-10px";
     }
 });
 

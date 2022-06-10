@@ -409,7 +409,7 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     if (binaryReader._readIndex = 0, binaryReader.readUint16() == 0x5741) startOffset = 0x7; // chat
     if (binaryReader._readIndex = 0xB, binaryReader.readUint16() == 0x5741) startOffset = 0x12; // chat?ED={routingToken}
 
-    if (startOffset > 3)  MultiDevice.numPacketsSinceHandshake = 0; // client hello
+    if (startOffset > 3) MultiDevice.numPacketsSinceHandshake = 0; // client hello
     if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
 
     var binary = payload.slice(startOffset, payload.length);
@@ -419,7 +419,6 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     }
     catch
     {
-        debugger;
         return false;
     }
 
