@@ -24,24 +24,15 @@ initialize();
 //
 wsHook.before = function (originalData, url)
 {
-    var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
-
     var promise = async function(originalData) {
 
     if (WAPassthrough) return originalData;
 
     try
     {
-        var data = originalData;
-        var isMultiDevice = !WACrypto.isTagBasedPayload(data);
+        var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
 
-        var tag = "";
-        if (!isMultiDevice)
-        {
-            payload = WACrypto.parseWebSocketPayload(data);
-            data = payload.data;
-            tag = payload.tag;
-        }
+        var {tag, data} = isMultiDevice ? {tag: "", data: originalData} : WACrypto.parseWebSocketPayload(originalData);
 
         if (data instanceof ArrayBuffer || data instanceof Uint8Array)
         {
@@ -111,6 +102,8 @@ wsHook.before = function (originalData, url)
 
     };
 
+    var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
+
     return isMultiDevice ? MultiDevice.enqueuePromise(promise, originalData, false) : promise(originalData);
 }
 
@@ -119,25 +112,15 @@ wsHook.before = function (originalData, url)
 //
 wsHook.after = function (messageEvent, url)
 {
-    var data = messageEvent.data;
-    var isMultiDevice = !WACrypto.isTagBasedPayload(data);
-
     var promise = async function(messageEvent) {
         
-    var data = messageEvent.data;
-    var isMultiDevice = !WACrypto.isTagBasedPayload(data);
-
     if (WAPassthrough) return messageEvent;
 
     try
     {
-        var tag = "";
-        if (!isMultiDevice)
-        {
-            payload = WACrypto.parseWebSocketPayload(data);
-            tag = payload.tag;
-            data = payload.data;
-        }
+        var isMultiDevice = !WACrypto.isTagBasedPayload(messageEvent.data);
+
+        var {tag, data} = isMultiDevice ? {tag: "", data: messageEvent.data} : WACrypto.parseWebSocketPayload(messageEvent.data);
 
         if (data instanceof ArrayBuffer || data instanceof Uint8Array)
         {
@@ -204,6 +187,8 @@ wsHook.after = function (messageEvent, url)
     };
 
     };
+
+    var isMultiDevice = !WACrypto.isTagBasedPayload(messageEvent.data);
 
     return isMultiDevice ? MultiDevice.enqueuePromise(promise, messageEvent, true) : promise(messageEvent);
 }
@@ -562,7 +547,7 @@ function exposeWhatsAppAPI()
 
 function initialize()
 {
-    hookLogs();
+    //hookLogs();
     initializeDeletedMessagesDB();
 }
 

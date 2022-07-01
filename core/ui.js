@@ -116,6 +116,7 @@ function onMainUIReady()
     setTimeout(checkInterception, 1000);
 
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
+    // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
 }
 
@@ -328,19 +329,21 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
     isMultiDevice = data.isMultiDevice;
 
-    var deletedDB = indexedDB.open("deletedMsgs", 1);
-    deletedDB.onsuccess = () => {
-        var keys = deletedDB.result.transaction('msgs', "readonly")
-            .objectStore("msgs").getAll();
+    // populate pseudoMsgsIDs
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
+    deletedDBOpenRequest.onsuccess = () => 
+    {
+        var deletedMsgsDB = deletedDBOpenRequest.result;
+        var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((v) => {
-                pseudoMsgsIDs.add(v.originalID);
+            keys.result.forEach((value) => {
+                pseudoMsgsIDs.add(value.originalID);
             });
             document.addEventListener("pseudoMsgs", (e) => {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
-        deletedDB.result.close();
+        deletedMsgsDB.close();
     };
 });
 
