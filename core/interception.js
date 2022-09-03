@@ -463,14 +463,16 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
 
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
-    // someone deleted a message, block
+    // someone deleted a message, block and mark as deleted
     var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
     if (messageNode)
-        messageNode.setAttribute("data-deleted", "true");
+        messageNode.setAttribute("deleted-message", "true");
+
     document.dispatchEvent(new CustomEvent("pseudoMsgs", {
         detail: deletedMessageId
     }));
 
+    // Now, save the deleted message in the DB after a short wait
     setTimeout(async function() {
         var chat = await getChatByJID(remoteJid);
         if (chat)

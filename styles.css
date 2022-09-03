@@ -323,9 +323,9 @@ input[type=number]::-webkit-inner-spin-button {
 	margin-right: 7px;
 }
 
-[data-deleted="true"] {
-  --incoming-background: #920f0f;
-  --incoming-background-rgb: #920f0f;
-  --incoming-background-deeper: #880404;
-  --incoming-background-deeper-rgb: #880404;
+[deleted-message="true"] {
+  --incoming-background: #9e4646;
+  --incoming-background-rgb: #9e4646;
+  --incoming-background-deeper: #9e4646;
+  --incoming-background-deeper-rgb: #9e4646;
 }

@@ -69,20 +69,20 @@ function initialize()
                     // Scan for deleted messages and replace the text
                     if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main")
                     {
-                        const msgNodes = addedNode.querySelectorAll("div." + UIClassNames.CHAT_MESSAGE + ".message-in" + ", div." + 
-                                                                    UIClassNames.CHAT_MESSAGE + ".message-out");
+                        const msgNodes = addedNode.querySelectorAll("div.message-in");
                         for (let i = 0; i < msgNodes.length; i++)
                         {
                             const currentNode = msgNodes[i];
                             restoreDeletedMessage(currentNode);
                         }
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.CHAT_MESSAGE) 
-                            && (addedNode.classList.contains("message-in") || addedNode.classList.contains("message-out")))
+                    else if (addedNode.nodeName.toLowerCase() == "div" 
+                            && (addedNode.classList.contains("message-in")))
                     {
                         restoreDeletedMessage(addedNode);
                     }
                 }
+                
                 for (var j = 0; j < removedNodes.length; j++)
                 {
                     var removedNode = removedNodes[j];
@@ -485,16 +485,17 @@ function onSafetyDelayEnabled()
 
 function restoreDeletedMessage(messageNode) 
 {
-    const messageText = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
+    const messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
 
     if (messageNode.classList.contains("message-out")) return;
 
     const data_id = messageNode.getAttribute("data-id");
     const msgID = data_id.split("_")[2];
 
-    if (messageText || pseudoMsgsIDs.has(msgID))
-        messageNode.setAttribute("data-deleted", "true");
-    if (!messageText) return;
+    if (messageTextElement || pseudoMsgsIDs.has(msgID))
+        messageNode.setAttribute("deleted-message", "true");
+
+    if (!messageTextElement) return;
 
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
     document.addEventListener("onDeletedMessageReceived", function(e)
@@ -509,17 +510,16 @@ function restoreDeletedMessage(messageNode)
         const textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
     
-        messageText.textContent = "";
+        messageTextElement.textContent = "";
         if (!messageData)
         {
             textSpan.textContent = "Failed to restore message";
-            messageText.appendChild(textSpan);
-            messageText.appendChild(span);
+            messageTextElement.appendChild(textSpan);
+            messageTextElement.appendChild(span);
             return;
         }
 
-        const textSpanStyle = getTheme() == "\"dark\"" ? "font-style: normal; color: rgba(241, 241, 242, 0.95)" : 
-                                                            "font-style: normal; color: rgb(48, 48, 48)";
+        const textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95)";
         const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
         textSpan.style.cssText = textSpanStyle;
         textSpan.className = "copyable-text selectable-text";
@@ -528,7 +528,7 @@ function restoreDeletedMessage(messageNode)
         if (messageData.isMedia)
         {
             titleSpan.textContent = "Restored media: \n";
-            messageText.appendChild(titleSpan); // Top title span
+            messageTextElement.appendChild(titleSpan); // Top title span
 
             if (messageData.mediaText) textSpan.textContent = "\n" + messageData.mediaText; //caption text span
             if (messageData.type === "image")
@@ -537,14 +537,14 @@ function restoreDeletedMessage(messageNode)
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
-                messageText.appendChild(imgTag);
+                messageTextElement.appendChild(imgTag);
             }
             else if (messageData.type === "sticker")
             {
                 const imgTag = document.createElement("img");
                 imgTag.className = UIClassNames.STICKER_MESSAGE_TAG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
-                messageText.appendChild(imgTag);
+                messageTextElement.appendChild(imgTag);
             }
             else if (messageData.type === "video")
             {
@@ -555,7 +555,7 @@ function restoreDeletedMessage(messageNode)
                 sourceTag.type = messageData.mimetype;
                 sourceTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 vidTag.appendChild(sourceTag);
-                messageText.appendChild(vidTag);
+                messageTextElement.appendChild(vidTag);
             }
             else if (messageData.type === "document")
             {
@@ -563,7 +563,7 @@ function restoreDeletedMessage(messageNode)
                 aTag.download = messageData.fileName;
                 aTag.href = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 aTag.textContent = "Download \"" + messageData.fileName + "\"";
-                messageText.appendChild(aTag);
+                messageTextElement.appendChild(aTag);
             }
             else if (messageData.type === "ptt") // audio file
             {
@@ -573,7 +573,7 @@ function restoreDeletedMessage(messageNode)
                 sourceTag.type = messageData.mimetype;
                 sourceTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 audioTag.appendChild(sourceTag);
-                messageText.appendChild(audioTag);
+                messageTextElement.appendChild(audioTag);
             }
         }
         else
@@ -593,7 +593,7 @@ function restoreDeletedMessage(messageNode)
                 titleSpan.textContent = "Restored contact card: \r\n";
                 textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
 
-                messageText.appendChild(titleSpan);
+                messageTextElement.appendChild(titleSpan);
                 textSpan.appendChild(aTagPhone);
 
             }
@@ -604,7 +604,7 @@ function restoreDeletedMessage(messageNode)
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
-                messageText.appendChild(imgTag);
+                messageTextElement.appendChild(imgTag);
 
                 const locationLink = document.createElement("a");
                 locationLink.target = "_blank";
@@ -612,19 +612,19 @@ function restoreDeletedMessage(messageNode)
                 locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
                                         encodeURIComponent(messageData.lat + " " + messageData.lng);
                 locationLink.textContent = "Google Maps Link"
-                messageText.appendChild(locationLink);
+                messageTextElement.appendChild(locationLink);
             }
             else
             {
                 titleSpan.textContent = "Restored message: \n";
                 textSpan.textContent = messageData.body;
-                messageText.appendChild(titleSpan);
+                messageTextElement.appendChild(titleSpan);
             }
 
         }
             
-        messageText.appendChild(textSpan);
-        messageText.appendChild(span);
+        messageTextElement.appendChild(textSpan);
+        messageTextElement.appendChild(span);
     })    
 }
 
