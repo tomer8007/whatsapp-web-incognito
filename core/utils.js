@@ -36,6 +36,68 @@ function findChatEntryElementForJID(jid)
     return blockedChat;
 }
 
+function nodeToElement(node)
+{
+    if (!node.tag) 
+    {
+        var element = document.createElement("unknown");
+        element.innerHTML = node.toString();
+        return element;
+    }
+
+    if (node.tag == "0") node.tag = "zero"; // prevent "The tag name provided ('0') is not a valid name."
+
+    var element = document.createElement(node.tag);
+
+    for (var attribute in node.attrs)
+    {
+        element.setAttribute(attribute, node.attrs[attribute]);
+    }
+
+    if (node.content)
+    {
+        if (Array.isArray(node.content))
+        {
+            for (var subNode of node.content)
+            {
+                element.appendChild(nodeToElement(subNode));
+            }
+        }
+        else
+        {
+            element.appendChild(nodeToElement(node.content));
+        }
+    }
+
+    return element;
+}
+
+function nodeToXML(node)
+{
+    if  (typeof(node) == ArrayBuffer)
+        return "<ArrayBuffer (" + node.byteLength + " bytes)>";
+
+    var text = "<" + node.tag + " ";
+    for (var attribute in node.attrs)
+    {
+        text += attribute + "='" + node.attrs[attribute] + "' ";
+    }
+    text += ">";
+
+    if (node.content)
+    {
+        for (var subNode of node.content)
+        {
+            text += "\r\n";
+            text += nodeToXML(subNode);
+        }
+    }
+
+    text += "\r\n</"+node.tag+">";
+
+    return text;
+}
+
 function getCurrentChat()
 {
     if (window.WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.getActive)

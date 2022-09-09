@@ -13,9 +13,12 @@ var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
 
+// debugging flags
+var WAdebugMode = false;
+var WALogs = true;
+var xmlDebugging = true;
 var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
-var WAdebugMode = false;
 
 initialize();
  
@@ -59,9 +62,7 @@ wsHook.before = function (originalData, url)
                 
                 if (WAdebugMode)
                 {
-                    console.log("[Out] Sending binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted): ");
-                    console.log(node);
-
+                    printNode(node, isIncoming=false, tag, decryptedFrame);
                     if (WAPassthroughWithDebug) return originalData;
                 }
 
@@ -138,8 +139,7 @@ wsHook.after = function (messageEvent, url)
 
                 if (WAdebugMode)
                 {
-                    console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
-                    console.log(node);
+                    printNode(node, isIncoming=true, tag, decryptedFrame);
 
                     if (WAPassthroughWithDebug) return messageEvent;
                 }
@@ -461,6 +461,38 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     return false;
 }
 
+NodeHandler.manipulateReceivedNode = async function (node)
+{
+    var messages = [];
+    var children = node.content;
+    var type = node.attrs["type"];
+
+    return node;
+}
+
+function printNode(node, isIncoming = false, tag="", decryptedFrame)
+{
+    var objectToPrint = xmlDebugging ? nodeToElement(node) : node;
+    if (isIncoming)
+    {
+        console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
+    }
+    else
+    {
+        console.log("[Out] Sending binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted): ");
+    }
+
+    if (xmlDebugging)
+    {
+        console.dirxml(objectToPrint);
+        objectToPrint.remove();
+    }
+    else
+    {
+        console.log(objectToPrint);
+    }
+}
+
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
     // someone deleted a message, block and mark as deleted
@@ -496,14 +528,6 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     }, 4000);
 }
 
-NodeHandler.manipulateReceivedNode = async function (node)
-{
-    var messages = [];
-    var children = node.content;
-    var type = node.attrs["type"];
-
-    return node;
-}
 
 async function getMessagesFromNode(node, isMultiDevice)
 {
@@ -549,7 +573,8 @@ function exposeWhatsAppAPI()
 
 function initialize()
 {
-    //hookLogs();
+    if (WALogs)
+        hookLogs();
     initializeDeletedMessagesDB();
 }
 
