@@ -13,7 +13,7 @@ This extension works by intercepting the WebSocket frames between chrome and Wha
 
 Those frames are then decrypted if needed using local encryption keys, and decoded from their binary XMPP form using a javascript code from WhatsApp's original implementation.
 
-The resulting "nodes" are then simply checked to see if WhatsApp tries to send out a `read` or `presence` action, and if so, the extension blocks it and fakes a failure response from the server.
+The resulting "stanzas" are then simply checked to see if WhatsApp tries to send out a `read` or `presence` action, and if so, the extension blocks it and fakes a failure response from the server.
 ## Limitations
 Unfortunately, in multi-device mode, when last seen is blocked, you will not be able to see other people's last seen. This is apparently because WhatsApp servers do not forward presence updates to offline devices.
 ## Organization & Internals
