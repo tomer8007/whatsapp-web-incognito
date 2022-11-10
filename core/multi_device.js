@@ -101,6 +101,8 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
             // reverse the counter, in case this is another socket
             if (isIncoming) MultiDevice.readCounter--;
             else MultiDevice.writeCounter--;
+
+            debugger;
             throw "Wrong counter in decryption";
         }
         else

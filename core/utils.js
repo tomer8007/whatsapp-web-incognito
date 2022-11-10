@@ -46,6 +46,7 @@ function nodeToElement(node)
     }
 
     if (node.tag == "0") node.tag = "zero"; // prevent "The tag name provided ('0') is not a valid name."
+    if (node.tag == "1") node.tag = "one"; // prevent "The tag name provided ('1') is not a valid name."
 
     var element = document.createElement(node.tag);
 
