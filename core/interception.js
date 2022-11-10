@@ -59,12 +59,6 @@ wsHook.before = function (originalData, url)
                     document.dispatchEvent(new CustomEvent('onInterceptionWorking', 
                             { detail: JSON.stringify({isInterceptionWorking: true, isMultiDevice: isMultiDevice}) }));
                 }
-                
-                if (WAdebugMode)
-                {
-                    printNode(node, isIncoming=false, tag, decryptedFrame);
-                    if (WAPassthroughWithDebug) return originalData;
-                }
 
                 var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
                 var manipulatedNode = structuredClone(node);
@@ -76,9 +70,17 @@ wsHook.before = function (originalData, url)
 
                 manipulatedNode = await NodeHandler.manipulateSentNode(manipulatedNode, isMultiDevice);
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter};
+
+                if (WAdebugMode)
+                {
+                    printNode(manipulatedNode, isIncoming=false, tag, decryptedFrame);
+                    if (WAPassthroughWithDebug) return originalData;
+                }
             }
 
-            return WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag);
+            var packedNode = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag);
+
+            return packedNode;
         }
         else
         {
@@ -128,6 +130,7 @@ wsHook.after = function (messageEvent, url)
             var decryptedFrames = await WACrypto.decryptWithWebCrypto(data, isMultiDevice, true);
             if (decryptedFrames == null) return messageEvent;
 
+            var didBlockNode = false;
             for (var i = 0; i < decryptedFrames.length; i++)
             {
                 var decryptedFrameInfo = decryptedFrames[i];
@@ -151,14 +154,20 @@ wsHook.after = function (messageEvent, url)
                 {
                     if (!isMultiDevice) return null;
                     manipulatedNode.tag = "blocked_node";
+                    didBlockNode = true;
                 }
 
                 manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter};
             }
 
-            var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
-            messageEvent.data = packet;
+            if (didBlockNode)
+            {
+                // TODO: This is a temporary bypass for an issue where packing nodes do not restore correctly. Fix this
+                var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
+                messageEvent.data = packet;
+            }
+
             return messageEvent;
             
         }
