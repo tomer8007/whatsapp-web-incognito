@@ -327,7 +327,29 @@ function FindReact(dom, traverseUp = 0)
     for (let i = 0; i < traverseUp; i++) {
         compFiber = GetCompFiber(compFiber);
     }
-    return compFiber.stateNode;
+
+    var reactElement = null;
+
+    if (compFiber.props != null)
+    {
+        reactElement = compFiber;
+    }
+    else if (compFiber.props == null && compFiber.memoizedProps != null)
+    {
+        compFiber.props = compFiber.memoizedProps;
+        reactElement = compFiber;
+    }
+    else
+    {
+        reactElement = compFiber.stateNode;
+    }
+
+    if (reactElement == null)
+    {
+        debugger;
+    }
+
+    return reactElement;
 }
 
 function fixCSSPositionIfNeeded(drop)

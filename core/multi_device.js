@@ -102,7 +102,6 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
             if (isIncoming) MultiDevice.readCounter--;
             else MultiDevice.writeCounter--;
 
-            debugger;
             throw "Wrong counter in decryption";
         }
         else

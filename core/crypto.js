@@ -188,7 +188,7 @@ WACrypto.sendNode = function(node)
     });
 }
 
-WACrypto.packNodesForSending = async function(nodesInfo, isMultiDevice = false, isIncoming = false, tag=undefined, decrypted=null)
+WACrypto.packNodesForSending = async function(nodesInfo, isMultiDevice = false, isIncoming = false, tag=undefined)
 {
     // convert to binary protocol
     var packetBinaryWriter = new BinaryWriter();
@@ -197,14 +197,17 @@ WACrypto.packNodesForSending = async function(nodesInfo, isMultiDevice = false, 
         var nodeInfo = nodesInfo[i];
         var node = nodeInfo.node;
         var counter = nodeInfo.counter;
+        var decryptedFrame = nodeInfo.decryptedFrame;
 
         var nodeBinaryWriter = new BinaryWriter();
-        var nodePacker = new NodePacker(isMultiDevice);
         
-        if (isMultiDevice) nodeBinaryWriter.pushByte(0);
+        if (isMultiDevice) nodeBinaryWriter.pushByte(0); // push flags
+
+        // serialize the node to buffer
+        var nodePacker = new NodePacker(isMultiDevice);
         nodePacker.writeNode(nodeBinaryWriter, node);
         var nodeBuffer = nodeBinaryWriter.toBuffer();
-        
+
         var data = await WACrypto.encryptWithWebCrypto(nodeBuffer, isMultiDevice, isIncoming, counter);
         var frame = new WAPacket({"isMultiDevice": isMultiDevice, "data": data, "tag": tag, "binaryOpts": {}});
         packetBinaryWriter.pushBytes(isIncoming ? frame.serializeWithoutBinaryOpts() : frame.serialize());

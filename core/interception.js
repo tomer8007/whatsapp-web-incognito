@@ -139,7 +139,7 @@ wsHook.after = function (messageEvent, url)
 
                 var nodeParser = new NodeParser(isMultiDevice);
                 var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
-
+                
                 if (WAdebugMode)
                 {
                     printNode(node, isIncoming=true, tag, decryptedFrame);
@@ -158,18 +158,13 @@ wsHook.after = function (messageEvent, url)
                 }
 
                 manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
-                decryptedFrames[i] = {node: manipulatedNode, counter: counter};
+                decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
             }
 
-            if (didBlockNode)
-            {
-                // TODO: This is a temporary bypass for an issue where packing nodes do not restore correctly. Fix this
-                var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
-                messageEvent.data = packet;
-            }
+            var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
+            if (didBlockNode) messageEvent.data = packet;
 
             return messageEvent;
-            
         }
         else
         {
