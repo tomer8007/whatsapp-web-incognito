@@ -116,7 +116,7 @@ wsHook.before = function (originalData, url)
 wsHook.after = function (messageEvent, url)
 {
     var promise = async function(messageEvent) {
-        
+    
     if (WAPassthrough) return messageEvent;
 
     try
@@ -529,7 +529,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 }
             }
         }
-    }, 4000);
+    }, 5000);
 }
 
 
@@ -587,11 +587,11 @@ function hookLogs()
     // we don't want extension-related errors to be silently sent out
 
     var originalSendLogs = window.SEND_LOGS;
-    var originalOnUnhandledRejction = window.onunhandledrejection;
+    var originalOnUnhandledRejection = window.onunhandledrejection;
     var originalLog = window.__LOG__;
 
     Object.defineProperty(window, 'onunhandledrejection', {
-        set: function(value) { originalOnUnhandledRejction = value; },
+        set: function(value) { originalOnUnhandledRejection = value; },
         get: function() {return hookedPromiseError;}
     });
     Object.defineProperty(window, '__LOG__', {
@@ -604,7 +604,7 @@ function hookLogs()
         debugger;
         console.error("Unhandled promise rejection:");
         console.error(errorObject);
-        return originalOnUnhandledRejction.call(event);
+        return originalOnUnhandledRejection.call(event);
     }
 
     function hookedLog(errorLevel)

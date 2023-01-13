@@ -106,17 +106,8 @@ function getCurrentChat()
 
     // fallback to old method
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    var elements2 = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS_2);
-    if (elements.length > 0)
-    {
-        var reactResult = FindReact(elements[0], traverseUp = 2);
-        var chat = reactResult.props.children.props.children.props.chat;
-    }
-    else
-    {
-        var reactResult = FindReact(elements2[0], traverseUp = 3);
-        var chat = reactResult.props.children.props.children.props.children.props.chat;
-    }
+    var reactResult = FindReact(elements[0], traverseUp = 2);
+    var chat = reactResult.props.children.props.children.props.chat;
     
     return chat;
 }
@@ -124,9 +115,7 @@ function getCurrentChat()
 function getCurrentChatPanel()
 {
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    var elements2 = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS_2);
-    if (elements.length > 0 ) return elements[0];
-    else return elements2[0];
+    return elements[0];
 }
 
 function isChatBlocked(jid)
@@ -334,12 +323,13 @@ function FindReact(dom, traverseUp = 0)
     {
         reactElement = compFiber;
     }
-    else if (compFiber.props == null && compFiber.memoizedProps != null)
+    if (compFiber.memoizedProps != null)
     {
         compFiber.props = compFiber.memoizedProps;
         reactElement = compFiber;
     }
-    else
+    
+    if (compFiber.props == null && compFiber.memoizedProps == null)
     {
         reactElement = compFiber.stateNode;
     }

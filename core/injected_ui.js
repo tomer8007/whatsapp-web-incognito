@@ -97,9 +97,9 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
-    if (readConfirmationsHookEnabled && safetyDelay > 0)
+    if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
     {
-        setTimeout(markChatAsPendingReciptsSending, 250);
+        markChatAsPendingReciptsSending(chat);
     }
     else if (readConfirmationsHookEnabled && chat.id.user == blockedUser)
     {
@@ -240,14 +240,27 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     }
 });
 
-function markChatAsPendingReciptsSending()
+function markChatAsPendingReciptsSending(chat)
 {
-    var chatWindow = getCurrentChatPanel();
-    var chat = getCurrentChat();
+    if (chat.pendingSeenCount != 0) chat.pendingSeenCount = 0;
+
+    if (chat.unreadCount == 0)
+    {
+        return;
+    }
+
+    var currentChat = getCurrentChat();
+    if (currentChat.id.user != chat.id.user) 
+    {
+        return;
+    }
+
     var messageID = chat.id + chat.lastReceivedKey.id;
     var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
                             document.getElementsByClassName("incognito-message")[0] : null;
     var seconds = safetyDelay;
+
+    var chatWindow = getCurrentChatPanel();
 
     if (chatWindow != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
     {
@@ -305,6 +318,8 @@ function markChatAsPendingReciptsSending()
 
         var id = setInterval(function ()
         {
+            chat.pendingSeenCount = 0;
+
             seconds--;
             if (seconds > 0)
             {

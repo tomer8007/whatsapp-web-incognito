@@ -33,10 +33,10 @@ MultiDevice.initialize = function()
             }
             else if (keyUsages.includes("decrypt"))
             {
-                console.log("WAIncognito: Noise decryption key has been replaced.");
                 MultiDevice.readKey = keyData;
                 MultiDevice.readKeyImported = key;
                 MultiDevice.readCounter = 0;
+                console.log("WAIncognito: Noise decryption key has been replaced.");
             }
         }
 

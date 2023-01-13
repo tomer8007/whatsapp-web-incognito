@@ -5,27 +5,26 @@ var UIClassNames = {};
 
 (function() {
 
-UIClassNames.MENU_ITEM_CLASS = "_2cNrC";
-UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_1CTfw";
+UIClassNames.MENU_ITEM_CLASS = "_3OtEr";
+UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_2Qn52";
 
-UIClassNames.OUTER_DROPDOWN_CLASS = "o--vV"; // outside class of dropdown with "mark as unread"
-UIClassNames.DROPDOWN_CLASS = "_1HnQz";
-UIClassNames.DROPDOWN_ENTRY_CLASS = "_2qR8G _1wMaz _18oo2";
+UIClassNames.OUTER_DROPDOWN_CLASS = "_2sDI2"; // outside class of dropdown with "mark as unread"
+UIClassNames.DROPDOWN_CLASS = "_3bcLp";
+UIClassNames.DROPDOWN_ENTRY_CLASS = "Iaqxu FCS6Q jScby";
 
-UIClassNames.UNREAD_COUNTER_CLASS = "ovhn1urg";
+UIClassNames.UNREAD_COUNTER_CLASS = "ovhn1urg"; // the class that sets background-color to var(--unread-marker-background)
 
-UIClassNames.CHAT_PANEL_CLASS = "_1LcQK"; // the outermost chat panel class
-UIClassNames.CHAT_PANEL_CLASS_2 = "_2gzeB";
-UIClassNames.INNER_CHAT_PANEL_CLASS = "_33LGR"; // the innermost chat panel class
+UIClassNames.CHAT_PANEL_CLASS = "_2gzeB"; // the outermost chat panel class
+UIClassNames.INNER_CHAT_PANEL_CLASS = "_5kRIK"; // the innermost chat panel class ('conversation-panel-messages')
 
 UIClassNames.CHAT_ENTRY_CLASS = "rx9719la"; // the chat entry in the chats list
-UIClassNames.UNREAD_MARKER_CLASS = "_3cOAM"; // the class inside the top-level item;
+UIClassNames.UNREAD_MARKER_CLASS = "_2jRew"; // the "X unread messages" warning inside the chat panel; the class inside the top-level item
 
-UIClassNames.CHAT_MESSAGE = "_2wUmf";
-UIClassNames.CHAT_MESSAGE_FROM_SELF_CLASS = "_21bY5";
+UIClassNames.CHAT_MESSAGE = "messag-in";
+
+// TODO
 UIClassNames.TEXT_WRAP_POSITION_CLASS = "_1Gy50";
 UIClassNames.DELETED_MESSAGE_DIV_CLASS = "_3TjU1";
 UIClassNames.DELETED_MESSAGE_SPAN = "_20bHr";
-UIClassNames.IMAGE_MESSAGE_IMG = "_1WrWf";
 UIClassNames.STICKER_MESSAGE_TAG = "_3mPXD";
 })();

@@ -6,6 +6,7 @@
 .menu-item-incognito
 {
     cursor: pointer !important;
+    padding: 8px;
 }
 
 .icon-incognito
