@@ -222,6 +222,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
+            (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "contact") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
             (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
@@ -235,6 +236,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                 case "read":
                 case "receipt":
                     var jid = data.jid ? data.jid : data.to;
+                    if (!jid) jid = data.class;
                     var isReadReceiptAllowed = exceptionsList.includes(jid);
                     if (isReadReceiptAllowed)
                     {
@@ -531,7 +533,6 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
         }
     }, 5000);
 }
-
 
 async function getMessagesFromNode(node, isMultiDevice)
 {
