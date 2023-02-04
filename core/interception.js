@@ -222,7 +222,6 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
-            (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "contact") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
             (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
