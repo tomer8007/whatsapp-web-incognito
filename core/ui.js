@@ -76,8 +76,7 @@ function initialize()
                             restoreDeletedMessage(currentNode);
                         }
                     }
-                    else if (addedNode.nodeName.toLowerCase() == "div" 
-                            && (addedNode.classList.contains("message-in")))
+                    else if (addedNode.nodeName.toLowerCase() == "div" && (addedNode.classList.contains("message-in")))
                     {
                         restoreDeletedMessage(addedNode);
                     }
@@ -483,19 +482,24 @@ function onSafetyDelayEnabled()
 // Utils
 //
 
+// This function attempts to syntethise a message that was deleted from our DB
 function restoreDeletedMessage(messageNode) 
 {
-    const messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
+    var messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
+    if (!messageTextElement) return;
+    if (!messageTextElement.textContent) return;
+    if (!messageTextElement.textContent.includes("message was deleted"))
+    {
+        // doesn't loook like a deleted message
+        return;
+    }
 
     if (messageNode.classList.contains("message-out")) return;
 
-    const data_id = messageNode.getAttribute("data-id");
-    const msgID = data_id.split("_")[2];
+    var data_id = messageNode.parentElement.getAttribute("data-id");
+    var msgID = data_id.split("_")[2];
 
-    if (messageTextElement || pseudoMsgsIDs.has(msgID))
-        messageNode.setAttribute("deleted-message", "true");
-
-    if (!messageTextElement) return;
+    messageNode.setAttribute("deleted-message", "true");
 
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
     document.addEventListener("onDeletedMessageReceived", function(e)

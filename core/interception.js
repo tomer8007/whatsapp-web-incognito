@@ -235,7 +235,6 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
                 case "read":
                 case "receipt":
                     var jid = data.jid ? data.jid : data.to;
-                    if (!jid) jid = data.class;
                     var isReadReceiptAllowed = exceptionsList.includes(jid);
                     if (isReadReceiptAllowed)
                     {
@@ -421,7 +420,12 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
 
             var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
 
-            if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
+            if (!saveDeletedMsgsHookEnabled)
+            {
+                isAllowed = true;
+                break;
+            }
+            else if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
             {
                 console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
                 isAllowed = false;
@@ -510,7 +514,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     }));
 
     // Now, save the deleted message in the DB after a short wait
-    setTimeout(async function() {
+    setTimeout(async function() 
+    {
         var chat = await getChatByJID(remoteJid);
         if (chat)
         {

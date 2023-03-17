@@ -22,9 +22,9 @@ UIClassNames.UNREAD_MARKER_CLASS = "_2jRew"; // the "X unread messages" warning 
 
 UIClassNames.CHAT_MESSAGE = "messag-in";
 
+UIClassNames.TEXT_WRAP_POSITION_CLASS = "_21Ahp";
+UIClassNames.DELETED_MESSAGE_DIV_CLASS = "c4mcV";
 // TODO
-UIClassNames.TEXT_WRAP_POSITION_CLASS = "_1Gy50";
-UIClassNames.DELETED_MESSAGE_DIV_CLASS = "_3TjU1";
 UIClassNames.DELETED_MESSAGE_SPAN = "_20bHr";
 UIClassNames.STICKER_MESSAGE_TAG = "_3mPXD";
 })();
