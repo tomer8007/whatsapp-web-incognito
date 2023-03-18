@@ -2,7 +2,9 @@
 This is the source code of a chrome extension that disables read receipts and presence updates on WhatsApp Web.
 You can find the original extension in [Chrome Web Store](https://chrome.google.com/webstore/detail/waincognito/alhmbbnlcggfcjjfihglopfopcbigmil).
 
-<img src="https://raw.githubusercontent.com/tomer8007/whatsapp-web-incognito/master/promotion.jpg">
+
+![image](https://user-images.githubusercontent.com/11458759/226142143-70a7bbbd-2f20-4b0d-9a19-ce2342edbae5.png)
+
 
 ## Installing from GitHub directly
 To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/tomer8007/whats-incognito/releases) page, or better, just clone the source code
