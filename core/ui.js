@@ -175,10 +175,11 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
                 document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
-                document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
-                document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
-                document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
-                document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
+
+                //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
+                //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
+                //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
+                //document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
 
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
             });
@@ -188,8 +189,8 @@ async function addIconIfNeeded()
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
-                document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
-                document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
+                //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
+                //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
             });
         });
     }
@@ -236,21 +237,7 @@ function generateDropContent(options)
                         \
                         \
                 <div id='incognito-safety-delay-option-panel' style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'> \
-                    Send after safety delay: <br> \
-                    <div style='margin-top: 7px'> \
-                        <div id='incognito-option-disable-safety-delay' style='display: inline-block;' > \
-                            <input id='incognito-radio-disable-safety-delay' type='radio' class='radio-input' "
-                                + (options.safetyDelay <= 0 ? "checked" : "") + " /> \
-                            Never \
-                        </div> \
-                        <div id='incognito-option-enable-safety-delay' style='display: inline-block; margin-left: 20px;'> \
-                            <input id='incognito-radio-enable-safety-delay' type='radio' class='radio-input' name='example' "
-                                + (options.safetyDelay > 0 ? "checked" : "") + "/> \
-                            After <input id='incognito-option-safety-delay' type='number' class='seconds-incognito-input' min='1' max='30' \
-                            step='1' placeholder='5' " + (options.safetyDelay <= 0 ? "disabled" : "") + " "
-                                + (options.safetyDelay > 0 ? "value='" + options.safetyDelay + "'" : "") + "/> seconds \
-                        </div> \
-                    </div> \
+                    Also works for stories and audio messages. <br> \
                 </div> \
             </div> \
                     \
@@ -262,7 +249,7 @@ function generateDropContent(options)
                     "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
                     </div> \
                 </div> \
-                Don't send \"Last Seen\" and \"Online\" updates \
+                Don't send \"Last Seen\" and \"Typing\" updates \
                 <div class='incognito-options-description'>" + presenceCaption + "</div> \
             </div>" + 
             "<div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \

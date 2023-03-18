@@ -135,6 +135,8 @@ document.addEventListener('onDropdownOpened', function (e)
     var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
     var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
     if (reactResult == null) return;
+    if (reactResult.props.children.length == 0) return;
+    
     var reactMenuItems = reactResult.props.children[0].props.children;
     if (reactMenuItems.props == undefined) return;
     
