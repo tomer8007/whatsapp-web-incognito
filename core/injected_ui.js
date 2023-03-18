@@ -13,6 +13,8 @@ document.addEventListener('onIncognitoOptionsOpened', function (e)
     fixCSSPositionIfNeeded(drop);
     Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
 
+
+    /*
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
     if (!readConfirmationsHookEnabled)
     {
@@ -20,6 +22,7 @@ document.addEventListener('onIncognitoOptionsOpened', function (e)
         safetyDelayPanel.style.height = 0;
         safetyDelayPanel.style.marginTop = "-10px";
     }
+    */
 });
 
 document.addEventListener('onIncognitoOptionsClosed', function (e)
@@ -28,9 +31,13 @@ document.addEventListener('onIncognitoOptionsClosed', function (e)
     fixCSSPositionIfNeeded(drop);
     Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
 
-    if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
 
-    // validate safety delay
+    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
+    // validateSafetyDelay();
+});
+
+function validateSafetyDelay()
+{
     var string = document.getElementById("incognito-option-safety-delay").value;
     var isValid = false;
     var number = Math.floor(Number(string));
@@ -44,7 +51,7 @@ document.addEventListener('onIncognitoOptionsClosed', function (e)
 
         showToast("The safety delay must be an integer number in range 1-30 !");
     }
-});
+}
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
@@ -136,7 +143,7 @@ document.addEventListener('onDropdownOpened', function (e)
     var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
     if (reactResult == null) return;
     if (reactResult.props.children.length == 0) return;
-    
+
     var reactMenuItems = reactResult.props.children[0].props.children;
     if (reactMenuItems.props == undefined) return;
     

@@ -223,7 +223,7 @@ function generateDropContent(options)
                                                                         \
                                                                         \
             <div class='incognito-options-item'> \
-                <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 10px'> \
+                <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px'> \
                     <div class='checkbox-container-incognito' style=''> \
                         <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
                         <div class='checkmark incognito-mark incognito-marked'> </div>" :
@@ -233,12 +233,13 @@ function generateDropContent(options)
                     Don't send read confirmations \
                     <div class='incognito-options-description'>Messages that their read confirmation was blocked<p> \
                     will be marked in red instead of green.</div> \
+                    <br> \
+                    <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'> \
+                        Also works for stories and audio messages. \
+                    </div> \
                 </div> \
                         \
                         \
-                <div id='incognito-safety-delay-option-panel' style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'> \
-                    Also works for stories and audio messages. <br> \
-                </div> \
             </div> \
                     \
                     \
