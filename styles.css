@@ -57,6 +57,7 @@
 
 .checkbox-container-incognito
 {
+    display: inline-block !important;
     margin-right: 5px;
     border-bottom-left-radius: 2px;
     border-bottom-right-radius: 2px;
@@ -132,6 +133,7 @@
 
 .incognito-options-container
 {
+    display: block !important;
     background-color: var(--dropdown-background) !important;
     padding: 9px 0 !important;
     font-family: Roboto, sans-serif !important;
