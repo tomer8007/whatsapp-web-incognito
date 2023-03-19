@@ -249,6 +249,21 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     }
 });
 
+document.addEventListener("getDeviceTypeForMessage", async function(e) 
+{
+    var data = JSON.parse(e.detail);
+    var msgID = data.messageID;
+    var deviceType = null;
+
+    if (deviceTypesPerMessage[msgID] != undefined)
+        deviceType = deviceTypesPerMessage[msgID];
+
+    setTimeout(function()
+    {
+        document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
+    }, 20);
+});
+
 function markChatAsPendingReciptsSending(chat)
 {
     if (chat.pendingSeenCount != 0) chat.pendingSeenCount = 0;

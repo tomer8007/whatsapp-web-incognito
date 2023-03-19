@@ -66,19 +66,13 @@ function initialize()
                         }, 200);
                     }
 
-                    // Scan for deleted messages and replace the text
-                    if (addedNode.nodeName.toLowerCase() == "div" && addedNode.id.toLowerCase() == "main")
+                    var msgNodes = addedNode.querySelectorAll("div.message-in");
+                    // Scan for messages and modify if needed
+                    
+                    for (let i = 0; i < msgNodes.length; i++)
                     {
-                        const msgNodes = addedNode.querySelectorAll("div.message-in");
-                        for (let i = 0; i < msgNodes.length; i++)
-                        {
-                            const currentNode = msgNodes[i];
-                            restoreDeletedMessage(currentNode);
-                        }
-                    }
-                    else if (addedNode.nodeName.toLowerCase() == "div" && (addedNode.classList.contains("message-in")))
-                    {
-                        restoreDeletedMessage(addedNode);
+                        const currentNode = msgNodes[i];
+                        onNewMessageNodeAdded(currentNode);
                     }
                 }
                 
@@ -126,20 +120,8 @@ async function addIconIfNeeded()
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
     if (firstMenuItem != undefined)
     {
-        var menuItemElem = document.createElement("div");
+        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24.svg"), "_26lC3", "Incognito Options", 24, "button");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-        menuItemElem.innerHTML = '<div aria-disabled="false" role="button" tabindex="0" class="_26lC3" title="Incognito Options" \
-                                aria-label="Incognito Options"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="0 0 26 26" \
-                                width="24" height="24" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>';
-        var path = menuItemElem.getElementsByTagName("path")[0];
-        var svg = menuItemElem.getElementsByTagName("svg")[0];
-
-        var response = await fetch(chrome.runtime.getURL("images/incognito_gray_24.svg"));
-		var text = await response.text();
-        var dom = new DOMParser().parseFromString(text, 'text/html');
-        var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;
-        svg.innerHTML = svgHtml;
 
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 
@@ -470,9 +452,43 @@ function onSafetyDelayEnabled()
 // Utils
 //
 
-// This function attempts to syntethise a message that was deleted from our DB
-function restoreDeletedMessage(messageNode) 
+async function generateSVGElement(svgImagePath, clazz="", title="", size=24, role="")
 {
+    var response = await fetch(svgImagePath);
+    var text = await response.text();
+    var viewBoxText = text.split('viewBox="')[1].split('"')[0];
+    var viewboxSize = parseInt(text.split('viewBox="')[1].split(' ')[2]);
+
+    var menuItemElem = document.createElement("div");
+
+    menuItemElem.innerHTML = `<div aria-disabled="false" role="${role}" tabindex="0" class="${clazz}" title="${title}" \
+                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${viewBoxText}" \
+                            width="${size}" height="${size}" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>`;
+    var path = menuItemElem.getElementsByTagName("path")[0];
+    var svg = menuItemElem.getElementsByTagName("svg")[0];
+
+    var dom = new DOMParser().parseFromString(text, 'text/html');
+    var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;
+    svg.innerHTML = svgHtml;
+
+    return menuItemElem;
+}
+
+function onNewMessageNodeAdded(messageNode)
+{
+    var data_id = messageNode.parentElement.getAttribute("data-id");
+    var msgID = data_id.split("_")[2];
+
+    restoreDeletedMessageIfNeeded(messageNode, msgID);
+
+    markMessageNodeDeviceIfPossible(messageNode, msgID);
+}
+
+// This function attempts to syntethise a message that was deleted from our DB
+function restoreDeletedMessageIfNeeded(messageNode, msgID) 
+{
+    // First, make sure this is a valid deleted message
+    if (messageNode.classList.contains("message-out")) return;
     var messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
     if (!messageTextElement) return;
     if (!messageTextElement.textContent) return;
@@ -481,11 +497,6 @@ function restoreDeletedMessage(messageNode)
         // doesn't loook like a deleted message
         return;
     }
-
-    if (messageNode.classList.contains("message-out")) return;
-
-    var data_id = messageNode.parentElement.getAttribute("data-id");
-    var msgID = data_id.split("_")[2];
 
     messageNode.setAttribute("deleted-message", "true");
 
@@ -498,8 +509,8 @@ function restoreDeletedMessage(messageNode)
 
         if (messageID != msgID) return;
 
-        const span = document.createElement("span");
-        const textSpan = document.createElement("span");
+        var span = document.createElement("span");
+        var textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
     
         messageTextElement.textContent = "";
@@ -511,11 +522,11 @@ function restoreDeletedMessage(messageNode)
             return;
         }
 
-        const textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95)";
-        const titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
+        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95)";
+        var titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
         textSpan.style.cssText = textSpanStyle;
         textSpan.className = "copyable-text selectable-text";
-        const titleSpan = document.createElement("span");
+        var titleSpan = document.createElement("span");
         titleSpan.style.cssText = titleSpanStyle;
         if (messageData.isMedia)
         {
@@ -574,13 +585,13 @@ function restoreDeletedMessage(messageNode)
             {
                 let vcardBody = messageData.body;
                 vcardBody = vcardBody.split(":");
-                const phone = vcardBody[vcardBody.length - 2].slice(0, -4);
-                const aTagPhone = document.createElement("a");
+                var phone = vcardBody[vcardBody.length - 2].slice(0, -4);
+                var aTagPhone = document.createElement("a");
                 aTagPhone.href = "tel:" + phone;
                 aTagPhone.textContent = phone;
                 aTagPhone.target = "_blank";
                 aTagPhone.rel = "noopener noreferrer";
-                const name = vcardBody[4].split(";")[0].slice(0, -4);
+                var name = vcardBody[4].split(";")[0].slice(0, -4);
 
                 titleSpan.textContent = "Restored contact card: \r\n";
                 textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
@@ -592,13 +603,13 @@ function restoreDeletedMessage(messageNode)
             else if (messageData.type === "location")
             {
                 titleSpan.textContent = "Restored location: \n";
-                const imgTag = document.createElement("img");
+                var imgTag = document.createElement("img");
                 imgTag.style.cssText = "width: 100%;";
                 imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
                 imgTag.src = "data:" + messageData.mimetype + ";base64," + messageData.body;
                 messageTextElement.appendChild(imgTag);
 
-                const locationLink = document.createElement("a");
+                var locationLink = document.createElement("a");
                 locationLink.target = "_blank";
                 locationLink.rel = "noopener noreferrer";
                 locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
@@ -618,6 +629,39 @@ function restoreDeletedMessage(messageNode)
         messageTextElement.appendChild(textSpan);
         messageTextElement.appendChild(span);
     })    
+}
+
+function markMessageNodeDeviceIfPossible(messageNode, msgID)
+{
+    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
+    document.addEventListener("onDeviceTypeReceived", async function(e)
+    {
+        var data = JSON.parse(e.detail);
+        var messageID = data.messageID;
+        var deviceType = data.deviceType;
+
+        if (messageID != msgID) return;
+        
+        var imageURL = "";
+        if (deviceType == "computer")
+            imageURL = chrome.runtime.getURL("images/computer.svg");
+        else if (deviceType == "phone")
+            imageURL = chrome.runtime.getURL("images/phone.svg");
+        else
+            return;
+
+        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
+        imageElement.className = "device-type-image";
+
+        var topMessageNode = messageNode.parentNode.parentNode;
+        if (topMessageNode.innerHTML.includes("chat-profile-picture"))
+        {
+            imageElement.className += " below-profile-picture";
+        }
+
+        messageNode.insertBefore(imageElement, messageNode.firstChild);
+    });
+
 }
 
 function tickCheckbox(checkbox, checkmark)

@@ -5,6 +5,7 @@
 var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
 var saveDeletedMsgsHookEnabled = false;
+var trackDeviceTypesEnabled = true;
 var safetyDelay = 0;
 
 var isInitializing = true;
@@ -12,6 +13,7 @@ var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
+var deviceTypesPerMessage = {};
 
 // debugging flags
 var WAdebugMode = false;
@@ -147,7 +149,7 @@ wsHook.after = function (messageEvent, url)
                     if (WAPassthroughWithDebug) return messageEvent;
                 }
 
-                var isAllowed = await NodeHandler.isReceivedNodeAllowed(node, isMultiDevice);
+                var isAllowed = await NodeHandler.onNodeReceived(node, isMultiDevice);
                 var manipulatedNode = structuredClone(node);
 
                 if (!isAllowed)
@@ -380,7 +382,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevi
     return messageNode;
 }
 
-NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
+NodeHandler.onNodeReceived = async function (node, isMultiDevice)
 {
     var isAllowed = true;
 
@@ -404,38 +406,8 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
         var nodeMessages = await getMessagesFromNode(currentNode, isMultiDevice);
         for (var message of nodeMessages)
         {
-            var remoteJid = null;
-            if (!isMultiDevice)
-            {
-                // non multi-device
-                remoteJid = message.key.remoteJid;
-                messageId = message.key.id;
-                message = message.message;
-            }
-            else if (currentNode.attrs != null)
-            {
-                remoteJid = currentNode.attrs["from"];
-                messageId = currentNode.attrs["id"];
-            }
-
-            var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
-
-            if (!saveDeletedMsgsHookEnabled)
-            {
-                isAllowed = true;
-                break;
-            }
-            else if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
-            {
-                console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-                isAllowed = false;
-                break;
-            }
-            else if (isRevokeMessage)
-            {
-                // TODO: edit the node to remove only the revoke messages
-                console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
-            }
+            isAllowed = NodeHandler.onMessageNodeReceived(currentNode, message, isMultiDevice, nodeMessages, messageNodes);
+            if (!isAllowed) break;
         }
 
         messages = messages.concat(nodeMessages);
@@ -445,6 +417,54 @@ NodeHandler.isReceivedNodeAllowed = async function (node, isMultiDevice)
     {
         console.log("Got messages:");
         console.log(messages);
+    }
+
+    return isAllowed;
+}
+
+NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMultiDevice, nodeMessages, messageNodes)
+{
+    var isAllowed = true;
+    var remoteJid = null;
+    var participant = null;
+    if (!isMultiDevice)
+    {
+        // non multi-device
+        remoteJid = message.key.remoteJid;
+        messageId = message.key.id;
+        message = message.message;
+    }
+    else if (currentNode.attrs != null)
+    {
+        messageId = currentNode.attrs["id"];
+
+        remoteJid = currentNode.attrs["from"];
+        participant = currentNode.attrs["participant"];
+        participant = participant ? participant : remoteJid;
+    }
+
+    if (trackDeviceTypesEnabled)
+    {
+        var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
+        var deviceType = looksLikePhone ? "phone" : "computer";
+        deviceTypesPerMessage[messageId] = deviceType;
+    }
+
+    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
+
+    if (!saveDeletedMsgsHookEnabled)
+    {
+        isAllowed = true;
+    }
+    else if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
+    {
+        console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
+        isAllowed = false;
+    }
+    else if (isRevokeMessage)
+    {
+        // TODO: edit the node to remove only the revoke messages
+        console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
     }
 
     return isAllowed;
