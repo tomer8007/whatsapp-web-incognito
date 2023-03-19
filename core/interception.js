@@ -534,6 +534,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     }));
 
     // Now, save the deleted message in the DB after a short wait
+    var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
     setTimeout(async function() 
     {
         var chat = await getChatByJID(remoteJid);
@@ -555,7 +556,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 }
             }
         }
-    }, 5000);
+    }, waitTime);
 }
 
 async function getMessagesFromNode(node, isMultiDevice)
@@ -655,26 +656,45 @@ function hookLogs()
 
 function initializeDeletedMessagesDB()
 {
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 2);
 
-    deletedDBOpenRequest.onupgradeneeded = function (e)
+    deletedDBOpenRequest.onupgradeneeded = function (event)
     {
         // triggers if the client had no database
         // ...perform initialization...
         debugger;
-        let db = deletedDBOpenRequest.result;
-        switch (e.oldVersion)
+
+        // Get a reference to the request related to this event
+        // @type IDBOpenRequest (a specialized type of IDBRequest)
+        var request = event.target;
+
+        // Get a reference to the IDBDatabase object for this request
+        // @type IDBDatabase
+        var db = request.result;
+
+        // Get a reference to the implicit transaction for this request
+        // @type IDBTransaction
+        var txn = request.transaction;
+
+        switch (event.oldVersion)
         {
             case 0:
-                db.createObjectStore('msgs', { keyPath: 'id' });
+                var store = db.createObjectStore('msgs', { keyPath: 'id' });
                 console.log('WhatsIncognito: Deleted messages database generated');
+                store.createIndex("originalID_index", "originalID");
+                break;
+            case 1:
+                var store = txn.objectStore("msgs");
+                
+                store.createIndex("originalID_index", "originalID");
                 break;
         }
     };
-    deletedDBOpenRequest.onerror = function ()
+    deletedDBOpenRequest.onerror = function (e)
     {
         console.error("WhatsIncognito: Error opening database");
         console.error("Error", deletedDBOpenRequest);
+        console.error(e);
     };
     deletedDBOpenRequest.onsuccess = () =>
     {

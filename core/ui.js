@@ -489,16 +489,10 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 {
     // First, make sure this is a valid deleted message
     if (messageNode.classList.contains("message-out")) return;
-    var messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS + "." + UIClassNames.DELETED_MESSAGE_DIV_CLASS);
+    var messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS);
     if (!messageTextElement) return;
     if (!messageTextElement.textContent) return;
-    if (!messageTextElement.textContent.includes("message was deleted"))
-    {
-        // doesn't loook like a deleted message
-        return;
-    }
 
-    messageNode.setAttribute("deleted-message", "true");
 
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
     document.addEventListener("onDeletedMessageReceived", function(e)
@@ -509,18 +503,33 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 
         if (messageID != msgID) return;
 
-        var span = document.createElement("span");
-        var textSpan = document.createElement("span");
-        span.className = UIClassNames.DELETED_MESSAGE_SPAN;
-    
-        messageTextElement.textContent = "";
-        if (!messageData)
+        if (messageData)
         {
+            // This message was deleted and we have the original data.
+            messageNode.setAttribute("deleted-message", "true");
+        }
+
+        if (!messageTextElement.textContent.includes("message was deleted"))
+        {
+            // doesn't loook like a we need to restore anything
+            return;
+        }
+        else if (!messageData)
+        {
+            messageTextElement.textContent = "";
             textSpan.textContent = "Failed to restore message";
             messageTextElement.appendChild(textSpan);
             messageTextElement.appendChild(span);
+            messageNode.setAttribute("deleted-message", "true");
+
             return;
         }
+
+        messageTextElement.textContent = "";
+
+        var span = document.createElement("span");
+        var textSpan = document.createElement("span");
+        span.className = UIClassNames.DELETED_MESSAGE_SPAN;
 
         var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95)";
         var titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";

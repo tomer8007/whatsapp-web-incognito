@@ -240,13 +240,31 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     if (window.deletedMessagesDB == null) return;
 
     var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
-    let request = transcation.objectStore("msgs").get(msgID);
+    var msgsStore = transcation.objectStore("msgs");
 
-    request.onsuccess = (e) =>
+    // search the message ID in both the original message ID and the revoked message ID
+    let requestByID = msgsStore.get(msgID);
+    
+    requestByID.onsuccess = (e) =>
     {
-        var messageData = request.result;
-        document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+        var messageData = requestByID.result;
+        if (messageData)
+        {
+            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+            return;
+        }
+
+        // Did not find the message data by revoked message ID. try by original message ID
+        var originalIDIndex = msgsStore.index('originalID_index');
+        var requestByOriginalID = originalIDIndex.get(msgID);
+        requestByOriginalID.onsuccess = (e) =>
+        {
+            var messageData = requestByOriginalID.result;
+
+            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+        }
     }
+    
 });
 
 document.addEventListener("getDeviceTypeForMessage", async function(e) 
