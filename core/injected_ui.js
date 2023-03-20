@@ -55,12 +55,15 @@ function validateSafetyDelay()
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
-    // update enforcing globals locally
+    // update enforcing globals
+    // TODO: move outside injected_ui.js
     var options = JSON.parse(e.detail);
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
+    if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
@@ -273,7 +276,7 @@ document.addEventListener("getDeviceTypeForMessage", async function(e)
     var msgID = data.messageID;
     var deviceType = null;
 
-    if (deviceTypesPerMessage[msgID] != undefined)
+    if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
         deviceType = deviceTypesPerMessage[msgID];
 
     setTimeout(function()

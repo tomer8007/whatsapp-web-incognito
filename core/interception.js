@@ -5,7 +5,8 @@
 var readConfirmationsHookEnabled = true;
 var presenceUpdatesHookEnabled = true;
 var saveDeletedMsgsHookEnabled = false;
-var trackDeviceTypesEnabled = true;
+var showDeviceTypesEnabled = true;
+var autoReceiptOnReplay = true;
 var safetyDelay = 0;
 
 var isInitializing = true;
@@ -70,7 +71,7 @@ wsHook.before = function (originalData, url)
                     manipulatedNode.tag = "blocked_node";
                 }
 
-                manipulatedNode = await NodeHandler.manipulateSentNode(manipulatedNode, isMultiDevice);
+                manipulatedNode = await NodeHandler.onSentNode(manipulatedNode, isMultiDevice);
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter};
 
                 if (WAdebugMode)
@@ -282,10 +283,13 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
     return true;
 }
 
-NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
+NodeHandler.onSentNode = async function (node, isMultiDevice)
 {
     try
     {
+        //
+        // Check for message nodes
+        //
         if (node.tag == "message" || node.tag == "action")
         {
             // manipulating a message node
@@ -302,20 +306,22 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
                     var messageNode = childNode.content[0];
                     if (messageNode.tag == "enc")
                     {
-                        childNode = await this.manipulateSentMessageNode(childNode, isMultiDevice);
+                        childNode = await this.onSentMessageNode(childNode, isMultiDevice);
                         children[i] = childNode;
                     }
                 }
             }
             else if (node.tag == "action")
             {
+                // non-multi device
+
                 var children = node.content;
                 for (var i = 0; i < children.length; i++)
                 {
                     var child = children[i];
                     if (child.tag == "message")
                     {
-                        var messageNode = await this.manipulateSentMessageNode(child, isMultiDevice);
+                        var messageNode = await this.onSentMessageNode(child, isMultiDevice);
                         children[i] = messageNode;
                     }
                 }
@@ -334,7 +340,7 @@ NodeHandler.manipulateSentNode = async function (node, isMultiDevice)
     return node;
 }
 
-NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevice)
+NodeHandler.onSentMessageNode = async function (messageNode, isMultiDevice)
 {
     var remoteJid = null;
 
@@ -357,7 +363,7 @@ NodeHandler.manipulateSentMessageNode = async function (messageNode, isMultiDevi
         remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"]: messageNode.attrs["from"];
     }
 
-    if (remoteJid && isChatBlocked(remoteJid))
+    if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
@@ -443,12 +449,9 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMulti
         participant = participant ? participant : remoteJid;
     }
 
-    if (trackDeviceTypesEnabled)
-    {
-        var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
-        var deviceType = looksLikePhone ? "phone" : "computer";
-        deviceTypesPerMessage[messageId] = deviceType;
-    }
+    var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
+    var deviceType = looksLikePhone ? "phone" : "computer";
+    deviceTypesPerMessage[messageId] = deviceType;
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
 
@@ -590,7 +593,7 @@ function exposeWhatsAppAPI()
 
     var moduleFinder = moduleRaid();
     window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
-    window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[1].default;
+    window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[0].default;
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
     window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
     window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];

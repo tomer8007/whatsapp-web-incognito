@@ -157,6 +157,10 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
                 document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
+                document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
+                document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
+                document.getElementsByClassName('incognito-next-button')[0].addEventListener("click", onNextButtonClicked);
+                document.getElementsByClassName('incognito-back-button')[0].addEventListener("click", onBackButtonClicked);
 
                 //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
                 //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
@@ -171,6 +175,10 @@ async function addIconIfNeeded()
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
+                
+                document.getElementsByClassName('incognito-next-button')[0].removeEventListener("click", onNextButtonClicked);
+                document.getElementsByClassName('incognito-back-button')[0].removeEventListener("click", onBackButtonClicked);
+
                 //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
                 //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
             });
@@ -195,57 +203,96 @@ function generateDropContent(options)
 {
     var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" : 
                                           "Blocks outgoing presence updates.";
-    var deletedMessagesTitle = "Save deleted messages";
-    var deletedMessagesCaption = isMultiDevice ? "Prevents messages from getting deleted" : 
+    var deletedMessagesTitle = "Restore deleted messages";
+    var deletedMessagesCaption = isMultiDevice ? "Marks deleted messages in red" : 
                                                  "Saves deleted messages and restores them later.";
 
-    var dropContent = " \
-        <div class='incognito-options-container' dir='ltr'> \
-            <div class='incognito-options-title'>Incognito options</div> \
-                                                                        \
-                                                                        \
-            <div class='incognito-options-item'> \
-                <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px'> \
-                    <div class='checkbox-container-incognito' style=''> \
-                        <div class='checkbox checkbox-incognito " + (options.readConfirmationsHook ? "checked incognito-checked'> \
-                        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-                        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
-                        </div> \
-                    </div> \
-                    Don't send read confirmations \
-                    <div class='incognito-options-description'>Messages that their read confirmation was blocked<p> \
-                    will be marked in red instead of green.</div> \
-                    <br> \
-                    <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'> \
-                        Also works for stories and audio messages. \
-                    </div> \
-                </div> \
-                        \
-                        \
-            </div> \
-                    \
-                    \
-            <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'> \
-                <div class='checkbox-container-incognito' style=''> \
-                    <div class='checkbox checkbox checkbox-incognito " + (options.presenceUpdatesHook ? "checked incognito-checked'> \
-                    <div class='checkmark incognito-mark incognito-marked'> </div>" :
-                    "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
-                    </div> \
-                </div> \
-                Don't send \"Last Seen\" and \"Typing\" updates \
-                <div class='incognito-options-description'>" + presenceCaption + "</div> \
-            </div>" + 
-            "<div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'> \
-            <div class='checkbox-container-incognito' style=''> \
-                <div class='checkbox checkbox checkbox-incognito " + (options.saveDeletedMsgs ? "checked incognito-checked'> \
-                <div class='checkmark incognito-mark incognito-marked'> </div>" :
-                    "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>") + "\
-                </div> \
-            </div> \
-            " + deletedMessagesTitle + " \
-            <div class='incognito-options-description'>" + deletedMessagesCaption + "</div>" + 
-        "</div> \
-        </div>";
+    var showDeviceTypeTitle = "Show device of messages";
+    var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
+
+    var autoReceiptTitle = "Auto-Send receipts on replay";
+    var autoReceiptCaption = "Automatically mark messages as read when replaying in a chat";
+
+    var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var presenceUpdatesChcekbox = (options.presenceUpdatesHook ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var showDeviceTypeCheckbox = (options.showDeviceTypes ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+
+
+    var dropContent = ` \
+        <div class='incognito-options-container' dir='ltr'>
+            <div class='incognito-options-title'>Incognito options</div>
+
+            <div class='incognito-options-navigator'>
+                <div class='incognito-options-view' id='incognito-options-view1'>                                                                            
+                    <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'> 
+                        <div class='checkbox-container-incognito' style=''>
+                            <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
+                            </div>
+                        </div>
+                        Don't send read confirmations
+                        <div class='incognito-options-description'>Messages that their read confirmation was blocked<p>
+                        will be marked in red instead of green.</div>
+                        <br>
+                        <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
+                            Also works for stories and audio messages.
+                        </div> 
+                    </div> 
+                            
+                    <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'>
+                        <div class='checkbox-container-incognito' style=''>
+                            <div class='checkbox checkbox checkbox-incognito ${presenceUpdatesChcekbox}
+                            </div>
+                        </div>
+                        Don't send \"Last Seen\" and \"Typing\" updates
+                        <div class='incognito-options-description'>${presenceCaption}</div>
+                    </div>
+                    <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
+                        <div class='checkbox-container-incognito' style=''>
+                            <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
+                            </div>
+                        </div>
+                        ${deletedMessagesTitle}
+                        <div class='incognito-options-description'>${deletedMessagesCaption}</div>
+                    </div>
+                    <button class='incognito-next-button'>Next &gt</button>
+                </div>
+
+                <div class='incognito-options-view' id='incognito-options-view2'>
+                    <div class='incognito-options-view' id='incognito-options-view1'>
+                        <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
+                                </div>
+                            </div>
+                            ${showDeviceTypeTitle}
+                            <div class='incognito-options-description'>${showDeviceTypeCaption}</div>
+                        </div>
+                        <div id='incognito-option-auto-receipt' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${autoReceiptCheckbox}
+                                </div>
+                            </div>
+                            ${autoReceiptTitle}
+                            <div class='incognito-options-description'>${autoReceiptCaption}</div>
+                        </div>
+                        <button class='incognito-back-button'>&lt Back</button>
+                    </div>
+                </div>
+            </div>
+            
+        </div>`;
 
     return dropContent;
 }
@@ -351,6 +398,7 @@ function onReadConfirmaionsTick()
     else
     {
         untickCheckbox(checkbox, checkmark);
+
         readConfirmationsHook = false;
         var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
         for (var i = 0; i < redChats.length; i++)
@@ -413,6 +461,81 @@ function onSaveDeletedMsgsTick()
     }));
 }
 
+function onShowDeviceTypesTick()
+{
+    var showDeviceTypes = false;
+    var checkbox = document.querySelector("#incognito-option-show-device-type .checkbox-incognito");
+    
+    var checkmark = checkbox.firstElementChild;
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        showDeviceTypes = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        
+        showDeviceTypes = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", showDeviceTypes: showDeviceTypes });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ showDeviceTypes: showDeviceTypes })
+    }));
+}
+
+function onAutoReceiptsTick()
+{
+    var autoReceipts = false;
+    var checkbox = document.querySelector("#incognito-option-auto-receipt .checkbox-incognito");
+    
+    var checkmark = checkbox.firstElementChild;
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        autoReceipts = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        
+        autoReceipts = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", autoReceiptOnReplay: autoReceipts });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ autoReceiptOnReplay: autoReceipts })
+    }));
+}
+
+function onNextButtonClicked()
+{
+    var views = document.getElementsByClassName("incognito-options-view");
+    var prevView = views[0];
+    var nextView = views[1];
+    requestAnimationFrame(() => {
+        prevView.style.transform = `translate(-100%,0%)`;
+        nextView.style.transform = `translate(0%,0%)`;
+    });
+}
+
+function onBackButtonClicked()
+{
+    var views = document.getElementsByClassName("incognito-options-view");
+    var prevView = views[0];
+    var nextView = views[1];
+    requestAnimationFrame(() => {
+        prevView.style.transform = `translate(0%,0%)`;
+        nextView.style.transform = `translate(100%,0%)`;
+    });
+}
+
+//
+//    Safety Delay
+//
 function onSafetyDelayChanged(event)
 {
     if (isSafetyDelayValid(event.srcElement.value))

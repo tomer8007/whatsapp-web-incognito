@@ -29,6 +29,14 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({"saveDeletedMsgs": messageEvent.saveDeletedMsgs});
         }
+        if ("showDeviceTypes" in messageEvent)
+        {
+            chrome.storage.local.set({"showDeviceTypes": messageEvent.showDeviceTypes});
+        }
+        if ("autoReceiptOnReplay" in messageEvent)
+        {
+            chrome.storage.local.set({"autoReceiptOnReplay": messageEvent.autoReceiptOnReplay});
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -38,8 +46,16 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var showReadWarning = true;
 		var safetyDelay = 0;
         var saveDeletedMsgs = false;
+        var showDeviceTypes = true;
+        var autoReceiptOnReplay = true;
 
-        chrome.storage.local.get(['presenceUpdatesHook', 'readConfirmationsHook', 'showReadWarning', 'safetyDelay', 'saveDeletedMsgs']).then(function(storage)
+        chrome.storage.local.get(['presenceUpdatesHook', 
+                                'readConfirmationsHook', 
+                                'showReadWarning', 
+                                'safetyDelay', 
+                                'saveDeletedMsgs', 
+                                'showDeviceTypes',
+                                'autoReceiptOnReplay']).then(function(storage)
         {
             if (storage["presenceUpdatesHook"] != undefined)
             {
@@ -61,13 +77,23 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 saveDeletedMsgs = storage["saveDeletedMsgs"];
             }
+            if (storage["showDeviceTypes"] != undefined)
+            {
+                showDeviceTypes = storage["showDeviceTypes"];
+            }
+            if (storage["autoReceiptOnReplay"] != undefined)
+            {
+                autoReceiptOnReplay = storage["autoReceiptOnReplay"];
+            }
             callback(
             {
                 presenceUpdatesHook: presenceUpdatesHook,
                 readConfirmationsHook: readConfirmationsHook,
                 showReadWarning: showReadWarning,
                 safetyDelay: safetyDelay,
-                saveDeletedMsgs: saveDeletedMsgs
+                saveDeletedMsgs: saveDeletedMsgs,
+                showDeviceTypes: showDeviceTypes,
+                autoReceiptOnReplay: autoReceiptOnReplay
             });
         });   
     }

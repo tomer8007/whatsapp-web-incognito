@@ -21,7 +21,7 @@ function findChatEntryElementForJID(jid)
         {
             matches = true;
         }
-        else if (typeof (jid) == "string" && id.user == jid.split("@")[0])
+        else if (typeof (jid) == "string" && id.user == jid.split("@")[0].split(":")[0])
         {
             matches = true;
         }
