@@ -210,8 +210,8 @@ function generateDropContent(options)
     var showDeviceTypeTitle = "Show device of messages";
     var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
 
-    var autoReceiptTitle = "Auto-Send receipts on replay";
-    var autoReceiptCaption = "Automatically mark messages as read when replaying in a chat";
+    var autoReceiptTitle = "Auto-Send receipts on reply";
+    var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
 
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
