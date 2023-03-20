@@ -187,17 +187,18 @@ Messages
 {
   animation: fadeIn 0.3s;
   width: 19px; 
-  margin-right: 12px;
-  margin-top: 5px;
+  margin-right: 4px;
+  margin-top: 7px;
   position: absolute;
   left: 35px;
+  right: 35px;
   color: var(--business-name-title);
 }
 
 .below-profile-picture
 {
-  top: 27px;
-  width: 10px;
+  top: 28px;
+  width: 8px;
 }
 
 .incognito-message
