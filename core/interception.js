@@ -296,33 +296,51 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
 
             if (isMultiDevice)
             {
-                var participants = node.content[0];
-                var children = participants.content;
-                for (var i = 0; i < children.length; i++)
+                var childNodes = node.content;
+                for (var i = 0; i < childNodes.length; i++)
                 {
-                    var childNode = children[i];
-                    if (childNode.tag != "to") continue;
-    
-                    var messageNode = childNode.content[0];
-                    if (messageNode.tag == "enc")
+                    var childNode = childNodes[i];
+
+                    if (childNode.tag == "enc")
                     {
-                        childNode = await this.onSentMessageNode(childNode, isMultiDevice);
-                        children[i] = childNode;
+                        childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"], isMultiDevice)
                     }
+    
+                    // list of devices to which a copy of the message is sent
+                    if (childNode.tag == "participants")
+                    {
+                        var participants = childNode.content;
+                        for (var j = 0; j < participants.length; j++)
+                        {
+                            var participant = participants[j];
+                            if (participant.tag != "to") continue;
+            
+                            var messageNode = participant.content[0];
+                            if (messageNode.tag == "enc")
+                            {
+                                var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
+
+                                participant = await this.onSentMessageNode(participant, toJID, isMultiDevice);
+                                participants[j] = participant;
+                            }
+                        }
+                    }
+
                 }
+                
             }
             else if (node.tag == "action")
             {
                 // non-multi device
 
-                var children = node.content;
-                for (var i = 0; i < children.length; i++)
+                var participants = node.content;
+                for (var j = 0; j < participants.length; j++)
                 {
-                    var child = children[i];
+                    var child = participants[j];
                     if (child.tag == "message")
                     {
                         var messageNode = await this.onSentMessageNode(child, isMultiDevice);
-                        children[i] = messageNode;
+                        participants[j] = messageNode;
                     }
                 }
             }
@@ -340,10 +358,8 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
     return node;
 }
 
-NodeHandler.onSentMessageNode = async function (messageNode, isMultiDevice)
+NodeHandler.onSentMessageNode = async function (messageNode, remoteJid, isMultiDevice)
 {
-    var remoteJid = null;
-
     if (!isMultiDevice)
     {
         var message = (await getMessagesFromNode(messageNode, isMultiDevice))[0];
@@ -356,21 +372,19 @@ NodeHandler.onSentMessageNode = async function (messageNode, isMultiDevice)
         if (message == null || message.key == null) return;
         remoteJid = message.key.remoteJid;
     }
-    else
-    {
-        // multi device
-        if (messageNode.tag != "to") debugger;
-        remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"]: messageNode.attrs["from"];
-    }
 
     if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
 
-        var chat = await getChatByJID(remoteJid);
-        var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
-        setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
+        // don't try to send receipts for multiple devices
+        if (!remoteJid.includes(":"))
+        {
+            var chat = await getChatByJID(remoteJid);
+            var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
+            setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
+        }
     }
 
     // do message manipulation if needed
@@ -708,11 +722,7 @@ function initializeDeletedMessagesDB()
 async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
-    let author = "";
-    if (deletedMessageKey.fromMe || !retrievedMsg.isGroupMsg) 
-        author = retrievedMsg.from.user;
-    else 
-        author = retrievedMsg.author.user;
+    let author = deletedMessageKey.participant.split("@")[0].split(":")[0]
 
     let body = "";
     let isMedia = false;

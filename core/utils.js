@@ -120,11 +120,11 @@ function getCurrentChatPanel()
 
 function isChatBlocked(jid)
 {
-    var user = jid.split("@")[0]
+    var user = jid.split("@")[0].split(":")[0];
 
     for (jid in blockedChats)
     {
-        if (jid.split("@")[0] == user)
+        if (jid.split("@")[0].split(":")[0] == user)
             return true;
     }
 
@@ -134,7 +134,7 @@ function isChatBlocked(jid)
 async function getChatByJID(jid)
 {
     if (jid == undefined) debugger;
-    if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
+    jid = normalizeJID(jid);
 
     if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
     {
@@ -163,6 +163,15 @@ async function getChatByJID(jid)
     }
 
     return chat;
+}
+
+function normalizeJID(jid)
+{
+    if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
+    var suffix = jid.split("@")[1];
+    var prefix = jid.split("@")[0].split(":")[0];
+
+    return prefix + "@" + suffix;
 }
 
 const arrayBufferToBase64 = (buffer) =>

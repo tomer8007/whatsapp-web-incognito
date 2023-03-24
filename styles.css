@@ -397,6 +397,12 @@ input[type=number]::-webkit-inner-spin-button {
   --incoming-background-rgb: #9e4646;
   --incoming-background-deeper: #9e4646;
   --incoming-background-deeper-rgb: #9e4646;
+
+  --outgoing-background: #9e4646;
+  --outgoing-background-rgb: #9e4646;
+  --outgoing-background-deeper: #9e4646;
+  --outgoing-background-deeper-rgb: #9e4646;
+
 }
 
 [deleted-message="true"] .selectable-text {

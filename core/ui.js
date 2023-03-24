@@ -66,7 +66,7 @@ function initialize()
                         }, 200);
                     }
 
-                    var msgNodes = addedNode.querySelectorAll("div.message-in");
+                    var msgNodes = addedNode.querySelectorAll("div.message-in, div.message-out");
                     // Scan for messages and modify if needed
                     
                     for (let i = 0; i < msgNodes.length; i++)
@@ -611,7 +611,6 @@ function onNewMessageNodeAdded(messageNode)
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
     // First, make sure this is a valid deleted message
-    if (messageNode.classList.contains("message-out")) return;
     var messageTextElement = messageNode.querySelector("." + UIClassNames.TEXT_WRAP_POSITION_CLASS);
     if (!messageTextElement) return;
     if (!messageTextElement.textContent) return;
