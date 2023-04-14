@@ -541,10 +541,12 @@ function printNode(node, isIncoming = false, tag="", decryptedFrame)
 
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
-    // someone deleted a message, block and mark as deleted
+    // In case the message already appears on screen, mark it in red
     var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
     if (messageNode)
-        messageNode.setAttribute("deleted-message", "true");
+    {
+        messageNode.setAttribute("deleted-message", "true");     // mark the message in red
+    }
 
     document.dispatchEvent(new CustomEvent("pseudoMsgs", {
         detail: deletedMessageId
@@ -735,7 +737,7 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
         // get extended media key              
         try
         {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndDecrypt({ directPath: retrievedMsg.directPath, 
+            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: retrievedMsg.directPath, 
                 encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, 
                 type: retrievedMsg.type, signal: (new AbortController).signal });
 
