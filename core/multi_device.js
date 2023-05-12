@@ -106,6 +106,8 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         }
         else
         {
+            console.error("Could not decrypt Noise packet");
+            debugger;
             throw exception;
         }
     }
@@ -208,25 +210,43 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
 
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
-    var session = await storage.loadSession(address.toString());
-    var sessions = session.sessions;
+    var sessionObject = await storage.loadSession(address.toString());
+    var sessions = sessionObject.sessions;
 
     var version = (new Uint8Array(whisperMessageBuffer))[0];
     var messageProto = whisperMessageBuffer.slice(1, whisperMessageBuffer.byteLength - 8);
     var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
-    for (var sessionKey in sessions)
+    var sessionKeys = Object.keys(sessions);
+
+    // Try to decrypt the message using each of the relevant sessions
+    for (var i = 0; i < sessionKeys.length; i++)
     {
+        var sessionKey = sessionKeys[i];
         var session = sessions[sessionKey];
+
         var chain = session[String.fromCharCode.apply(String, whisperMessage.ephemeralKey)];
         var chainKeyData = chain == null ? await MultiDevice.calculateNewChainKey(whisperMessage, session.currentRatchet) : chain.chainKey;
         var messageKeys = chain ? chain.messageKeys : {};
 
         var messageKey = await MultiDevice.signalGetMessageKey(chainKeyData, whisperMessage.counter, messageKeys);
         var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperMessageKeys");
-        var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
-        // plaintext makes sense? good.
-        return plaintext;
+
+        try
+        {
+            var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
+            return plaintext;
+        }
+        catch (exception)
+        {
+            if (i == sessionKeys.length - 1)
+                throw exception;
+            else
+            {
+                // try on the next session, just like the original signal library does
+            }
+        }
+
     }
 }
 

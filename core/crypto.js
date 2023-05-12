@@ -19,14 +19,17 @@ WACrypto.decryptWithWebCrypto = async function(buffer, isMultiDevice, isIncoming
             var keys = getKeys();
             var algorithmInfo = {name: "AES-CBC",iv: new Uint8Array(iv)};
             const key = await window.crypto.subtle.importKey("raw", new Uint8Array(keys.enc), algorithmInfo, false, ["decrypt"]);
-            try {
+            try 
+            {
                 const decrypted = await window.crypto.subtle.decrypt(algorithmInfo, key, data);
                 return [{ frame: decrypted, counter: 0 }];
-            } catch (e) {
+            } catch (e) 
+            {
                 console.log(e.code + ", " + e.toString());
             }
         
-        } catch (exception)
+        } 
+        catch (exception)
         {
             // getKeys might fail due to WASecretBundle not being set yet, or this is a multi-device
             // (if this is the case, we can ignore it)

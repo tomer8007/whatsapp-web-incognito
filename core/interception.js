@@ -190,6 +190,7 @@ wsHook.after = function (messageEvent, url)
 
         console.error("Passing-through incoming packet due to error:");
         console.error(exception);
+        debugger;
         return messageEvent;
     };
 
@@ -423,14 +424,14 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     {
         var currentNode = messageNodes[i];
 
-        var nodeMessages = await getMessagesFromNode(currentNode, isMultiDevice);
-        for (var message of nodeMessages)
+        var encNodes = await getMessagesFromNode(currentNode, isMultiDevice);
+        for (var message of encNodes)
         {
-            isAllowed = NodeHandler.onMessageNodeReceived(currentNode, message, isMultiDevice, nodeMessages, messageNodes);
+            isAllowed = NodeHandler.onMessageNodeReceived(currentNode, message, isMultiDevice, encNodes, messageNodes);
             if (!isAllowed) break;
         }
 
-        messages = messages.concat(nodeMessages);
+        messages = messages.concat(encNodes);
     }
 
     if (WAdebugMode && messages.length > 0)
@@ -442,7 +443,7 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     return isAllowed;
 }
 
-NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMultiDevice, nodeMessages, messageNodes)
+NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMultiDevice, encNodes, messageNodes)
 {
     var isAllowed = true;
     var remoteJid = null;
@@ -473,7 +474,7 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMulti
     {
         isAllowed = true;
     }
-    else if (isRevokeMessage && nodeMessages.length == 1 && messageNodes.length == 1)
+    else if (isRevokeMessage && encNodes.length == 1 && messageNodes.length == 1)
     {
         console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
         isAllowed = false;
@@ -595,7 +596,16 @@ async function getMessagesFromNode(node, isMultiDevice)
     else
     {
         // decrypt the signal message
-        return MultiDevice.decryptE2EMessage(node);
+        try
+        {
+            return MultiDevice.decryptE2EMessage(node);
+        }
+        catch (exception)
+        {
+            console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
+            console.error(exception);
+            debugger;
+        }
     }
 }
 
