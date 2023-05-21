@@ -5,7 +5,11 @@ You can find the original extension in [Chrome Web Store](https://chrome.google.
 
 ![image](https://user-images.githubusercontent.com/11458759/226142143-70a7bbbd-2f20-4b0d-9a19-ce2342edbae5.png)
 
-
+## Notable Features
+- Block "read" receipts sending, and decide when to send them later (works for statuses as well)
+- Block "typing"/"seen" updates (Will prevent you from seeing others')
+- Always restore deleted messages of all kinds
+- See whether every message was sent from a phone or a computer
 ## Installing from GitHub directly
 To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/tomer8007/whats-incognito/releases) page, or better, just clone the source code
 **to a directory** and add it to Chrome using the 'Load unpacked extension' option when developer mode is turned on.
@@ -16,8 +20,6 @@ This extension works by intercepting the WebSocket frames between chrome and Wha
 Those frames are then decrypted if needed using local encryption keys, and decoded from their binary XMPP form using a javascript code from WhatsApp's original implementation.
 
 The resulting "stanzas" are then simply checked to see if WhatsApp tries to send out a `read` or `presence` action, and if so, the extension blocks it and fakes a failure response from the server.
-## Limitations
-Unfortunately, in multi-device mode, when last seen is blocked, you will not be able to see other people's last seen. This is apparently because WhatsApp servers do not forward presence updates to offline devices.
 ## Organization & Internals
 The main code of the extension is located in `core/interception.js` and in `core/ui.js`. 
 
