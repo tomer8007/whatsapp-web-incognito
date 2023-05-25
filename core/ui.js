@@ -599,7 +599,10 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 
 function onNewMessageNodeAdded(messageNode)
 {
-    var data_id = messageNode.parentElement.getAttribute("data-id");
+    var data_id = messageNode.getAttribute("data-id");
+    if (!data_id) data_id = messageNode.parentElement.getAttribute("data-id");
+    if (data_id == null)
+        debugger;
     var msgID = data_id.split("_")[2];
 
     restoreDeletedMessageIfNeeded(messageNode, msgID);
@@ -668,8 +671,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 
         // Now try to synthesize the message from the DB (best effort)
         tryToSynthesizeMessage(messageSubElement, messageData);
-    
-    })
+    });
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)

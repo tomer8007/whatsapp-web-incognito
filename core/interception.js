@@ -74,7 +74,7 @@ wsHook.before = function (originalData, url)
                 manipulatedNode = await NodeHandler.onSentNode(manipulatedNode, isMultiDevice);
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter};
 
-                if (WAdebugMode)
+                if (WAdebugMode || WAPassthroughWithDebug)
                 {
                     printNode(manipulatedNode, isIncoming=false, tag, decryptedFrame);
                     if (WAPassthroughWithDebug) return originalData;
@@ -143,7 +143,7 @@ wsHook.after = function (messageEvent, url)
                 var nodeParser = new NodeParser(isMultiDevice);
                 var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
                 
-                if (WAdebugMode)
+                if (WAdebugMode || WAPassthroughWithDebug)
                 {
                     printNode(node, isIncoming=true, tag, decryptedFrame);
 
