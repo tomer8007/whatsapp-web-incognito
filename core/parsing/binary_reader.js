@@ -17,16 +17,48 @@
         this._littleEndian = !!t,
         this._hiddenWrites = 0
     }
-    function n() {
-        for (var e = 0, t = arguments.length, n = Array(t), a = 0; a < t; a++)
-            n[a] = arguments[a];
-        for (var i = 0; i < n.length; i++) {
-            var d = n[i];
-            "string" == typeof d ? e += o(d) : "number" == typeof d ? e++ : d instanceof BinaryReader ? e += d.size() : d instanceof ArrayBuffer ? e += d.byteLength : d instanceof Uint8Array && (e += d.length)
+    function buildFunc() 
+    {
+        for (var i = 0, argsLength = arguments.length, args = Array(argsLength), i2 = 0; i2 < argsLength; i2++)
+            args[i2] = arguments[i2];
+
+        for (var i = 0; i < args.length; i++) 
+        {
+            var argument = args[i];
+
+            "string" == typeof argument ? 
+                i += o(argument) : 
+                    "number" == typeof argument ? 
+                        i++ : 
+                            argument instanceof BinaryReader ? 
+                                i += argument.size() : 
+                                    argument instanceof ArrayBuffer ? 
+                                        i += argument.byteLength : 
+                                            argument instanceof Uint8Array && (i += argument.length);
+
         }
-        var s = new BinaryReader(e);
-        return s.write.apply(s, n),
-        s
+
+        var binaryReader = new BinaryReader(i);
+        try
+        {
+            if (args.length > 50000)
+            {
+                // Avoid "maximum call stack size exceeded" error when there are a lot of arguments on the stack
+                var oldArgs = args;
+                args = new Array(1);
+                args[0] = oldArgs;
+            }
+            
+            binaryReader.write.apply(binaryReader, args);
+
+        }
+        catch (exception)
+        {
+            console.error(exception);
+            debugger;
+        }
+
+        return binaryReader;
     }
     function o(e) {
         if (e === m)
@@ -60,7 +92,7 @@
         if (n < 56320 || 57344 <= n)
             throw new TypeError("Invalid second surrogate at wchar-position " + t + ' in "' + e + '"')
     }
-    function d(e, t, r, n) {
+    function validateType(e, t, r, n) {
         if ("number" != typeof e || e !== e || Math.floor(e) !== e || e < t || e >= r)
             throw new TypeError("string" == typeof e ? 'WriteError: string "' + e + '" is not a valid ' + n : "WriteError: " + e + " is not a valid " + n)
     }
@@ -77,7 +109,7 @@
         return e._readIndex = n,
         r
     }
-    function p(e, t) {
+    function advanceFunc(e, t) {
         var r = e._writeIndex
           , n = r + t
           , o = e._buffer;
@@ -100,7 +132,7 @@
         return l(e, a, i)
     }
     function f(e, t, r) {
-        var n = p(r, 8)
+        var n = advanceFunc(r, 8)
           , o = e < 0;
         o && (e = -e);
         var a = Math.floor(e / 4294967296)
@@ -306,70 +338,77 @@
             a.join("")) : w
         },
         write: function() {
-            for (var e = 0; e < arguments.length; e++) {
-                var t = arguments[e];
+
+            var objectsToIterate = arguments;
+            if (objectsToIterate.length == 1 && typeof objectsToIterate[0] == "object" && Array.isArray(objectsToIterate[0]))
+            {
+                objectsToIterate = objectsToIterate[0];
+            }
+
+            for (var e = 0; e < objectsToIterate.length; e++) {
+                var t = objectsToIterate[e];
                 "string" == typeof t ? this.writeString(t) : "number" == typeof t ? this.writeUint8(t) : t instanceof BinaryReader ? this.writeBinary(t) : t instanceof ArrayBuffer ? this.writeBuffer(t) : t instanceof Uint8Array && this.writeByteArray(t)
             }
         },
         writeUint8: function(e) {
-            d(e, 0, 256, "uint8");
-            var t = p(this, 1);
+            validateType(e, 0, 256, "uint8");
+            var t = advanceFunc(this, 1);
             this._buffer[t] = e
         },
         writeInt8: function(e) {
-            d(e, -128, 128, "signed int8");
-            var t = p(this, 1);
+            validateType(e, -128, 128, "signed int8");
+            var t = advanceFunc(this, 1);
             this._buffer[t] = e
         },
         writeUint16: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, 0, 65536, "uint16");
-            var r = p(this, 2);
+            validateType(e, 0, 65536, "uint16");
+            var r = advanceFunc(this, 2);
             s(this).setUint16(r, e, t)
         },
         writeInt16: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, -32768, 32768, "signed int16");
-            var r = p(this, 2);
+            validateType(e, -32768, 32768, "signed int16");
+            var r = advanceFunc(this, 2);
             s(this).setInt16(r, e, t)
         },
         writeUint32: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, 0, 4294967296, "uint32");
-            var r = p(this, 4);
+            validateType(e, 0, 4294967296, "uint32");
+            var r = advanceFunc(this, 4);
             s(this).setUint32(r, e, t)
         },
         writeInt32: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, -2147483648, 2147483648, "signed int32");
-            var r = p(this, 4);
+            validateType(e, -2147483648, 2147483648, "signed int32");
+            var r = advanceFunc(this, 4);
             s(this).setInt32(r, e, t)
         },
         writeUint64: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, -0x8000000000000000, 0x8000000000000000, "signed int64"),
+            validateType(e, -0x8000000000000000, 0x8000000000000000, "signed int64"),
             f(e, t, this)
         },
         writeInt64: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1];
-            d(e, 0, 0x10000000000000000, "uint64"),
+            validateType(e, 0, 0x10000000000000000, "uint64"),
             f(e, t, this)
         },
         writeFloat32: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1]
-              , r = p(this, 4);
+              , r = advanceFunc(this, 4);
             s(this).setFloat32(r, e, t)
         },
         writeFloat64: function(e) {
             var t = arguments.length <= 1 || void 0 === arguments[1] ? this._littleEndian : arguments[1]
-              , r = p(this, 8);
+              , r = advanceFunc(this, 8);
             s(this).setFloat64(r, e, t)
         },
         writeVarInt: function(e) {
-            d(e, -0x8000000000000000, 0x8000000000000000, "varint (signed int64)");
+            validateType(e, -0x8000000000000000, 0x8000000000000000, "varint (signed int64)");
             var t = e < 0;
             t && (e = -e);
-            for (var r = e < 128 && 1 || e < 16384 && 2 || e < 2097152 && 3 || e < 268435456 && 4 || e < 34359738368 && 5 || e < 4398046511104 && 6 || e < 562949953421312 && 7 || e < 72057594037927940 && 8 || 9, n = p(this, t ? 10 : r), o = this._buffer, a = e, i = n, s = r; s > 4; s--) {
+            for (var r = e < 128 && 1 || e < 16384 && 2 || e < 2097152 && 3 || e < 268435456 && 4 || e < 34359738368 && 5 || e < 4398046511104 && 6 || e < 562949953421312 && 7 || e < 72057594037927940 && 8 || 9, n = advanceFunc(this, t ? 10 : r), o = this._buffer, a = e, i = n, s = r; s > 4; s--) {
                 var c = Math.floor(a / 128)
                   , u = a - 128 * c;
                 o[i++] = 128 | 127 & u,
@@ -394,7 +433,7 @@
             var t = e._readIndex
               , r = e._readEndIndex;
             if (t !== r) {
-                var n = p(this, r - t);
+                var n = advanceFunc(this, r - t);
                 this._buffer.set(e._buffer.subarray(t, r), n)
             }
         },
@@ -402,11 +441,11 @@
             this.writeByteArray(new Uint8Array(e))
         },
         writeByteArray: function(e) {
-            var t = p(this, e.length);
+            var t = advanceFunc(this, e.length);
             this._buffer.set(e, t)
         },
         writeString: function(e) {
-            for (var t = p(this, o(e)), r = this._buffer, n = 0; n < e.length; n++) {
+            for (var t = advanceFunc(this, o(e)), r = this._buffer, n = 0; n < e.length; n++) {
                 var a = e.charCodeAt(n);
                 if (a < 128)
                     r[t++] = a;
@@ -428,8 +467,8 @@
         },
         writeBytes: function() {
             for (var e = 0; e < arguments.length; e++)
-                d(arguments[e], 0, 256, "byte");
-            for (var t = p(this, arguments.length), r = this._buffer, n = 0; n < arguments.length; n++)
+                validateType(arguments[e], 0, 256, "byte");
+            for (var t = advanceFunc(this, arguments.length), r = this._buffer, n = 0; n < arguments.length; n++)
                 r[t + n] = arguments[n]
         },
         writeWithVarIntLength: function(e, t) {
@@ -449,7 +488,7 @@
         throw new Error("ReadError: integer exceeded 52 bits (" + e + ")")
     }
     ,
-    BinaryReader.build = n;
+    BinaryReader.build = buildFunc;
     var m = ""
       , _ = 0;
     BinaryReader.numUtf8Bytes = o;

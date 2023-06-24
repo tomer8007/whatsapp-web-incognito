@@ -3,10 +3,10 @@
 function BinaryWriter() {
         function e(e) {
             t++,
-            n.push(e)
+            pushedElements.push(e)
         }
         var t = 0
-          , n = [];
+          , pushedElements = [];
         this.pushInt16 = function(t) {
             if ("number" != typeof t)
                 throw new Error("invalid int16");
@@ -41,7 +41,7 @@ function BinaryWriter() {
             if (!(e instanceof ArrayBuffer))
                 throw new Error("invalid byte buffer");
             t += e.byteLength,
-            n.push(e)
+            pushedElements.push(e)
         }
         ,
         this.pushUint8Array = function(e) {
@@ -49,17 +49,17 @@ function BinaryWriter() {
                 throw new Error("invalid Uint8Array");
             t += e.length;
             for (var r = 0; r < e.length; r++)
-                n.push(e[r])
+                pushedElements.push(e[r])
         }
         ,
         this.pushString = function(e) {
             if ("string" != typeof e)
                 throw new Error("invalid string");
             t += BinaryReader.numUtf8Bytes(e),
-            n.push(e)
+            pushedElements.push(e)
         }
         ,
         this.toBuffer = function() {
-            return BinaryReader.build.apply(null, n).readBuffer()
+            return BinaryReader.build.apply(null, pushedElements).readBuffer()
         }
     }

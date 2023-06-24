@@ -146,7 +146,7 @@ wsHook.after = function (messageEvent, url)
                 if (WAdebugMode || WAPassthroughWithDebug)
                 {
                     printNode(node, isIncoming=true, tag, decryptedFrame);
-
+                    
                     if (WAPassthroughWithDebug) return messageEvent;
                 }
 

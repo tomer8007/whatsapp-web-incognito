@@ -649,7 +649,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
             }
         }
 
-        var messageSubElement = messageNode.firstChild.firstChild; // oh well
+        var messageSubElement = messageNode.getElementsByClassName("msg-container"); // oh well
         if (!messageSubElement) return;
 
         if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
