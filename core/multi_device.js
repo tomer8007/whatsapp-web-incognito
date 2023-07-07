@@ -158,7 +158,8 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
         var chiphertextType = message.attrs["type"];
     
         // get the storage
-        var storageModule = new moduleRaid().findModule("getSignalProtocolStore")[0];
+        var moduleFinder = window.mR ? window.mR : new moduleRaid();
+        var storageModule = moduleFinder.findModule("getSignalProtocolStore")[0];
         storage = storageModule.getSignalProtocolStore();
         if (storage == undefined) 
         {

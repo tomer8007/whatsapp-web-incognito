@@ -617,7 +617,24 @@ function exposeWhatsAppAPI()
 {
     window.WhatsAppAPI = {};
 
-    var moduleFinder = moduleRaid();
+    var moduleFinder = window.mR ? window.mR : new moduleRaid();
+
+    /*
+    var suspectedModules = moduleFinder.findModule("isLegitErrorStack");
+    if (suspectedModules.length > 0)
+    {
+        suspectedModules[0].isLegitErrorStack = function() {return true;};
+        Object.defineProperty(suspectedModules[0], "isLegitErrorStack", {
+            get()
+            {
+                debugger;
+                return function() {return true;};
+            }
+        })
+
+    }
+    */
+
     window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
     window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[0].default;
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
