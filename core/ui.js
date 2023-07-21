@@ -649,7 +649,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
             }
         }
 
-        var messageSubElement = messageNode.getElementsByClassName("msg-container"); // oh well
+        var messageSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0]; // oh well
         if (!messageSubElement) return;
 
         if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
@@ -678,11 +678,14 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 {
     messageSubElement.textContent = "";
 
+    var titleSpan = document.createElement("span");
+    var textSpan = document.createElement("span");
+
     var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95)";
     var titleSpanStyle = "font-style: normal; color: rgb(128, 128, 128)";
     textSpan.style.cssText = textSpanStyle;
     textSpan.className = "copyable-text selectable-text";
-    var titleSpan = document.createElement("span");
+    
     titleSpan.style.cssText = titleSpanStyle;
     if (messageData.isMedia)
     {
@@ -783,7 +786,6 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
     }
         
     messageSubElement.appendChild(textSpan);
-    messageSubElement.appendChild(span);
 }
 
 function markMessageNodeDeviceIfPossible(messageNode, msgID)

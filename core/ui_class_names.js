@@ -21,6 +21,8 @@ UIClassNames.CHAT_ENTRY_CLASS = "rx9719la"; // the chat entry in the chats list
 UIClassNames.UNREAD_MARKER_CLASS = "_2jRew"; // the "X unread messages" warning inside the chat panel; the class inside the top-level item
 
 UIClassNames.CHAT_MESSAGE = "messag-in";
+UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV = "_21Ahp c4mcV";
+
 
 UIClassNames.TEXT_WRAP_POSITION_CLASS = "_21Ahp";
 // TODO
