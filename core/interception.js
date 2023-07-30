@@ -617,7 +617,7 @@ function exposeWhatsAppAPI()
 {
     window.WhatsAppAPI = {};
 
-    var moduleFinder = window.mR ? window.mR : new moduleRaid();
+    var moduleFinder = getModuleFinder();
 
     /*
     var suspectedModules = moduleFinder.findModule("isLegitErrorStack");

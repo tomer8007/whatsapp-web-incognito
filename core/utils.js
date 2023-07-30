@@ -36,6 +36,15 @@ function findChatEntryElementForJID(jid)
     return blockedChat;
 }
 
+function getModuleFinder()
+{
+    if (window.mR) return window.mR;
+
+    window.mR = new moduleRaid();
+
+    return window.mR;
+}
+
 function nodeToElement(node)
 {
     if (!node.tag) 
