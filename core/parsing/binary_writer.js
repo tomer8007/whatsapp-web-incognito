@@ -60,6 +60,8 @@ function BinaryWriter() {
         }
         ,
         this.toBuffer = function() {
-            return BinaryReader.build.apply(null, pushedElements).readBuffer()
+            var array = new Array(1);
+            array[0] = pushedElements;
+            return BinaryReader.build.apply(null, array).readBuffer()
         }
     }

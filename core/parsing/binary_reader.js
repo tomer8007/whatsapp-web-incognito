@@ -22,6 +22,9 @@
         for (var i = 0, argsLength = arguments.length, args = Array(argsLength), i2 = 0; i2 < argsLength; i2++)
             args[i2] = arguments[i2];
 
+        if (args.length == 1 && Array.isArray(args[0]))
+            args = args[0];
+
         for (var i = 0; i < args.length; i++) 
         {
             var argument = args[i];
