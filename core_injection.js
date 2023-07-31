@@ -25,7 +25,7 @@ async function injectOtherScripts()
 
 	setTimeout(
 		function() {injectScript('lib/moduleraid.js');},
-		2000);
+		10);
 }
 
 function injectScript(scriptName) 
