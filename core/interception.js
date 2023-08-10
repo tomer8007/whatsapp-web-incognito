@@ -224,7 +224,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
         var shouldBlock = 
             (readConfirmationsHookEnabled && action === "read") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
+            //(readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
