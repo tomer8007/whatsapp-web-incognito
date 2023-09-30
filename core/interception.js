@@ -153,14 +153,18 @@ wsHook.after = function (messageEvent, url)
                 var isAllowed = await NodeHandler.onNodeReceived(node, isMultiDevice);
                 var manipulatedNode = structuredClone(node);
 
+                manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
+
                 if (!isAllowed)
                 {
                     if (!isMultiDevice) return null;
-                    manipulatedNode.tag = "blocked_node";
+                    //manipulatedNode.tag = "blocked_node";
+                    manipulatedNode.tag = "ib";
+                    manipulatedNode.attrs["from"] = "c.us";
+                    manipulatedNode.content = [{tag: "offline", attrs: {"count": "88"}, content: null}];
                     didBlockNode = true;
                 }
 
-                manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
                 decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
             }
 
@@ -224,7 +228,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
         var shouldBlock = 
             (readConfirmationsHookEnabled && action === "read") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-            //(readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
+            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
@@ -493,7 +497,7 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     //
     // Check if this is a message deletion node
     //
-    var messageRevokeValue = ProtocolMessage.ProtocolMessageType.REVOKE.value;
+    var messageRevokeValue = Message.ProtocolMessage.Type.REVOKE.value;
     if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
     {
         var deletedMessageId = message.protocolMessage.key.id;

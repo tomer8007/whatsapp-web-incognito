@@ -212,6 +212,12 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
     var sessionObject = await storage.loadSession(address.toString());
+    if (sessionObject == null)
+    {
+        console.error("Can't get session for " + address.toString());
+        debugger;
+    }
+
     var sessions = sessionObject.sessions;
 
     var version = (new Uint8Array(whisperMessageBuffer))[0];
@@ -337,7 +343,13 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
-    if (session == null) { console.log("Session not found for " + senderKeyName); return null;}
+    
+    if (session == null) 
+    { 
+        console.error("Session not found for " + senderKeyName); 
+        debugger;
+        return null;
+    }
 
     var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
             

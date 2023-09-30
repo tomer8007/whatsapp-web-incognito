@@ -169,7 +169,7 @@ document.addEventListener('onDropdownOpened', function (e)
     if (props != null)
     {
         var name = props.chat.name;
-        var formattedName = props.chat.contact.formattedName;
+        var formattedName = props.chat.contact.name;
         var jid = props.chat.id;
         var lastMessageIndex = props.chat.lastReceivedKey.id;
         var unreadCount = props.chat.unreadCount;
@@ -439,7 +439,7 @@ function markChatAsBlocked(chat)
             var data = {
                 name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id,
                 fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
-                formattedName: chat.contact.formattedName
+                formattedName: chat.contact.name
             };
             document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
         };

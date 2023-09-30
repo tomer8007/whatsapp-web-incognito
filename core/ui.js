@@ -771,9 +771,8 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
             var locationLink = document.createElement("a");
             locationLink.target = "_blank";
             locationLink.rel = "noopener noreferrer";
-            locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + 
-                                    encodeURIComponent(messageData.lat + " " + messageData.lng);
-            locationLink.textContent = "Google Maps Link"
+            locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(messageData.lat + " " + messageData.lng);
+            locationLink.textContent = "Google Maps Link";
             messageSubElement.appendChild(locationLink);
         }
         else
