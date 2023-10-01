@@ -144,7 +144,8 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
 {
     var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
     var participant = messageNode.attrs["participant"];
-    var fromJid = participant ? participant : remoteJid;
+    var participantLid = messageNode.attrs["participant_lid"];
+    var fromJid = participant ? participant : remoteJid;;
 
     var decryptedMessages = [];
     var keyDistributionMessage = null;
@@ -343,7 +344,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     {
         session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
     }
-    
+
     if (session == null) 
     { 
         console.error("Session not found for " + senderKeyName); 
@@ -389,15 +390,18 @@ MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageK
     }
 
     var messageKey = null; var chainKey = chainKeyData.key;
-    if (isSenderKey) counter++;
+    
+    if (counter == chainKeyData.counter || isSenderKey)
+    {
+        // the message key should be already calculated, but sometimes it seems not
+        counter++;
+    }
     
     for (var i = chainKeyData.counter; i < counter; i++)
     {
         messageKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x1])), chainKey);
         chainKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x2])), chainKey);
     }
-
-    if (messageKey == null) debugger;
 
     return messageKey;
 
