@@ -367,7 +367,7 @@ NodeHandler.onSentMessageNode = async function (messageNode, remoteJid, isMultiD
 {
     if (!isMultiDevice)
     {
-        var message = (await getMessagesFromNode(messageNode, isMultiDevice))[0];
+        var message = (await decryptE2EMessagesFromNode(messageNode, isMultiDevice))[0];
         if (WAdebugMode)
         {
             console.log("WAIncognito: Sending message:");
@@ -427,27 +427,43 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     for (var i = 0 ; i < messageNodes.length; i++)
     {
         var currentNode = messageNodes[i];
-
-        var encNodes = await getMessagesFromNode(currentNode, isMultiDevice);
-        for (var message of encNodes)
-        {
-            isAllowed = NodeHandler.onMessageNodeReceived(currentNode, message, isMultiDevice, encNodes, messageNodes);
-            if (!isAllowed) break;
-        }
-
-        messages = messages.concat(encNodes);
-    }
-
-    if (WAdebugMode && messages.length > 0)
-    {
-        console.log("Got messages:");
-        console.log(messages);
+        var isMessageNodeAllowed = NodeHandler.onMessageNodeReceived(currentNode, messageNodes, isMultiDevice);
+        
+        if (!isMessageNodeAllowed) isAllowed = false;
     }
 
     return isAllowed;
 }
 
-NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMultiDevice, encNodes, messageNodes)
+NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, isMultiDevice)
+{
+    var messageId = currentNode.attrs["id"];
+    var remoteJid = currentNode.attrs["from"];
+    var participant = currentNode.attrs["participant"];
+    participant = participant ? participant : remoteJid;
+
+    // check for device type
+    var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
+    var deviceType = looksLikePhone ? "phone" : "computer";
+    deviceTypesPerMessage[messageId] = deviceType;
+
+    var encNodes = await decryptE2EMessagesFromNode(currentNode, isMultiDevice);
+    for (var message of encNodes)
+    {
+        isAllowed = NodeHandler.onE2EMessageNodeReceived(currentNode, message, isMultiDevice, encNodes, messageNodes);
+        if (!isAllowed) break;
+    }
+
+    if (WAdebugMode && encNodes.length > 0)
+    {
+        console.log("Got messages:");
+        console.log(encNodes);
+    }
+
+    return isAllowed;
+}
+
+NodeHandler.onE2EMessageNodeReceived = async function(currentNode, message, isMultiDevice, encNodes, messageNodes)
 {
     var isAllowed = true;
     var remoteJid = null;
@@ -467,10 +483,6 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, message, isMulti
         participant = currentNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
     }
-
-    var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
-    var deviceType = looksLikePhone ? "phone" : "computer";
-    deviceTypesPerMessage[messageId] = deviceType;
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
 
@@ -583,7 +595,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     }, waitTime);
 }
 
-async function getMessagesFromNode(node, isMultiDevice)
+async function decryptE2EMessagesFromNode(node, isMultiDevice)
 {
     if (!isMultiDevice)
     {
