@@ -801,6 +801,8 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
+        var messageNode = document.querySelectorAll('[data-id*="' + messageID +'"]')[0].childNodes[0];
+
         var deviceType = data.deviceType;
 
         if (messageID != msgID) return;
@@ -817,7 +819,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         imageElement.className = "device-type-image";
 
         var topMessageNode = messageNode.parentNode.parentNode;
-        if (topMessageNode.innerHTML.includes("chat-profile-picture"))
+        if (topMessageNode.innerHTML.includes("chat-profile-picture") || messageNode.innerHTML.includes("Open chat details"))
         {
             imageElement.className += " below-profile-picture";
         }
