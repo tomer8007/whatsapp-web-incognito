@@ -801,11 +801,16 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
-        var messageNode = document.querySelectorAll('[data-id*="' + messageID +'"]')[0].childNodes[0];
 
         var deviceType = data.deviceType;
 
         if (messageID != msgID) return;
+
+        var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
+        if (possibleNodes.length > 0 )
+            messageNode = possibleNodes[0].childNodes[0];
+
+        if (messageNode.getElementsByClassName("device-type-image").length > 0) return;
         
         var imageURL = "";
         if (deviceType == "computer")

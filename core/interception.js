@@ -427,7 +427,7 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     for (var i = 0 ; i < messageNodes.length; i++)
     {
         var currentNode = messageNodes[i];
-        var isMessageNodeAllowed = NodeHandler.onMessageNodeReceived(currentNode, messageNodes, isMultiDevice);
+        var isMessageNodeAllowed = await NodeHandler.onMessageNodeReceived(currentNode, messageNodes, isMultiDevice);
         
         if (!isMessageNodeAllowed) isAllowed = false;
     }
@@ -463,7 +463,7 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
     return isAllowed;
 }
 
-NodeHandler.onE2EMessageNodeReceived = async function(currentNode, message, isMultiDevice, encNodes, messageNodes)
+NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, isMultiDevice, encNodes, messageNodes)
 {
     var isAllowed = true;
     var remoteJid = null;
