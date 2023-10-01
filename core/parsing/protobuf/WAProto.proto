@@ -1,4 +1,5 @@
 // https://github.com/WhiskeySockets/Baileys/blob/master/WAProto/WAProto.proto
+// https://github.com/tulir/whatsmeow/blob/main/binary/proto/def.proto
 
 syntax = "proto2";
 package proto;

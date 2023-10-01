@@ -74,6 +74,7 @@ function NodeParser(isMultiDevice = false)
 			DICTIONARY_1: 237,
 			DICTIONARY_2: 238,
 			DICTIONARY_3: 239,
+            JID_INTEROP: 245,
             JID_FB: 246,
             JID_AD: 247,
 			LIST_8: 248,
@@ -159,21 +160,34 @@ function NodeParser(isMultiDevice = false)
                 case o.BINARY_32:
                     return e.readString(e.readInt32());
                 case o.JID_PAIR:
-                    var a = this.readString(e, e.readByte());
+                    var device = this.readString(e, e.readByte());
                     var i = this.readString(e, e.readByte());
-                    if ("undefined" != typeof a && "undefined" != typeof i)
-                        return a + "@" + i;
+                    if ("undefined" != typeof device && "undefined" != typeof i)
+                        return device + "@" + i;
                     if ("undefined" != typeof i)
                         return i;
-                    throw new Error("invalid jid " + a + "," + i + " " + e.debugInfo());
+                    throw new Error("invalid jid " + device + "," + i + " " + e.debugInfo());
                 case o.JID_AD:
-                    t = e.readByte();
-                    var a = e.readByte();
-                    var s = this.readString(e, e.readByte());
-                        if (void 0 !== s)
-                            return t && a ? s + "." + t + ":" + a + "@c.us" : 
-                                t ? s + "." + t + "@c.us" : a ? s + ":" + a + "@c.us" : s + "@c.us";
-                        throw new Error(`invalid JID_AD agent:${t} device:${a} user:${s}`);
+                    var t = e.readByte();
+                    var device = e.readByte();
+                    var user = this.readString(e, e.readByte());
+                        if (void 0 !== user)
+                        {
+                            var domainTypeSuffix = t == 0 ? "s.whatsapp.net" :  t == 1 ? "lid" : "hosted";
+                            return 0 === device ? `${user}@${domainTypeSuffix}` : `${user}:${device}@${domainTypeSuffix}`;
+                        }
+                            
+                        throw new Error(`invalid JID_AD agent:${t} device:${device} user:${user}`);
+                case o.JID_INTEROP:
+                      var device = e.readUint16();
+                      var integrator = e.readUint16();
+                      var user = this.readString(e, e.readByte());
+                      if (user != null)
+                      {
+                        return `${integrator}-${user}:${device}@$interop`;
+                      }
+                    
+                    break;
                 case o.JID_FB:
                     debugger;
                 case o.NIBBLE_8:
