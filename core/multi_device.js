@@ -145,7 +145,17 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
     var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
     var participant = messageNode.attrs["participant"];
     var participantLid = messageNode.attrs["participant_lid"];
-    var fromJid = participant ? participant : remoteJid;;
+    var fromJid = participant ? participant : remoteJid;
+
+    // get the storage
+    var moduleFinder = getModuleFinder();
+    var storageModule = moduleFinder.findModule("getSignalProtocolStore")[0];
+    storage = storageModule.getSignalProtocolStore();
+    if (storage == undefined) 
+    {
+        storageModule.enableMemSignalStore();
+        storage = storageModule.getSignalProtocolStore();
+    }
 
     var decryptedMessages = [];
     var keyDistributionMessage = null;
@@ -157,21 +167,12 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
 
         var ciphertext = message.content;
         var chiphertextType = message.attrs["type"];
-    
-        // get the storage
-        var moduleFinder = getModuleFinder();
-        var storageModule = moduleFinder.findModule("getSignalProtocolStore")[0];
-        storage = storageModule.getSignalProtocolStore();
-        if (storage == undefined) 
-        {
-            storageModule.enableMemSignalStore();
-            storage = storageModule.getSignalProtocolStore();
-        }
-    
+
         // decrypt the message
         var address = new libsignal.SignalProtocolAddress(fromJid.substring(0, fromJid.indexOf("@")), 0);
         var message = null;
     
+        // decryptSignalProto
         switch (chiphertextType)
         {
             case "pkmsg":
@@ -219,49 +220,83 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
         debugger;
     }
 
-    var sessions = sessionObject.sessions;
-
     var version = (new Uint8Array(whisperMessageBuffer))[0];
     var messageProto = whisperMessageBuffer.slice(1, whisperMessageBuffer.byteLength - 8);
     var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
-    var sessionKeys = Object.keys(sessions);
+    var chainKey = null; var chainCounter = -1; var messageKeys = {};
 
-    // Try to decrypt the message using each of the relevant sessions
-    for (var i = 0; i < sessionKeys.length; i++)
+    var sessions = sessionObject.sessions;
+
+    if (sessions)
     {
-        var sessionKey = sessionKeys[i];
-        var session = sessions[sessionKey];
+        // version 1
 
-        var chain = session[String.fromCharCode.apply(String, whisperMessage.ephemeralKey)];
-        var chainKeyData = chain == null ? await MultiDevice.calculateNewChainKey(whisperMessage, session.currentRatchet) : chain.chainKey;
-        var messageKeys = chain ? chain.messageKeys : {};
+        var sessionKeys = Object.keys(sessions);
 
-        var messageKey = await MultiDevice.signalGetMessageKey(chainKeyData, whisperMessage.counter, messageKeys);
-        var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperMessageKeys");
-
-        try
+        // multiple seesions, Try to get the chain using each of the relevant sessions
+        for (var i = 0; i < sessionKeys.length; i++)
         {
-            var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
-            return plaintext;
+            var sessionKey = sessionKeys[i];
+            var session = sessions[sessionKey];
+
+            var chain = session[String.fromCharCode.apply(String, whisperMessage.ephemeralKey)];
+            var chainKeyData = chain == null ? await MultiDevice.calculateNewChainKey(session.currentRatchet.rootKey, whisperMessage.ephemeralKey, 
+                                                                                    ratchet.ephemeralKeyPair.privKey) : 
+                                                chain.chainKey;
+                                                
+            messageKeys = chain.messageKeys;
+            chainKey = chainKeyData.key;
+            chainCounter = chainKeyData.counter;
+
+            // TODO: try the next session if this one fails decryption, just like the original signal library does
         }
-        catch (exception)
+    }
+    else
+    {
+        // version 2
+
+        var recvChains = sessionObject.recvChains;
+        var chainIndex = recvChains.findIndex((e => isEqualArray(e.ratchetPubKey,whisperMessage.ephemeralKey)))
+        if (chainIndex != -1)
         {
-            if (i == sessionKeys.length - 1)
-                throw exception;
-            else
-            {
-                // try on the next session, just like the original signal library does
-            }
+            var currentChain = recvChains[chainIndex];
+            chainKey = currentChain.chainKey;
+            chainCounter = currentChain.nextMsgIndex;
+            messageKeys = currentChain.unusedMsgKeys;
+        }
+        else
+        {
+            // calculate new chain, see decryptMsgFromSession -> calculateRatchet, makeFreshRecvChain
+            var chainKeyData = await MultiDevice.calculateNewChainKey(sessionObject.rootKey, whisperMessage.ephemeralKey, 
+                                                                    sessionObject.sendChain.ratchetKey.privateKey);
+            chainKey = chainKeyData.key;
+            chainCounter = chainKeyData.counter;
         }
 
     }
+
+    var messageKey = await MultiDevice.signalGetMessageKey(chainKey, chainCounter, whisperMessage.counter, messageKeys);
+    var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperMessageKeys");
+
+    try
+    {
+        var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
+        return plaintext;
+    }
+    catch (exception)
+    {
+        console.error("E2E plaintext decryption failed.")
+        debugger;
+        throw exception;
+    }
+    
 }
 
 MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMessageBuffer, storage, address)
 {
-    var session = await storage.loadSession(address.toString());
-    var sessions = session ? session.sessions : {};
+    var sessionObject = await storage.loadSession(address.toString());
+    var sessions = sessionObject ? sessionObject.sessions : {};
 
     var version = (new Uint8Array(prekeyWhisperMessageBuffer))[0];
     var messageProto = prekeyWhisperMessageBuffer.slice(1, prekeyWhisperMessageBuffer.byteLength);
@@ -273,19 +308,37 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 
     version = (new Uint8Array(prekeyMessage.message))[0];
     messageProto = prekeyMessage.message.slice(1, prekeyMessage.message.byteLength - 8);
-    var message = WhisperMessage.read(new Pbf(messageProto));
+    var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
     var chainKeyData = null;
     var messageKeys = {};
-    var session = sessions[String.fromCharCode.apply(String, prekeyMessage.baseKey)];
-    if (session && session[String.fromCharCode.apply(String, message.ephemeralKey)])
+
+    if (sessionObject.sessions)
     {
-        // existing ratchet
-        var ratchet = session[String.fromCharCode.apply(String, message.ephemeralKey)];
-        chainKeyData = ratchet.chainKey;
-        messageKeys = ratchet.messageKeys;
+        // version 1
+        var sessionObject = sessions[String.fromCharCode.apply(String, prekeyMessage.baseKey)];
+        if (sessionObject && sessionObject[String.fromCharCode.apply(String, whisperMessage.ephemeralKey)])
+        {
+            // existing ratchet
+            var ratchet = sessionObject[String.fromCharCode.apply(String, whisperMessage.ephemeralKey)];
+            chainKeyData = ratchet.chainKey;
+            messageKeys = ratchet.messageKeys;
+        }
     }
     else
+    {
+        // version 2
+        var recvChains = sessionObject.recvChains;
+        var chainIndex = recvChains.findIndex((e => isEqualArray(e.ratchetPubKey, whisperMessage.ephemeralKey)))
+        if (chainIndex != -1)
+        {
+            var currentChain = recvChains[chainIndex];
+            chainKeyData = {key: currentChain.chainKey, counter: currentChain.nextMsgIndex};
+            messageKeys = currentChain.unusedMsgKeys;
+        }
+    }
+    
+    if (!chainKeyData)
     {
         // new session
         var sharedSecret = (ourEphemeralKey === undefined || prekeyMessage.baseKey === undefined) ? 
@@ -307,16 +360,16 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
         var rootKey = masterKey[0];
     
         // calculate new ratchet
-        sharedSecret = await libsignal.Curve.async.calculateAgreement(message.ephemeralKey, ourSignedKey.privKey);
+        sharedSecret = await libsignal.Curve.async.calculateAgreement(whisperMessage.ephemeralKey, ourSignedKey.privKey);
         var keys = await libsignal.HKDF.deriveSecrets(sharedSecret, rootKey, "WhisperRatchet");
         var chainKey = keys[1];
 
         chainKeyData = {key: chainKey, counter: -1};
     }
 
-    var messageKey = await MultiDevice.signalGetMessageKey(chainKeyData, message.counter, messageKeys);
+    var messageKey = await MultiDevice.signalGetMessageKey(chainKeyData.key, chainKeyData.counter, whisperMessage.counter, messageKeys);
     var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperMessageKeys");
-    var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(message.ciphertext), keys[2].slice(0, 16));
+    var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
     // plaintext makes sense? good.
     return plaintext;
         
@@ -332,27 +385,48 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     var senderKeyMessage = SenderKeyMessage.read(new Pbf(messageProto));
     var id = senderKeyMessage.id;
     
-    var session = null;
+    var chainKey = null; var chainMsgCounter = -1; var messageKeys = {};
+
     if (senderKey)
     {
-        for (var e = 0; e < senderKey.sessions.length; e++)
-            if (senderKey.sessions[e].keyId === id) {
-                session = senderKey.sessions[e]; break; 
-            }
+        if (senderKey.sessions)
+        {
+            // version 1
+            for (var e = 0; e < senderKey.sessions.length; e++)
+                if (senderKey.sessions[e].keyId === id) 
+                {
+                    chainKey = senderKey.sessions[e].chainKey.key;
+                    chainMsgCounter = senderKey.sessions[e].chainKey.counter;
+                    messageKeys = senderKey.sessions[e].messageKeys;
+                    break;
+                }
+        }
+        else
+        {
+            // vesrion 2
+            for (var e = 0; e < senderKey.senderKeyStates.length; e++)
+                if (senderKey.senderKeyStates[e].senderKeyId === id) 
+                {
+                    chainKey =  senderKey.senderKeyStates[e].senderKeyChainKey.chainKey;
+                    chainMsgCounter = senderKey.senderKeyStates[e].senderKeyChainKey.nextMsgIndex;
+                    break; 
+                }
+        }
     }
-    if (session == null && keyDistributionMessage) // && keyDistributionMessage.id == id
+    
+    if (chainKey == null && keyDistributionMessage) // && keyDistributionMessage.id == id
     {
-        session = {chainKey: {key: keyDistributionMessage.chainKey, counter: keyDistributionMessage.iteration}};
+        chainKey = keyDistributionMessage.chainKey;
+        chainMsgCounter = keyDistributionMessage.iteration;
     }
 
-    if (session == null) 
+    if (chainKey == null) 
     { 
-        console.error("Session not found for " + senderKeyName); 
-        debugger;
+        console.warn("Session not found for " + senderKeyName); 
         return null;
     }
 
-    var messageKey = await MultiDevice.signalGetMessageKey(session.chainKey, senderKeyMessage.iteration, session.messageKeys, true);
+    var messageKey = await MultiDevice.signalGetMessageKey(chainKey, chainMsgCounter, senderKeyMessage.iteration, messageKeys, true);
             
     var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperGroup");
     var key = new Uint8Array(32);
@@ -373,15 +447,18 @@ MultiDevice.signalGetKeyDistributionMessage = function(keyDistributionMessageBuf
 }
 
 // new ratchet: root key -> chain key
-MultiDevice.calculateNewChainKey = async function(message, ratchet)
+MultiDevice.calculateNewChainKey = async function(rootKey, ratchetPubKey, ratchetPrivKey)
 {
-    var sharedSecret = await libsignal.Curve.async.calculateAgreement(message.ephemeralKey, ratchet.ephemeralKeyPair.privKey);
-    var keys = await libsignal.HKDF.deriveSecrets(sharedSecret, ratchet.rootKey, "WhisperRatchet");
+    if (!(ratchetPrivKey instanceof ArrayBuffer))
+        ratchetPrivKey = toArrayBuffer(ratchetPrivKey);
+
+    var sharedSecret = await libsignal.Curve.async.calculateAgreement(ratchetPubKey, ratchetPrivKey);
+    var keys = await libsignal.HKDF.deriveSecrets(sharedSecret, rootKey, "WhisperRatchet");
 
     return {key: keys[1], counter: -1};
 }
 
-MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageKeys={}, isSenderKey=false)
+MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, counter, messageKeys={}, isSenderKey=false)
 {
     if (messageKeys && messageKeys[counter] != undefined) 
     {
@@ -389,22 +466,28 @@ MultiDevice.signalGetMessageKey = async function(chainKeyData, counter, messageK
         return messageKeys[counter];
     }
 
-    var messageKey = null; var chainKey = chainKeyData.key;
+    if (counter < chainMsgCounter) 
+    {
+        debugger;
+        // TODO: look is messageKeys, otherwise it should be a duplicated message
+    }
+
+    var messageKey = null;
     
-    if (counter == chainKeyData.counter || isSenderKey)
+    //if (counter == chainMsgCounter || isSenderKey)
+    if (chainMsgCounter != -1)
     {
         // the message key should be already calculated, but sometimes it seems not
         counter++;
     }
     
-    for (var i = chainKeyData.counter; i < counter; i++)
+    for (var i = chainMsgCounter; i < counter; i++)
     {
         messageKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x1])), chainKey);
         chainKey = await MultiDevice.HMAC_SHA256(toArrayBuffer(new Uint8Array([0x2])), chainKey);
     }
 
     return messageKey;
-
 }
 
 //
