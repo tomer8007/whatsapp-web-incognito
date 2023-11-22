@@ -296,6 +296,13 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
 MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMessageBuffer, storage, address)
 {
     var sessionObject = await storage.loadSession(address.toString());
+
+    if (sessionObject == null) {
+        console.warn("Could not find session for " + address.toString());
+        debugger;
+        return null;
+    }
+
     var sessions = sessionObject ? sessionObject.sessions : {};
 
     var version = (new Uint8Array(prekeyWhisperMessageBuffer))[0];
