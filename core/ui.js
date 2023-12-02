@@ -201,7 +201,7 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" : 
+    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen and typing status" : 
                                           "Blocks outgoing presence updates.";
     var deletedMessagesTitle = "Restore deleted messages";
     var deletedMessagesCaption = isMultiDevice ? "Marks deleted messages in red" : 
