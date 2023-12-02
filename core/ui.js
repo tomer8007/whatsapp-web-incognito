@@ -201,7 +201,7 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen" : 
+    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen and typing status" : 
                                           "Blocks outgoing presence updates.";
     var deletedMessagesTitle = "Restore deleted messages";
     var deletedMessagesCaption = isMultiDevice ? "Marks deleted messages in red" : 
@@ -242,8 +242,7 @@ function generateDropContent(options)
                             </div>
                         </div>
                         Don't send read confirmations
-                        <div class='incognito-options-description'>Messages that their read confirmation was blocked<p>
-                        will be marked in red instead of green.</div>
+                        <div class='incognito-options-description'>Blocked messages will be marked with a button.</div>
                         <br>
                         <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
                             Also works for stories and audio messages.
