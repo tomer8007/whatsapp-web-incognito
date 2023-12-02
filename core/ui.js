@@ -242,7 +242,7 @@ function generateDropContent(options)
                             </div>
                         </div>
                         Don't send read confirmations
-                        <div class='incognito-options-description'>Blocked messages will be marked with a button</div>
+                        <div class='incognito-options-description'>Blocked messages will be marked with a button.</div>
                         <br>
                         <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
                             Also works for stories and audio messages.
