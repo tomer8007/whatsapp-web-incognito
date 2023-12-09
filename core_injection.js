@@ -22,6 +22,8 @@ async function injectOtherScripts()
 	injectScript('lib/pako.js');
 	await injectScript('core/multi_device.js');
 	injectScript('core/interception.js');
+	
+	injectScript("core/status_download.js")
 
 	setTimeout(
 		function() {injectScript('lib/moduleraid.js');},
