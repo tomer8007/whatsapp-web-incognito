@@ -61,5 +61,13 @@ function checkIfButtonNeeded(){
     }
 }
 
-// every 400ms check if the button is needed
-setInterval(checkIfButtonNeeded, 400)
+// create a mutation observer to check if there a span two elements down from the div with id="app" has child nodes added to it
+var observer = new MutationObserver(function(mutations) {
+    checkIfButtonNeeded()
+});
+
+// start observing
+observer.observe(document.getElementById("app"), {
+    childList: true,
+    subtree: true
+});
