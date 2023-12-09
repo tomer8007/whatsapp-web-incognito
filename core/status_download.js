@@ -61,7 +61,7 @@ function checkIfButtonNeeded(){
     }
 }
 
-// create a mutation observer to check if there a span two elements down from the div with id="app" has child nodes added to it
+// create a mutation observer
 var observer = new MutationObserver(function(mutations) {
     checkIfButtonNeeded()
 });
