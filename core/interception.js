@@ -437,6 +437,8 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
 
 NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, isMultiDevice)
 {
+    var isAllowed = true;
+
     var messageId = currentNode.attrs["id"];
     var remoteJid = currentNode.attrs["from"];
     var participant = currentNode.attrs["participant"];
