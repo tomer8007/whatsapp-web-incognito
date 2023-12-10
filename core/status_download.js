@@ -7,8 +7,6 @@ function destroyOldButton(src) {
     // loop through buttons
     for (var i = 0; i < buttons.length; i++) {
       // if the button's src matches the src of the img
-      console.log("src" + buttons[i].href);
-      console.log("buttons[i]" + buttons[i]);
       if (buttons[i].href == src) {
         // remove the button
         buttons[i].remove();
@@ -56,8 +54,6 @@ function destroyOldButton(src) {
               for (var k = 0; k < imgs.length; k++) {
                 // if the img src starts with blob
                 if (imgs[k].src.startsWith("blob")) {
-                  console.log("THIS IS IT");
-                  console.log(addedNodes[j]);
                   // create a button
                   createDownloadButton(imgs[k].src);
                 }
