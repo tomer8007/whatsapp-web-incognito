@@ -71,7 +71,7 @@ function destroyOldButton(src) {
                         for (var i = 0; i < mutations.length; i++) {
                         var attributeName = mutations[i].attributeName;
                         if (attributeName == "src") {
-                            // destroy the old button
+                            // destroy the button
                             destroyOldButton(originalSRC);
                         }
                         }
@@ -88,7 +88,6 @@ function destroyOldButton(src) {
       // for each removed node
       if (removedNodes && removedNodes.length > 0) {
         for (var j = 0; j < removedNodes.length; j++) {
-            console.log(removedNodes[j])
           // check if this removed node contains any nodes that are img (at any depth)
           var imgs = removedNodes[j].getElementsByTagName("img");
           if (imgs.length > 0) {
@@ -103,7 +102,6 @@ function destroyOldButton(src) {
           }
           // check if this removed node contains any nodes that are video (at any depth)
           var videos = removedNodes[j].getElementsByTagName("video");
-          console.log(videos)
           if (videos.length > 0) {
             // Loop through each video
             for (var k = 0; k < videos.length; k++) {
