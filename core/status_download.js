@@ -61,27 +61,13 @@ function checkIfButtonNeeded(){
     }
 }
 
+// create a mutation observer
+var observer = new MutationObserver(function(mutations) {
+    checkIfButtonNeeded()
+});
 
-
-var mutationObserver = new MutationObserver(function (mutations){
-    if(document.getElementById("app").children[0].children[3]){
-        mutationObserver.disconnect()
-        var observer = new MutationObserver(function(mutations) {
-            checkIfButtonNeeded()
-        });
-
-        // find the 3rd child of the 1st child of the 1st child of id="app", which is a span where the status objects are contained
-        var target = document.getElementById("app").children[0].children[3]
-
-        // start observing
-        observer.observe(target, {
-            childList: true,
-            subtree: true
-        });
-    }
-})
-
-mutationObserver.observe(document.getElementById("app"), {
+// start observing
+observer.observe(document.getElementById("app"), {
     childList: true,
     subtree: true
-})
+});
