@@ -58,12 +58,27 @@ function destroyOldButton(src) {
                   createDownloadButton(imgs[k].src);
                 }
               }
-            } else if (videos.length > 0) {
+            } 
+            if (videos.length > 0) {
               for (var k = 0; k < videos.length; k++) {
                 // if the img src starts with blob
                 if (videos[k].src.startsWith("blob")) {
                   // create a button
                   createDownloadButton(videos[k].src);
+                  originalSRC = videos[k].src;
+                  // create a mutationobserver: whenever the attribute src changes, update the button's href
+                    var observer = new MutationObserver(function (mutations) {
+                        for (var i = 0; i < mutations.length; i++) {
+                        var attributeName = mutations[i].attributeName;
+                        if (attributeName == "src") {
+                            // destroy the old button
+                            destroyOldButton(originalSRC);
+                        }
+                        }
+                    });
+                    observer.observe(videos[k], {
+                        attributes: true,
+                    });
                 }
               }
             }
@@ -73,6 +88,7 @@ function destroyOldButton(src) {
       // for each removed node
       if (removedNodes && removedNodes.length > 0) {
         for (var j = 0; j < removedNodes.length; j++) {
+            console.log(removedNodes[j])
           // check if this removed node contains any nodes that are img (at any depth)
           var imgs = removedNodes[j].getElementsByTagName("img");
           if (imgs.length > 0) {
@@ -87,13 +103,14 @@ function destroyOldButton(src) {
           }
           // check if this removed node contains any nodes that are video (at any depth)
           var videos = removedNodes[j].getElementsByTagName("video");
+          console.log(videos)
           if (videos.length > 0) {
             // Loop through each video
             for (var k = 0; k < videos.length; k++) {
               // Check if the video src starts with blob
               if (videos[k].src.startsWith("blob")) {
                 // Remove the button
-                destroyOldButton(imgs[k].src);
+                destroyOldButton(videos[k].src);
               }
             }
           }
