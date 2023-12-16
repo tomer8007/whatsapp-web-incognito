@@ -3,7 +3,7 @@
 //
 
 function determineIfNodeIsStatus(node) {
-  // a correct status photo/img has the following parent classlists: 5, 0, 1, 5, 7, 3, 6
+  // a correct status photo/img has the following parent classlists: 5, 0, 1, 5
   // it's not a perfect solution
   if(node.parentElement.classList.length == 5){
     if(node.parentElement.parentElement.classList.length == 0){
