@@ -4,24 +4,20 @@
 
 function determineIfNodeIsStatus(node) {
   var isNodeStatus = false;
-  try{
   // is node a picture
   if(node.nodeName == "IMG"){
     // get the element 7 levels up
-    var parent = node.parentElement.parentElement.parentElement.parentElement.parentElement.parentElement.parentElement;
+    var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
   }else if(node.nodeName == "VIDEO"){
     // get the element 6 levels up
-    var parent = node.parentElement.parentElement.parentElement.parentElement.parentElement;
+    var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
   }
   // traverse the DOM to get the element with the data-icon "status-media-controls"
-  var child = parent.children[1].children[2].children[0].children[0].children[0].children[0].children[0]
-  // if the element has a data-icon of "status-media-controls-pause", then the orignal element is a status
-  if (child.getAttribute("data-icon") === "status-media-controls-pause") {
+  var child = parent?.children[1]?.children[2]?.children[0]?.children[0]?.children[0]?.children[0]?.children[0];
+  // if the element has a data-icon of "status-media-controls-pause", then the original element is a status
+  if (child?.getAttribute("data-icon") === "status-media-controls-pause") {
     isNodeStatus = true;
   }else{
-    isNodeStatus = false;
-  }
-  }catch(e){
     isNodeStatus = false;
   }
   return isNodeStatus;
