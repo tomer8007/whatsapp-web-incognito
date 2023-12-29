@@ -122,7 +122,7 @@ var observer = new MutationObserver(function (mutations) {
           // pass the element's old src to the handler
           handleSRCRemove(mutation.oldValue)
           // pass the element's new src to the handler
-          handleSRCAdd(mutation.target.src)
+          handleSRCAdd(mutation.target.src, mutation.target)
         }
       }
     }
