@@ -3,18 +3,28 @@
 //
 
 function determineIfNodeIsStatus(node) {
-  // a correct status photo/img has the following parent classlists: 5, 0, 1, 5
-  // it's not a perfect solution
-  if(node.parentElement.classList.length == 5){
-    if(node.parentElement.parentElement.classList.length == 0){
-      if(node.parentElement.parentElement.parentElement.classList.length == 1){
-        if(node.parentElement.parentElement.parentElement.parentElement.classList.length == 5){
-          return true
-        }
-      }
-    }
+  var isNodeStatus = false;
+  try{
+  // is node a picture
+  if(node.nodeName == "IMG"){
+    // get the element 7 levels up
+    var parent = node.parentElement.parentElement.parentElement.parentElement.parentElement.parentElement.parentElement;
+  }else if(node.nodeName == "VIDEO"){
+    // get the element 6 levels up
+    var parent = node.parentElement.parentElement.parentElement.parentElement.parentElement;
   }
-  return false
+  // traverse the DOM to get the element with the data-icon "status-media-controls"
+  var child = parent.children[1].children[2].children[0].children[0].children[0].children[0].children[0]
+  // if the element has a data-icon of "status-media-controls-pause", then the orignal element is a status
+  if (child.getAttribute("data-icon") === "status-media-controls-pause") {
+    isNodeStatus = true;
+  }else{
+    isNodeStatus = false;
+  }
+  }catch(e){
+    isNodeStatus = false;
+  }
+  return isNodeStatus;
 }
 
 function destroyOldButton(src) {
@@ -47,7 +57,6 @@ function createFailNotice(src){
   
   function createDownloadButton(src) {
     var a = document.createElement("a");
-  
     a.innerHTML =
       "<img src='" + chrome.runtime.getURL("images/download.svg") + "' >";
     a.className = "download-button-incognito";
@@ -105,6 +114,11 @@ var observer = new MutationObserver(function (mutations) {
       } else if (mutation.type == "attributes") {
         // if an attribute is changed, and it's the src attribute
         if (mutation.attributeName == "src") {
+          // check that the oldValue is different from the new value
+          if (mutation.oldValue == mutation.target.src) {
+            // if it's not, then the mutation is not a change in src
+            return;
+          }
           // pass the element's old src to the handler
           handleSRCRemove(mutation.oldValue)
           // pass the element's new src to the handler
