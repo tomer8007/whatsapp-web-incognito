@@ -88,9 +88,11 @@ function checkNodeAndChildrenForSRC(node, functionToCall){
     functionToCall(node.src, node)
   }
   // then check if the node has any children and check them, recursively
+  if(node.children !== undefined){
   if (node.children.length > 0) {
     for (var j = 0; j < node.children.length; j++) {
       checkNodeAndChildrenForSRC(node.children[j], functionToCall)
+      }
     }
   } 
 }
