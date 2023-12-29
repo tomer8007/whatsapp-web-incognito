@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 16.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+
+<svg
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   width="132px"
+   height="132px"
+   viewBox="0 0 132 132"
+   enable-background="new 0 0 132 132"
+   xml:space="preserve"
+   sodipodi:docname="download.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25, custom)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"><defs
+   id="defs3" /><sodipodi:namedview
+   id="namedview3"
+   pagecolor="#ffffff"
+   bordercolor="#000000"
+   borderopacity="0.25"
+   inkscape:showpageshadow="2"
+   inkscape:pageopacity="0.0"
+   inkscape:pagecheckerboard="0"
+   inkscape:deskcolor="#d1d1d1"
+   showgrid="false"
+   inkscape:zoom="2.9431818"
+   inkscape:cx="91.737452"
+   inkscape:cy="85.111969"
+   inkscape:window-width="1920"
+   inkscape:window-height="991"
+   inkscape:window-x="-9"
+   inkscape:window-y="-9"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<path
+   display="none"
+   fill="none"
+   d="M0,0v132h132V0H0z"
+   id="path1" />
+<g
+   id="g3"
+   transform="matrix(0.60409432,0,0,0.63053358,4.2323895,3.180076)">
+	<path
+   fill="#51585c"
+   d="m 122.872,77.806 c -6.086,-3.605 -21.22,1.165 -28.099,1.899 -17.806,1.903 -38.782,1.699 -56.648,-0.005 -7.119,-0.676 -20.42,-4.999 -27.05,-2.179 -5.424,2.307 -4.284,9.377 -3.368,13.923 2.485,12.329 5.696,25.17 16.781,32.477 7.323,4.826 20.652,10.759 29.374,6.393 4.509,-2.256 7.998,-9.253 13.638,-8.736 5.22,0.477 8.185,6.532 12.589,8.736 6.48,3.244 15.926,0.375 22.029,-2.402 14.84,-6.753 19.313,-18.25 22.711,-33.313 1.167,-5.164 3.843,-13.356 -1.957,-16.793 z M 43.958,112.453 C 32.452,113.031 20.688,95.85 36.581,95.34 c 4.755,-0.154 11.747,-0.339 15.473,3.097 6.312,5.823 -1.86,13.702 -8.096,14.016 z m 47.428,-0.011 c -6.143,-0.203 -14.761,-7.752 -8.85,-13.953 3.38,-3.544 10.682,-3.125 15.174,-3.153 16.093,-0.105 4.928,17.475 -6.324,17.106 z"
+   id="path2" />
+	<path
+   fill="#51585c"
+   d="M 107.362,49.392 C 106.345,36.917 102.341,23.635 99.091,11.545 97.853,6.947 95.873,1.566 90.573,0.535 82.01,-1.131 73.648,7.958 64.351,7.24 56.091,6.603 45.06,-3.934 37.49,2.77 27.78,11.368 29.917,33.575 25.261,45.128 22.727,51.418 -4.308,52.92 1.107,61.872 c 3.23,5.338 13.617,6.605 19.186,7.7 18.676,3.671 37.705,2.948 56.647,2.948 15.918,0 33.167,-0.733 48.256,-6.406 19.517,-7.338 -10.423,-16.115 -17.834,-16.722 z"
+   id="path3" />
+</g>
+<rect
+   style="fill:#000000;stroke-width:1.07247"
+   id="rect3"
+   width="20.386101"
+   height="98.872581"
+   x="80.86483"
+   y="8.1544409" /><rect
+   style="fill:#000000;stroke-width:1.69808"
+   id="rect4"
+   width="51.06041"
+   height="16.731661"
+   x="103.18507"
+   y="8.5119095"
+   transform="rotate(45)" /><rect
+   style="fill:#000000;stroke-width:1.69808"
+   id="rect4-2"
+   width="51.06041"
+   height="16.731661"
+   x="-25.832932"
+   y="137.515"
+   transform="matrix(-0.70710678,0.70710678,0.70710678,0.70710678,0,0)" /><text
+   xml:space="preserve"
+   style="font-size:17.9825px;fill:#000000;fill-opacity:1;stroke-width:1.49854"
+   x="7.4863496"
+   y="115.71925"
+   id="text5"
+   transform="scale(0.95349436,1.0487739)"><tspan
+     sodipodi:role="line"
+     id="tspan5"
+     x="7.4863496"
+     y="115.71925"
+     style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Verdana;-inkscape-font-specification:'Verdana Bold';stroke-width:1.49854">Status</tspan></text></svg>
