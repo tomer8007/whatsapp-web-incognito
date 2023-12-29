@@ -48,7 +48,7 @@ function destroyOldButton(src) {
 
 function createFailNotice(src){
     var a = document.createElement("div");
-    a.innerHTML = "Download not found, reopen the status to try again";
+    a.innerHTML = "Please re-open the status to download.";
     a.className = "download-button-incognito";
     a.id = "status-download-fail-button";
     a.download = "failstatus";
