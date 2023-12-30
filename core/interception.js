@@ -454,6 +454,31 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
         if (!isAllowed) break;
     }
 
+    if(encNodes[0].viewOnceMessageV2 !== null)
+    {
+        console.log(encNodes[0].viewOnceMessageV2)
+        var retrievedMsg = {}
+        var type = ""
+        if(encNodes[0].viewOnceMessageV2.message.imageMessage !== null){
+            retrievedMsg = encNodes[0].viewOnceMessageV2.message.imageMessage
+            type = "image"
+        }else if(encNodes[0].viewOnceMessageV2.message.videoMessage !== null){
+            retrievedMsg = encNodes[0].viewOnceMessageV2.message.videoMessage
+            type = "video"
+        }else{
+            throw new Error("Unknown viewOnceMessageV2 type")
+        }
+        const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
+        const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
+        const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
+        const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: retrievedMsg.directPath, 
+            encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded, 
+            type: type, signal: (new AbortController).signal });
+        body = arrayBufferToBase64(decryptedData);
+        dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body
+        console.log(dataURI)
+    }
+
     if (WAdebugMode && encNodes.length > 0)
     {
         console.log("Got messages:");
