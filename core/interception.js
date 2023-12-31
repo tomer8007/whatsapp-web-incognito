@@ -454,8 +454,6 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
         if (!isAllowed) break;
     }
 
-    await interceptViewOnceMessages(encNodes, messageId);
-
     if (WAdebugMode && encNodes.length > 0)
     {
         console.log("Got messages:");
@@ -487,6 +485,7 @@ NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, isMultiDev
     }
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
+    interceptViewOnceMessages(encNodes, messageId);
 
     if (!saveDeletedMsgsHookEnabled)
     {
