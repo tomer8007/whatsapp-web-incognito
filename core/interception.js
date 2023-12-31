@@ -456,7 +456,6 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
 
     if(encNodes[0].viewOnceMessageV2 !== null)
     {
-        console.log(encNodes[0].viewOnceMessageV2)
         var retrievedMsg = {}
         var type = ""
         if(encNodes[0].viewOnceMessageV2.message.imageMessage !== null){
@@ -476,7 +475,35 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
             type: type, signal: (new AbortController).signal });
         body = arrayBufferToBase64(decryptedData);
         dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body
-        console.log(dataURI)
+        // store in indexedDB called "view-once" messageID and dataURI 
+        var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
+        viewOnceDBOpenRequest.onupgradeneeded = function (event){
+            const db = event.target.result;
+            var store = db.createObjectStore('msgs', { keyPath: 'id' });
+            if(WAdebugMode){
+                console.log('WhatsIncognito: Deleted messages database generated');
+            }
+            store.createIndex("id_index", "id");
+        }
+        viewOnceDBOpenRequest.onerror = function (e){
+            console.error("WhatsIncognito: Error opening database");
+            console.error("Error", viewOnceDBOpenRequest);
+            console.error(e);
+        }
+        viewOnceDBOpenRequest.onsuccess = () =>{
+            var viewOnceDB = viewOnceDBOpenRequest.result;
+            var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
+            var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({id: messageId, dataURI: dataURI});
+            viewOnceRequest.onerror = (e) => {
+                if (viewOnceRequest.error.name == "ConstraintError"){
+                    if(WAdebugMode){
+                        console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
+                    }
+                }else{
+                    console.warn("WhatsIncognito: Unexpected error saving deleted message");
+                }
+            }
+        }
     }
 
     if (WAdebugMode && encNodes.length > 0)

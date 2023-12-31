@@ -604,6 +604,69 @@ function onNewMessageNodeAdded(messageNode)
         debugger;
     var msgID = data_id.split("_")[2];
 
+    // check if there are any view-once messages for this message ID
+    // open viewOnce indexedDB
+    try{
+    var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
+    viewOnceDBOpenRequest.onupgradeneeded = function (event){
+        const db = event.target.result;
+        var store = db.createObjectStore('msgs', { keyPath: 'id' });
+        if(WAdebugMode){
+            console.log('WhatsIncognito: Created viewOnce database');
+        }
+        store.createIndex("id_index", "id");
+    }
+    viewOnceDBOpenRequest.onsuccess = function() {
+        var viewOnceDB = viewOnceDBOpenRequest.result;
+        var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
+        keys.onsuccess = () => {
+            keys.result.forEach((value) => {
+                if (value.id == msgID) {
+                    // we found a view-once message for this message ID
+                    // mark the message node as view-once
+                    // get the place that we want to place the link
+                    // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
+                    var viewOnceExplanation = null
+                    // find all div elements in the message node
+                    var aElements = messageNode.getElementsByTagName("a")
+                    // loop through
+                    for (var i = 0; i < aElements.length; i++) {
+                        // if the innerHtml contains "added privacy"
+                        if (aElements[i].innerHTML.includes("earn mor")) {
+                            // set the viewOnceExplanation to the div
+                            viewOnceExplanation = aElements[i].parentElement
+                        }
+                    }
+                    // set innerHTML to empty
+                    viewOnceExplanation.innerHTML = "";
+                    // if value.dataURI starts with "data:image"
+                    if (value.dataURI.startsWith("data:image")) {
+                        // create an image elemnt
+                        var img = document.createElement("img");
+                        // set the source to the value.dataURI
+                        img.src = value.dataURI;
+                        // set the width to 100%
+                        img.style.cssText = "width: 100%;";
+                        // append the image to the viewOnceExplanation
+                        viewOnceExplanation.appendChild(img);
+                    }else if (value.dataURI.startsWith("data:video")) {
+                        // create a video element
+                        var video = document.createElement("video");
+                        // set the controls to true
+                        video.controls = true;
+                        video.src = value.dataURI;
+                        // append the video to the viewOnceExplanation
+                        viewOnceExplanation.appendChild(video);
+                    }
+                }
+            });
+        };
+    };
+
+    }catch(e){
+        alert(e)
+    }
+
     restoreDeletedMessageIfNeeded(messageNode, msgID);
 
     markMessageNodeDeviceIfPossible(messageNode, msgID);
