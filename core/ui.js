@@ -606,14 +606,14 @@ function onNewMessageNodeAdded(messageNode)
 
     // check if there are any view-once messages for this message ID
     // open viewOnce indexedDB
-    saveViewOnceToIndexedDBIfNecessary(msgID, messageNode);
+    checkIfMessageIDIsInViewOnceDB(msgID, messageNode);
 
     restoreDeletedMessageIfNeeded(messageNode, msgID);
 
     markMessageNodeDeviceIfPossible(messageNode, msgID);
 }
 
-function saveViewOnceToIndexedDBIfNecessary(msgID, messageNode) 
+function checkIfMessageIDIsInViewOnceDB(msgID, messageNode) 
 {
     var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
     viewOnceDBOpenRequest.onupgradeneeded = function (event) {
