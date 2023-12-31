@@ -606,17 +606,25 @@ function onNewMessageNodeAdded(messageNode)
 
     // check if there are any view-once messages for this message ID
     // open viewOnce indexedDB
-    try{
+    saveViewOnceToIndexedDBIfNecessary(msgID, messageNode);
+
+    restoreDeletedMessageIfNeeded(messageNode, msgID);
+
+    markMessageNodeDeviceIfPossible(messageNode, msgID);
+}
+
+function saveViewOnceToIndexedDBIfNecessary(msgID, messageNode) 
+{
     var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
-    viewOnceDBOpenRequest.onupgradeneeded = function (event){
+    viewOnceDBOpenRequest.onupgradeneeded = function (event) {
         const db = event.target.result;
         var store = db.createObjectStore('msgs', { keyPath: 'id' });
-        if(WAdebugMode){
+        if (WAdebugMode) {
             console.log('WhatsIncognito: Created viewOnce database');
         }
         store.createIndex("id_index", "id");
-    }
-    viewOnceDBOpenRequest.onsuccess = function() {
+    };
+    viewOnceDBOpenRequest.onsuccess = function () {
         var viewOnceDB = viewOnceDBOpenRequest.result;
         var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
@@ -626,15 +634,15 @@ function onNewMessageNodeAdded(messageNode)
                     // mark the message node as view-once
                     // get the place that we want to place the link
                     // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
-                    var viewOnceExplanation = null
+                    var viewOnceExplanation = null;
                     // find all div elements in the message node
-                    var aElements = messageNode.getElementsByTagName("a")
+                    var aElements = messageNode.getElementsByTagName("a");
                     // loop through
                     for (var i = 0; i < aElements.length; i++) {
-                        // if the innerHtml contains "added privacy"
-                        if (aElements[i].innerHTML.includes("earn mor")) {
-                            // set the viewOnceExplanation to the div
-                            viewOnceExplanation = aElements[i].parentElement
+                        // if the innerHtml indicates it's the "Learn more" link
+                        if (aElements[i].innerHTML.includes("Learn more")) {
+                            // set the viewOnceExplanation to the parent div
+                            viewOnceExplanation = aElements[i].parentElement;
                         }
                     }
                     // set innerHTML to empty
@@ -649,7 +657,7 @@ function onNewMessageNodeAdded(messageNode)
                         img.style.cssText = "width: 100%;";
                         // append the image to the viewOnceExplanation
                         viewOnceExplanation.appendChild(img);
-                    }else if (value.dataURI.startsWith("data:video")) {
+                    } else if (value.dataURI.startsWith("data:video")) {
                         // create a video element
                         var video = document.createElement("video");
                         // set the controls to true
@@ -662,14 +670,6 @@ function onNewMessageNodeAdded(messageNode)
             });
         };
     };
-
-    }catch(e){
-        alert(e)
-    }
-
-    restoreDeletedMessageIfNeeded(messageNode, msgID);
-
-    markMessageNodeDeviceIfPossible(messageNode, msgID);
 }
 
 // This function gets called on every new message node that gets added to the screen,
