@@ -665,9 +665,19 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                         video.src = value.dataURI;
                         // append the video to the viewOnceExplanation
                         viewOnceExplanation.appendChild(video);
+                    } else if (value.dataURI.startsWith("data:audio")) {
+                        // create an audio element
+                        var audio = document.createElement("audio");
+                        // set the controls to true
+                        audio.controls = true;
+                        audio.src = value.dataURI;
+                        // append the audio to the viewOnceExplanation
+                        viewOnceExplanation.appendChild(audio);
                     }
                     // add a learn more link below that opens a sweetalert
                     var learnMore = document.createElement("a");
+                    // give it the class of incognito-view-once-learn-more so styles can be applied
+                    learnMore.className = "incognito-view-once-learn-more";
                     learnMore.href = "#";
                     learnMore.innerHTML = "Sent as view once: Learn more";
                     learnMore.addEventListener("click", function () {
