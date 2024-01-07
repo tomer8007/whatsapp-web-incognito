@@ -666,6 +666,23 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                         // append the video to the viewOnceExplanation
                         viewOnceExplanation.appendChild(video);
                     }
+                    // add a learn more link below that opens a sweetalert
+                    var learnMore = document.createElement("a");
+                    learnMore.href = "#";
+                    learnMore.innerHTML = "Sent as view once: Learn more";
+                    learnMore.addEventListener("click", function () {
+                        Swal.fire({
+                            title: "View-once message",
+                            html: 'This message was sent as a view-once. \
+                            <br><br> Note that the recipient\'s device will show this as unopened \
+                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+                            icon: "info",
+                            width: 600,
+                            confirmButtonColor: "#000",
+                            confirmButtonText: "Got it",
+                        });
+                    });
+                    viewOnceExplanation.appendChild(learnMore);
                 }
             });
         };
