@@ -580,6 +580,7 @@ async function interceptViewOnceMessages(encNodes, messageId)
 
             body = arrayBufferToBase64(decryptedData);
             dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
+            var caption = retrievedMsg.caption;
             // store in indexedDB called "view-once" messageID and dataURI 
             var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
             viewOnceDBOpenRequest.onupgradeneeded = function (event) {
@@ -598,7 +599,7 @@ async function interceptViewOnceMessages(encNodes, messageId)
             viewOnceDBOpenRequest.onsuccess = () => {
                 var viewOnceDB = viewOnceDBOpenRequest.result;
                 var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
-                var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI });
+                var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI, caption});
                 viewOnceRequest.onerror = (e) => {
                     if (viewOnceRequest.error.name == "ConstraintError") {
                         if (WAdebugMode) {

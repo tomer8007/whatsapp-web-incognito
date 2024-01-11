@@ -674,6 +674,17 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                         // append the audio to the viewOnceExplanation
                         viewOnceExplanation.appendChild(audio);
                     }
+
+                    // check if there is a caption stored and render it
+                    if(value.caption != null){
+                        var textSpan = document.createElement("span");
+                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+                        textSpan.style.cssText = textSpanStyle;
+                        textSpan.className = "copyable-text selectable-text";
+                        textSpan.textContent = value.caption;
+                        viewOnceExplanation.appendChild(textSpan);
+                    }
+
                     // add a learn more link below that opens a sweetalert
                     var learnMore = document.createElement("a");
                     // give it the class of incognito-view-once-learn-more so styles can be applied
