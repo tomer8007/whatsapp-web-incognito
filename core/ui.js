@@ -665,7 +665,45 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                         video.src = value.dataURI;
                         // append the video to the viewOnceExplanation
                         viewOnceExplanation.appendChild(video);
+                    } else if (value.dataURI.startsWith("data:audio")) {
+                        // create an audio element
+                        var audio = document.createElement("audio");
+                        // set the controls to true
+                        audio.controls = true;
+                        audio.src = value.dataURI;
+                        // append the audio to the viewOnceExplanation
+                        viewOnceExplanation.appendChild(audio);
                     }
+
+                    // check if there is a caption stored and render it
+                    if(value.caption != null){
+                        var textSpan = document.createElement("span");
+                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+                        textSpan.style.cssText = textSpanStyle;
+                        textSpan.className = "copyable-text selectable-text";
+                        textSpan.textContent = value.caption;
+                        viewOnceExplanation.appendChild(textSpan);
+                    }
+
+                    // add a learn more link below that opens a sweetalert
+                    var learnMore = document.createElement("a");
+                    // give it the class of incognito-view-once-learn-more so styles can be applied
+                    learnMore.className = "incognito-view-once-learn-more";
+                    learnMore.href = "#";
+                    learnMore.innerHTML = "Sent as view once: Learn more";
+                    learnMore.addEventListener("click", function () {
+                        Swal.fire({
+                            title: "View-once message",
+                            html: 'This message was sent as a view-once. \
+                            <br><br> Note that the recipient\'s device will show this as unopened \
+                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+                            icon: "info",
+                            width: 600,
+                            confirmButtonColor: "#000",
+                            confirmButtonText: "Got it",
+                        });
+                    });
+                    viewOnceExplanation.appendChild(learnMore);
                 }
             });
         };

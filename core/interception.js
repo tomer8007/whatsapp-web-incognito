@@ -465,7 +465,7 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
     return isAllowed;
 }
 
-NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, isMultiDevice, encNodes, messageNodes)
+NodeHandler.onE2EMessageNodeReceived = async function(currentNode, message, isMultiDevice, encNodes, messageNodes)
 {
     var isAllowed = true;
     var remoteJid = null;
@@ -487,7 +487,7 @@ NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, isMultiDev
     }
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
-    interceptViewOnceMessages(encNodes, messageId);
+    await interceptViewOnceMessages(encNodes, messageId);
 
     if (!saveDeletedMsgsHookEnabled)
     {
@@ -538,71 +538,91 @@ NodeHandler.manipulateReceivedNode = async function (node)
 
 async function interceptViewOnceMessages(encNodes, messageId) 
 {
-    if (encNodes[0].viewOnceMessageV2 !== null) 
+    if (encNodes[0].viewOnceMessageV2 !== null || encNodes[0].viewOnceMessageV2Extension !== null) 
     {
         var retrievedMsg = {};
         var type = "";
-        if (encNodes[0].viewOnceMessageV2.message.imageMessage !== null) 
+        if(encNodes[0].viewOnceMessageV2 !== null)
         {
-            retrievedMsg = encNodes[0].viewOnceMessageV2.message.imageMessage;
-            type = "image";
+            if (encNodes[0].viewOnceMessageV2.message.imageMessage !== null) 
+            {
+                retrievedMsg = encNodes[0].viewOnceMessageV2.message.imageMessage;
+                type = "image";
+            }
+            else if (encNodes[0].viewOnceMessageV2.message.videoMessage !== null) 
+            {
+                retrievedMsg = encNodes[0].viewOnceMessageV2.message.videoMessage;
+                type = "video";
+            }
+            else
+            {
+                throw new Error("Unknown viewOnceMessageV2 type");
+            }
         }
-        else if (encNodes[0].viewOnceMessageV2.message.videoMessage !== null) 
+        else if (encNodes[0].viewOnceMessageV2Extension?.message?.audioMessage !== null) 
         {
-            retrievedMsg = encNodes[0].viewOnceMessageV2.message.videoMessage;
-            type = "video";
+            retrievedMsg = encNodes[0].viewOnceMessageV2Extension.message.audioMessage;
+            type = "audio";
         }
         else 
         {
-            throw new Error("Unknown viewOnceMessageV2 type");
+            throw new Error("Unknown viewOnceMessageV2 or viewOnceMessageV2Extension type");
         }
-
         const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
         const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
         const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
+        
+        if(window.WhatsAppAPI !== undefined)
+        {
+            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
+                directPath: retrievedMsg.directPath,
+                encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
+                type: type, signal: (new AbortController).signal
+            });
 
-        const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
-            directPath: retrievedMsg.directPath,
-            encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
-            type: type, signal: (new AbortController).signal
-        });
-
-        body = arrayBufferToBase64(decryptedData);
-        dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
-        // store in indexedDB called "view-once" messageID and dataURI 
-        var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
-        viewOnceDBOpenRequest.onupgradeneeded = function (event) 
-        {
-            const db = event.target.result;
-            var store = db.createObjectStore('msgs', { keyPath: 'id' });
-            if (WAdebugMode) {
-                console.log('WhatsIncognito: Deleted messages database generated');
-            }
-            store.createIndex("id_index", "id");
-        };
-        viewOnceDBOpenRequest.onerror = function (e) 
-        {
-            console.error("WhatsIncognito: Error opening database");
-            console.error("Error", viewOnceDBOpenRequest);
-            console.error(e);
-        };
-        viewOnceDBOpenRequest.onsuccess = () => 
-        {
-            var viewOnceDB = viewOnceDBOpenRequest.result;
-            var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
-            var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI });
-            viewOnceRequest.onerror = (e) => {
-                if (viewOnceRequest.error.name == "ConstraintError") {
-                    if (WAdebugMode) {
-                        console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-                    }
+            body = arrayBufferToBase64(decryptedData);
+            dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
+            var caption = retrievedMsg.caption;
+            // store in indexedDB called "view-once" messageID and dataURI 
+            var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
+            viewOnceDBOpenRequest.onupgradeneeded = function (event) {
+                const db = event.target.result;
+                var store = db.createObjectStore('msgs', { keyPath: 'id' });
+                if (WAdebugMode) {
+                    console.log('WhatsIncognito: Deleted messages database generated');
                 }
-
-                else {
-                    console.warn("WhatsIncognito: Unexpected error saving deleted message");
-                }
+                store.createIndex("id_index", "id");
             };
-        };
+            viewOnceDBOpenRequest.onerror = function (e) {
+                console.error("WhatsIncognito: Error opening database");
+                console.error("Error", viewOnceDBOpenRequest);
+                console.error(e);
+            };
+            viewOnceDBOpenRequest.onsuccess = () => {
+                var viewOnceDB = viewOnceDBOpenRequest.result;
+                var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
+                var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI, caption});
+                viewOnceRequest.onerror = (e) => {
+                    if (viewOnceRequest.error.name == "ConstraintError") {
+                        if (WAdebugMode) {
+                            console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
+                        }
+                    }
+
+                    else {
+                        console.warn("WhatsIncognito: Unexpected error saving deleted message");
+                    }
+                };
+            };
+        }
+        else
+        {
+            // retry in 5 seconds
+            // don't know why it's 5 seconds, but that's what is done for decrypting deleted messages 
+            setTimeout(function(){
+                interceptViewOnceMessages(encNodes, messageId)
+            }, 5000);
+        }
     }
 }
 
