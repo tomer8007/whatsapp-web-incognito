@@ -531,25 +531,29 @@ NodeHandler.manipulateReceivedNode = async function (node)
 {
     var messages = [];
     var children = node.content;
-    var type = node.attrs["type"];
+    // var type = node.attrs["type"]; // TODO: fix cannot read properties of undefined (reading 'type')
 
     return node;
 }
 
-async function interceptViewOnceMessages(encNodes, messageId) {
-    if (encNodes[0].viewOnceMessageV2 !== null) {
+async function interceptViewOnceMessages(encNodes, messageId) 
+{
+    if (encNodes[0].viewOnceMessageV2 !== null) 
+    {
         var retrievedMsg = {};
         var type = "";
-        if (encNodes[0].viewOnceMessageV2.message.imageMessage !== null) {
+        if (encNodes[0].viewOnceMessageV2.message.imageMessage !== null) 
+        {
             retrievedMsg = encNodes[0].viewOnceMessageV2.message.imageMessage;
             type = "image";
         }
-        else if (encNodes[0].viewOnceMessageV2.message.videoMessage !== null) {
+        else if (encNodes[0].viewOnceMessageV2.message.videoMessage !== null) 
+        {
             retrievedMsg = encNodes[0].viewOnceMessageV2.message.videoMessage;
             type = "video";
         }
-
-        else {
+        else 
+        {
             throw new Error("Unknown viewOnceMessageV2 type");
         }
 
@@ -567,7 +571,8 @@ async function interceptViewOnceMessages(encNodes, messageId) {
         dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
         // store in indexedDB called "view-once" messageID and dataURI 
         var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
-        viewOnceDBOpenRequest.onupgradeneeded = function (event) {
+        viewOnceDBOpenRequest.onupgradeneeded = function (event) 
+        {
             const db = event.target.result;
             var store = db.createObjectStore('msgs', { keyPath: 'id' });
             if (WAdebugMode) {
@@ -575,12 +580,14 @@ async function interceptViewOnceMessages(encNodes, messageId) {
             }
             store.createIndex("id_index", "id");
         };
-        viewOnceDBOpenRequest.onerror = function (e) {
+        viewOnceDBOpenRequest.onerror = function (e) 
+        {
             console.error("WhatsIncognito: Error opening database");
             console.error("Error", viewOnceDBOpenRequest);
             console.error(e);
         };
-        viewOnceDBOpenRequest.onsuccess = () => {
+        viewOnceDBOpenRequest.onsuccess = () => 
+        {
             var viewOnceDB = viewOnceDBOpenRequest.result;
             var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
             var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI });
