@@ -325,25 +325,8 @@ NodeHandler.onSentNode = async function (node)
                         }
                     }
                 }
-
-                }
-                
             }
-            else if (node.tag == "action")
-            {
-                // non-multi device
 
-                var participants = node.content;
-                for (var j = 0; j < participants.length; j++)
-                {
-                    var child = participants[j];
-                    if (child.tag == "message")
-                    {
-                        var messageNode = await this.onSentMessageNode(child, isMultiDevice);
-                        participants[j] = messageNode;
-                    }
-                }
-            }
         }
         
     }
