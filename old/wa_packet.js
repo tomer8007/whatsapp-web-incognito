@@ -36,7 +36,7 @@ WAPacket.prototype =
         return this.binaryOpts ? this.binaryOpts.debugString : Array.isArray(e) ? 0 === e.length ? "[]" : 1 === e.length ? "[" + e[0] + "]" : "query" === e[0] || "action" === e[0] ? "[" + e[0] + ", " + e[1] + (e.length > 2 ? ", ..." : "") + "]" : void 0 : Object.isObject(e) ? "{...}" : "" + e
     },
     serialize: function() {
-        // multi device
+        // multi device, Noise protocol
         var binaryReader = new BinaryReader();
         
         var size = this.data.byteLength;

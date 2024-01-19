@@ -84,7 +84,7 @@ wsHook.before = function (originalData, url)
             }
         }
 
-        var packedNode = await WACrypto.packNodesForSending(decryptedFrames, false);
+        var packedNode = await WACrypto.packNodesForSending(decryptedFrames, isIncoming=false);
 
         // TODO: compare the original `originalData` with `packet`
         if (WAdebugMode && isAllowed)

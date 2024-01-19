@@ -65,9 +65,20 @@ WACrypto.packNodesForSending = async function(nodesInfo, isIncoming = false)
         nodePacker.writeNode(nodeBinaryWriter, node);
         var nodeBuffer = nodeBinaryWriter.toBuffer();
 
-        var data = await WACrypto.encryptWithWebCrypto(nodeBuffer, isIncoming, counter);
-        var frame = new WAPacket({"data": data});
-        packetBinaryWriter.pushBytes(frame.serialize());
+        var data = await MultiDevice.encryptPacket(nodeBuffer, isIncoming, counter);
+
+        // Serialize to Noise protocol
+        var binaryReader = new BinaryReader();
+        
+        var size = data.byteLength;
+        binaryReader.writeUint8(size >> 16);
+        binaryReader.writeUint16(65535 & size);
+        binaryReader.write(data);
+
+        binaryReader._readIndex = 0;
+        var serializedPacket =  binaryReader.readBuffer();
+
+        packetBinaryWriter.pushBytes(serializedPacket);
     }
 
     return packetBinaryWriter.toBuffer();
