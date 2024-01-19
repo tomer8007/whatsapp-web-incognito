@@ -437,6 +437,8 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
 
 NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, isMultiDevice)
 {
+    var isAllowed = true;
+
     var messageId = currentNode.attrs["id"];
     var remoteJid = currentNode.attrs["from"];
     var participant = currentNode.attrs["participant"];
@@ -529,7 +531,7 @@ NodeHandler.manipulateReceivedNode = async function (node)
 {
     var messages = [];
     var children = node.content;
-    var type = node.attrs["type"];
+    // var type = node.attrs["type"]; // TODO: fix cannot read properties of undefined (reading 'type')
 
     return node;
 }
