@@ -10,7 +10,6 @@ if (chrome != undefined)
 initialize();
 
 var isInterceptionWorking = false;
-var isMultiDevice = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var pseudoMsgsIDs = new Set();
@@ -201,11 +200,9 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = isMultiDevice ? "Will prevent you from seeing other people's last seen and typing status" : 
-                                          "Blocks outgoing presence updates.";
+    var presenceCaption = "Will prevent you from seeing other people's last seen and typing status";
     var deletedMessagesTitle = "Restore deleted messages";
-    var deletedMessagesCaption = isMultiDevice ? "Marks deleted messages in red" : 
-                                                 "Saves deleted messages and restores them later.";
+    var deletedMessagesCaption = "Marks deleted messages in red";
 
     var showDeviceTypeTitle = "Show device of messages";
     var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
@@ -342,7 +339,6 @@ document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
-    isMultiDevice = data.isMultiDevice;
 
     // populate pseudoMsgsIDs
     var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
@@ -351,10 +347,12 @@ document.addEventListener('onInterceptionWorking', function (e)
         var deletedMsgsDB = deletedDBOpenRequest.result;
         var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => {
+            keys.result.forEach((value) => 
+            {
                 pseudoMsgsIDs.add(value.originalID);
             });
-            document.addEventListener("pseudoMsgs", (e) => {
+            document.addEventListener("pseudoMsgs", (e) => 
+            {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
@@ -616,20 +614,23 @@ function onNewMessageNodeAdded(messageNode)
 function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
 {
     var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
-    viewOnceDBOpenRequest.onupgradeneeded = function (event) {
+    viewOnceDBOpenRequest.onupgradeneeded = function (event) 
+    {
         const db = event.target.result;
         var store = db.createObjectStore('msgs', { keyPath: 'id' });
-        if (WAdebugMode) {
-            console.log('WhatsIncognito: Created viewOnce database');
-        }
+        console.log('WhatsIncognito: Created viewOnce database.');
         store.createIndex("id_index", "id");
     };
-    viewOnceDBOpenRequest.onsuccess = function () {
+
+    viewOnceDBOpenRequest.onsuccess = function () 
+    {
         var viewOnceDB = viewOnceDBOpenRequest.result;
         var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => {
-                if (value.id == msgID) {
+            keys.result.forEach((value) => 
+            {
+                if (value.id == msgID) 
+                {
                     // we found a view-once message for this message ID
                     // mark the message node as view-once
                     // get the place that we want to place the link
@@ -638,9 +639,11 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                     // find all div elements in the message node
                     var aElements = messageNode.getElementsByTagName("a");
                     // loop through
-                    for (var i = 0; i < aElements.length; i++) {
+                    for (var i = 0; i < aElements.length; i++) 
+                    {
                         // if the innerHtml indicates it's the "Learn more" link
-                        if (aElements[i].innerHTML.includes("Learn more")) {
+                        if (aElements[i].innerHTML.includes("Learn more")) 
+                        {
                             // set the viewOnceExplanation to the parent div
                             viewOnceExplanation = aElements[i].parentElement;
                         }
@@ -648,7 +651,8 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                     // set innerHTML to empty
                     viewOnceExplanation.innerHTML = "";
                     // if value.dataURI starts with "data:image"
-                    if (value.dataURI.startsWith("data:image")) {
+                    if (value.dataURI.startsWith("data:image")) 
+                    {
                         // create an image elemnt
                         var img = document.createElement("img");
                         // set the source to the value.dataURI
@@ -657,7 +661,9 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                         img.style.cssText = "width: 100%;";
                         // append the image to the viewOnceExplanation
                         viewOnceExplanation.appendChild(img);
-                    } else if (value.dataURI.startsWith("data:video")) {
+                    } 
+                    else if (value.dataURI.startsWith("data:video")) 
+                    {
                         // create a video element
                         var video = document.createElement("video");
                         // set the controls to true

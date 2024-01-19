@@ -52,12 +52,6 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     var binaryReader = new BinaryReader();
     binaryReader.writeBuffer(payload);
     binaryReader._readIndex = 0;
-    
-    var multipleFrames = false;
-    if (MultiDevice.sizeOfPacket(payload) != payload.byteLength - 3)
-    {
-        multipleFrames = true;
-    }
 
     var frames = [];
     while (binaryReader._readIndex + 3 < payload.byteLength)

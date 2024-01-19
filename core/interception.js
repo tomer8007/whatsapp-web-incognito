@@ -36,62 +36,66 @@ wsHook.before = function (originalData, url)
 
     try
     {
-        var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
+        data = originalData;
 
-        var {tag, data} = isMultiDevice ? {tag: "", data: originalData} : WACrypto.parseWebSocketPayload(originalData);
-
-        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
-        {
-            // encrytped binary payload
-            var decryptedFrames = await WACrypto.decryptWithWebCrypto(data, isMultiDevice, false);
-            if (decryptedFrames == null) return originalData;
-
-            for (var i = 0; i < decryptedFrames.length; i++)
-            {
-                var decryptedFrameInfo = decryptedFrames[i];
-                var decryptedFrame = decryptedFrameInfo.frame;
-                var counter = decryptedFrameInfo.counter;
-
-                var nodeParser = new NodeParser(isMultiDevice);
-                var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
-
-                if (isInitializing)
-                {
-                    isInitializing = false;
-                    console.log("WhatsIncognito: Interception is working.");
-                    document.dispatchEvent(new CustomEvent('onInterceptionWorking', 
-                            { detail: JSON.stringify({isInterceptionWorking: true, isMultiDevice: isMultiDevice}) }));
-                }
-
-                var isAllowed = NodeHandler.isSentNodeAllowed(node, tag);
-                var manipulatedNode = structuredClone(node);
-                if (!isAllowed)
-                {
-                    if (!isMultiDevice) return null;
-                    manipulatedNode.tag = "blocked_node";
-                }
-
-                manipulatedNode = await NodeHandler.onSentNode(manipulatedNode, isMultiDevice);
-                decryptedFrames[i] = {node: manipulatedNode, counter: counter};
-
-                if (WAdebugMode || WAPassthroughWithDebug)
-                {
-                    printNode(manipulatedNode, isIncoming=false, tag, decryptedFrame);
-                    if (WAPassthroughWithDebug) return originalData;
-                }
-            }
-
-            var packedNode = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, false, tag);
-
-            return packedNode;
-        }
-        else
+        if (!(data instanceof ArrayBuffer || data instanceof Uint8Array))
         {
             // textual payload
-            if (WAdebugMode) console.log("[Out] Sending message with tag '" + tag + "':");
+            if (WAdebugMode) console.log("[Out] Sending message:");
             if (data != "" && WAdebugMode) console.log(data);
             return originalData;
         }
+
+        // encrytped binary payload
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(data, isIncoming=false);
+        if (decryptedFrames == null) return originalData;
+
+        for (var i = 0; i < decryptedFrames.length; i++)
+        {
+            var decryptedFrameInfo = decryptedFrames[i];
+            var decryptedFrame = decryptedFrameInfo.frame;
+            var counter = decryptedFrameInfo.counter;
+
+            var nodeParser = new NodeParser();
+            var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+
+            if (isInitializing)
+            {
+                isInitializing = false;
+                console.log("WhatsIncognito: Interception is working.");
+                document.dispatchEvent(new CustomEvent('onInterceptionWorking', 
+                        { detail: JSON.stringify({isInterceptionWorking: true}) }));
+            }
+
+            var isAllowed = NodeHandler.isSentNodeAllowed(node);
+            var manipulatedNode = structuredClone(node);
+            if (!isAllowed)
+            {
+                manipulatedNode.tag = "blocked_node";
+            }
+
+            manipulatedNode = await NodeHandler.onSentNode(manipulatedNode);
+            decryptedFrames[i] = {node: manipulatedNode, counter: counter};
+
+            if (WAdebugMode || WAPassthroughWithDebug)
+            {
+                printNode(manipulatedNode, isIncoming=false, decryptedFrame);
+                if (WAPassthroughWithDebug) return originalData;
+            }
+        }
+
+        var packedNode = await WACrypto.packNodesForSending(decryptedFrames, false);
+
+        // TODO: compare the original `originalData` with `packet`
+        if (WAdebugMode && isAllowed)
+        {
+            console.log("original data:");
+            console.log(originalData);
+            console.log("re-built data:");
+            console.log(packedNode);
+        }
+
+        return packedNode;
     }
     catch (exception)
     {
@@ -108,9 +112,7 @@ wsHook.before = function (originalData, url)
 
     };
 
-    var isMultiDevice = !WACrypto.isTagBasedPayload(originalData);
-
-    return isMultiDevice ? MultiDevice.enqueuePromise(promise, originalData, false) : promise(originalData);
+    return MultiDevice.enqueuePromise(promise, originalData, false);
 }
 
 //
@@ -124,64 +126,61 @@ wsHook.after = function (messageEvent, url)
 
     try
     {
-        var isMultiDevice = !WACrypto.isTagBasedPayload(messageEvent.data);
+        data = messageEvent.data;
 
-        var {tag, data} = isMultiDevice ? {tag: "", data: messageEvent.data} : WACrypto.parseWebSocketPayload(messageEvent.data);
-
-        if (data instanceof ArrayBuffer || data instanceof Uint8Array)
+        if (!(data instanceof ArrayBuffer || data instanceof Uint8Array))
         {
-            var decryptedFrames = await WACrypto.decryptWithWebCrypto(data, isMultiDevice, true);
-            if (decryptedFrames == null) return messageEvent;
+             // textual payload
+             if (WAdebugMode) console.log("[In] Received message ");
+             if (data != "" && WAdebugMode)
+                 console.log(data);
+ 
+             return messageEvent;
+        }
 
-            var didBlockNode = false;
-            for (var i = 0; i < decryptedFrames.length; i++)
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(data, isIncoming=true);
+        if (decryptedFrames == null) return messageEvent;
+
+        var didBlockNode = false;
+        for (var i = 0; i < decryptedFrames.length; i++)
+        {
+            var decryptedFrameInfo = decryptedFrames[i];
+            var decryptedFrame = decryptedFrameInfo.frame;
+            var counter = decryptedFrameInfo.counter;
+
+            var nodeParser = new NodeParser();
+            var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+            
+            if (WAdebugMode || WAPassthroughWithDebug)
             {
-                var decryptedFrameInfo = decryptedFrames[i];
-                var decryptedFrame = decryptedFrameInfo.frame;
-                var counter = decryptedFrameInfo.counter;
-
-                var nodeParser = new NodeParser(isMultiDevice);
-                var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+                printNode(node, isIncoming=true, decryptedFrame);
                 
-                if (WAdebugMode || WAPassthroughWithDebug)
-                {
-                    printNode(node, isIncoming=true, tag, decryptedFrame);
-                    
-                    if (WAPassthroughWithDebug) return messageEvent;
-                }
-
-                var isAllowed = await NodeHandler.onNodeReceived(node, isMultiDevice);
-                var manipulatedNode = structuredClone(node);
-
-                manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode, tag);
-
-                if (!isAllowed)
-                {
-                    if (!isMultiDevice) return null;
-                    //manipulatedNode.tag = "blocked_node";
-                    manipulatedNode.tag = "ib";
-                    manipulatedNode.attrs["from"] = "c.us";
-                    manipulatedNode.content = [{tag: "offline", attrs: {"count": "88"}, content: null}];
-                    didBlockNode = true;
-                }
-
-                decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
+                if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            var packet = await WACrypto.packNodesForSending(decryptedFrames, isMultiDevice, true, tag);
-            if (didBlockNode) messageEvent.data = packet;
+            var isAllowed = await NodeHandler.onNodeReceived(node);
+            var manipulatedNode = structuredClone(node);
 
-            return messageEvent;
-        }
-        else
-        {
-            // textual payload
-            if (WAdebugMode) console.log("[In] Received message with tag '" + tag + "':");
-            if (data != "" && WAdebugMode)
-                console.log(data);
+            manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode);
 
-            return messageEvent;
+            if (!isAllowed)
+            {
+                manipulatedNode.tag = "blocked_node";
+                // manipulatedNode.tag = "ib";
+                // manipulatedNode.attrs["from"] = "c.us";
+                // manipulatedNode.content = [{tag: "offline", attrs: {"count": "88"}, content: null}];
+                didBlockNode = true;
+            }
+
+            decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
         }
+
+        var packet = await WACrypto.packNodesForSending(decryptedFrames, true);
+        if (didBlockNode) messageEvent.data = packet;
+
+        // TODO: compare the original `data` with `packet`
+
+        return messageEvent;
     }
     catch (exception)
     {
@@ -200,9 +199,7 @@ wsHook.after = function (messageEvent, url)
 
     };
 
-    var isMultiDevice = !WACrypto.isTagBasedPayload(messageEvent.data);
-
-    return isMultiDevice ? MultiDevice.enqueuePromise(promise, messageEvent, true) : promise(messageEvent);
+    return MultiDevice.enqueuePromise(promise, messageEvent, true);
 }
 
 //
@@ -211,7 +208,7 @@ wsHook.after = function (messageEvent, url)
 
 var NodeHandler = {};
 
-NodeHandler.isSentNodeAllowed = function (node, tag)
+NodeHandler.isSentNodeAllowed = function (node)
 {
     var subNodes = [node];
     if (Array.isArray(node.content)) 
@@ -288,7 +285,7 @@ NodeHandler.isSentNodeAllowed = function (node, tag)
     return true;
 }
 
-NodeHandler.onSentNode = async function (node, isMultiDevice)
+NodeHandler.onSentNode = async function (node)
 {
     try
     {
@@ -299,56 +296,38 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
         {
             // manipulating a message node
 
-            if (isMultiDevice)
+            var childNodes = node.content;
+            for (var i = 0; i < childNodes.length; i++)
             {
-                var childNodes = node.content;
-                for (var i = 0; i < childNodes.length; i++)
+                var childNode = childNodes[i];
+
+                if (childNode.tag == "enc")
                 {
-                    var childNode = childNodes[i];
+                    childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"])
+                }
 
-                    if (childNode.tag == "enc")
+                // list of devices to which a copy of the message is sent
+                if (childNode.tag == "participants")
+                {
+                    var participants = childNode.content;
+                    for (var j = 0; j < participants.length; j++)
                     {
-                        childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"], isMultiDevice)
-                    }
-    
-                    // list of devices to which a copy of the message is sent
-                    if (childNode.tag == "participants")
-                    {
-                        var participants = childNode.content;
-                        for (var j = 0; j < participants.length; j++)
+                        var participant = participants[j];
+                        if (participant.tag != "to") continue;
+        
+                        var messageNode = participant.content[0];
+                        if (messageNode.tag == "enc")
                         {
-                            var participant = participants[j];
-                            if (participant.tag != "to") continue;
-            
-                            var messageNode = participant.content[0];
-                            if (messageNode.tag == "enc")
-                            {
-                                var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
+                            var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
 
-                                participant = await this.onSentMessageNode(participant, toJID, isMultiDevice);
-                                participants[j] = participant;
-                            }
+                            participant = await this.onSentMessageNode(participant, toJID);
+                            participants[j] = participant;
                         }
                     }
-
                 }
-                
-            }
-            else if (node.tag == "action")
-            {
-                // non-multi device
 
-                var participants = node.content;
-                for (var j = 0; j < participants.length; j++)
-                {
-                    var child = participants[j];
-                    if (child.tag == "message")
-                    {
-                        var messageNode = await this.onSentMessageNode(child, isMultiDevice);
-                        participants[j] = messageNode;
-                    }
-                }
             }
+           
         }
         
     }
@@ -363,21 +342,8 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
     return node;
 }
 
-NodeHandler.onSentMessageNode = async function (messageNode, remoteJid, isMultiDevice)
+NodeHandler.onSentMessageNode = async function (messageNode, remoteJid)
 {
-    if (!isMultiDevice)
-    {
-        var message = (await decryptE2EMessagesFromNode(messageNode, isMultiDevice))[0];
-        if (WAdebugMode)
-        {
-            console.log("WAIncognito: Sending message:");
-            console.log(message);
-        }
-
-        if (message == null || message.key == null) return;
-        remoteJid = message.key.remoteJid;
-    }
-
     if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
     {
         // If the user replyed to a message from this JID,
@@ -396,18 +362,10 @@ NodeHandler.onSentMessageNode = async function (messageNode, remoteJid, isMultiD
     //         ...
     var putBreakpointHere = 1;
 
-    if (!isMultiDevice)
-    {
-        // TODO: following lines are commented out due to non-complete message types
-        // re-assmble everything
-        //messageBuffer = messageTypes.WebMessageInfo.encode(message).readBuffer();
-        //messageNode.content = messageBuffer;
-    }
-
     return messageNode;
 }
 
-NodeHandler.onNodeReceived = async function (node, isMultiDevice)
+NodeHandler.onNodeReceived = async function (node)
 {
     var isAllowed = true;
 
@@ -427,7 +385,7 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     for (var i = 0 ; i < messageNodes.length; i++)
     {
         var currentNode = messageNodes[i];
-        var isMessageNodeAllowed = await NodeHandler.onMessageNodeReceived(currentNode, messageNodes, isMultiDevice);
+        var isMessageNodeAllowed = await NodeHandler.onMessageNodeReceived(currentNode, messageNodes);
         
         if (!isMessageNodeAllowed) isAllowed = false;
     }
@@ -435,7 +393,7 @@ NodeHandler.onNodeReceived = async function (node, isMultiDevice)
     return isAllowed;
 }
 
-NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, isMultiDevice)
+NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes)
 {
     var isAllowed = true;
 
@@ -449,10 +407,10 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
     var deviceType = looksLikePhone ? "phone" : "computer";
     deviceTypesPerMessage[messageId] = deviceType;
 
-    var encNodes = await decryptE2EMessagesFromNode(currentNode, isMultiDevice);
+    var encNodes = await decryptE2EMessagesFromNode(currentNode);
     for (var message of encNodes)
     {
-        isAllowed = NodeHandler.onE2EMessageNodeReceived(currentNode, message, isMultiDevice, encNodes, messageNodes);
+        isAllowed = NodeHandler.onE2EMessageNodeReceived(currentNode, message, encNodes, messageNodes);
         if (!isAllowed) break;
     }
 
@@ -465,19 +423,13 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes, is
     return isAllowed;
 }
 
-NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, isMultiDevice, encNodes, messageNodes)
+NodeHandler.onE2EMessageNodeReceived = function(currentNode, message, encNodes, messageNodes)
 {
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
-    if (!isMultiDevice)
-    {
-        // non multi-device
-        remoteJid = message.key.remoteJid;
-        messageId = message.key.id;
-        message = message.message;
-    }
-    else if (currentNode.attrs != null)
+    
+    if (currentNode.attrs != null)
     {
         messageId = currentNode.attrs["id"];
 
@@ -606,16 +558,16 @@ async function interceptViewOnceMessages(encNodes, messageId)
     }
 }
 
-function printNode(node, isIncoming = false, tag="", decryptedFrame)
+function printNode(node, isIncoming = false, decryptedFrame)
 {
     var objectToPrint = xmlDebugging ? nodeToElement(node) : node;
     if (isIncoming)
     {
-        console.log("[In] Received binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
+        console.log("[In] Received binary (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
     }
     else
     {
-        console.log("[Out] Sending binary with tag '" + tag + "' (" + decryptedFrame.byteLength + " bytes, decrypted): ");
+        console.log("[Out] Sending binary (" + decryptedFrame.byteLength + " bytes, decrypted): ");
     }
 
     if (xmlDebugging)
@@ -668,33 +620,18 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     }, waitTime);
 }
 
-async function decryptE2EMessagesFromNode(node, isMultiDevice)
+async function decryptE2EMessagesFromNode(node)
 {
-    if (!isMultiDevice)
+    // decrypt the signal message
+    try
     {
-        // the message is not singal-encrypted, so just parse it
-        switch (node.tag)
-        {
-            case "message":
-                var message = WebMessageInfo.read(new Pbf(node.content));
-                return [message];
-            default:
-                return [];
-        }
+        return MultiDevice.decryptE2EMessage(node);
     }
-    else
+    catch (exception)
     {
-        // decrypt the signal message
-        try
-        {
-            return MultiDevice.decryptE2EMessage(node);
-        }
-        catch (exception)
-        {
-            console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
-            console.error(exception);
-            debugger;
-        }
+        console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
+        console.error(exception);
+        debugger;
     }
 }
 

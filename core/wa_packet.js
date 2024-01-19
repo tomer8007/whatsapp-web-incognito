@@ -1,7 +1,6 @@
 function WAPacket(e) 
 {
       var params = arguments.length > 0 && e != undefined ? e : {};
-      this.isMultiDevice = params.isMultiDevice;
       this.data = params.data,
       this.isToPhone = this.data instanceof ArrayBuffer,
       this.tag = params.tag,
@@ -37,44 +36,15 @@ WAPacket.prototype =
         return this.binaryOpts ? this.binaryOpts.debugString : Array.isArray(e) ? 0 === e.length ? "[]" : 1 === e.length ? "[" + e[0] + "]" : "query" === e[0] || "action" === e[0] ? "[" + e[0] + ", " + e[1] + (e.length > 2 ? ", ..." : "") + "]" : void 0 : Object.isObject(e) ? "{...}" : "" + e
     },
     serialize: function() {
-      if (!this.isMultiDevice)
-      {
-          var e = this.tag;
-          if (this.binaryOpts) {
-              var t = this.binaryOpts
-                , n = t.metric ? t.metric : 0
-                , r = (this.ignore ? 0 : 1) << 7 | (!this.ignore && t.ackRequest ? 1 : 0) << 6 | (t.available === !0 ? 1 : 0) << 5 | (t.available === !1 ? 1 : 0) << 4 | (t.expires ? 1 : 0) << 3 | (t.skipOffline ? 1 : 0) << 2;
-              return BinaryReader.build(e, ",", n, r, this.data).readBuffer();
-          }
-          var a = this.data;
-          return e + ",," + a;
-      }
-      else
-      {
-          // multi device
-          var binaryReader = new BinaryReader();
-          
-          var size = this.data.byteLength;
-          binaryReader.writeUint8(size >> 16);
-          binaryReader.writeUint16(65535 & size);
-          binaryReader.write(this.data);
+        // multi device
+        var binaryReader = new BinaryReader();
+        
+        var size = this.data.byteLength;
+        binaryReader.writeUint8(size >> 16);
+        binaryReader.writeUint16(65535 & size);
+        binaryReader.write(this.data);
 
-          binaryReader._readIndex = 0;
-          return binaryReader.readBuffer();
-      }
+        binaryReader._readIndex = 0;
+        return binaryReader.readBuffer();
     },
-    serializeWithoutBinaryOpts: function() {
-      if (this.isMultiDevice) return this.serialize();
-
-      var e = this.tag;
-      if (this.binaryOpts) {
-          var t = this.binaryOpts
-            , n = t.metric ? t.metric : 0
-            , r = (this.ignore ? 0 : 1) << 7 | (!this.ignore && t.ackRequest ? 1 : 0) << 6 | (t.available === !0 ? 1 : 0) << 5 | (t.available === !1 ? 1 : 0) << 4 | (t.expires ? 1 : 0) << 3 | (t.skipOffline ? 1 : 0) << 2;
-            
-            return BinaryReader.build(e, ",", this.data).readBuffer();
-      }
-      var a = this.data;
-      return e + ",," + a;
-  },
 }
