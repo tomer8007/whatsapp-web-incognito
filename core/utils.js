@@ -422,3 +422,14 @@ function isEqualArray(a, b)
     
     return true; 
 }
+
+async function gzipInflate(buffer) 
+{
+    return toArrayBuffer(pako.inflate(new Uint8Array(buffer)));
+}
+
+function deepClone(object)
+{
+    // https://stackoverflow.com/questions/41474986/how-to-clone-a-javascript-es6-class-instance
+    return Object.assign(Object.create(Object.getPrototypeOf(object)), object)
+}

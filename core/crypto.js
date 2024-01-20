@@ -45,7 +45,7 @@ WACrypto.sendNode = function(node)
     });
 }
 
-WACrypto.packNodesForSending = async function(nodesInfo, isIncoming = false)
+WACrypto.encryptAndPackNodesForSending = async function(nodesInfo, isIncoming = false)
 {
     // convert to binary protocol
     var packetBinaryWriter = new BinaryWriter();
@@ -56,27 +56,21 @@ WACrypto.packNodesForSending = async function(nodesInfo, isIncoming = false)
         var counter = nodeInfo.counter;
         var decryptedFrame = nodeInfo.decryptedFrame;
 
-        var nodeBinaryWriter = new BinaryWriter();
-        
-        nodeBinaryWriter.pushByte(0); // push flags
+        var nodeBuffer = await nodeReaderWriter.encodeStanza(node);
 
-        // serialize the node to buffer
-        var nodePacker = new NodePacker();
-        nodePacker.writeNode(nodeBinaryWriter, node);
-        var nodeBuffer = nodeBinaryWriter.toBuffer();
-
+        // encrypt it
         var data = await MultiDevice.encryptPacket(nodeBuffer, isIncoming, counter);
 
         // Serialize to Noise protocol
-        var binaryReader = new BinaryReader();
+        var binaryStream = new BinaryReader();
         
         var size = data.byteLength;
-        binaryReader.writeUint8(size >> 16);
-        binaryReader.writeUint16(65535 & size);
-        binaryReader.write(data);
+        binaryStream.writeUint8(size >> 16);
+        binaryStream.writeUint16(65535 & size);
+        binaryStream.write(data);
 
-        binaryReader._readIndex = 0;
-        var serializedPacket =  binaryReader.readBuffer();
+        binaryStream._readIndex = 0;
+        var serializedPacket =  binaryStream.readBuffer();
 
         packetBinaryWriter.pushBytes(serializedPacket);
     }

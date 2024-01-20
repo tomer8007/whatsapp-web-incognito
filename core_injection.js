@@ -5,9 +5,8 @@ injectOtherScripts();
 async function injectOtherScripts() 
 {
 	injectScript('core/parsing/binary_reader.js');
-	injectScript('core/parsing/node_reader.js');
 	injectScript('core/parsing/binary_writer.js');
-	injectScript('core/parsing/node_writer.js');
+	injectScript('core/parsing/node_reader_writer.js');
 	injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
 	injectScript('core/parsing/protobuf/WAProto.js');
 

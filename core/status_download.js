@@ -4,14 +4,14 @@
 
 function determineIfNodeIsStatus(node) 
 {
-var isNodeStatus = false;
+    var isNodeStatus = false;
     // is node a picture
     if(node.nodeName == "IMG")
     {
         // get the element 7 levels up
         var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
     }
-    else if(node.nodeName == "VIDEO")
+    else if (node.nodeName == "VIDEO")
     {
         // get the element 6 levels up
         var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
@@ -44,7 +44,7 @@ function destroyOldButton(src)
         }
         // special case: stream url's are handled wierdly, if the input contains "stream" destroy all buttons with 
         // "" as their src
-        if(src.includes("stream"))
+        if (src.includes("stream"))
         {
             if(buttons[i].id == "status-download-fail-button")
             {
@@ -98,18 +98,17 @@ function handleSRCRemove(src, node)
     destroyOldButton(src)
 }
 
-function checkNodeAndChildrenForSRC(node, functionToCall){
+function checkNodeAndChildrenForSRC(node, functionToCall)
+{
     // if the node is an img or video
-    if (
-        node.nodeName == "IMG" ||
-        node.nodeName == "VIDEO"
-    ) 
+    if (node.nodeName == "IMG" ||
+        node.nodeName == "VIDEO") 
     {
         // pass the element's src to the handler
         functionToCall(node.src, node)
     }
     // then check if the node has any children and check them, recursively
-    if(node.children !== undefined)
+    if (node.children !== undefined)
     {
         if (node.children.length > 0) 
         {

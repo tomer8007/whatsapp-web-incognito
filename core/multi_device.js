@@ -78,14 +78,14 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     
             var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
             var flags = new Uint8Array(decryptedFrame)[0];
-            decryptedFrame = decryptedFrame.slice(1);
+            var decryptedFrameOpened = decryptedFrame.slice(1);
             if (flags & 2)
             {
                 // zlib compressed. decompress
-                decryptedFrame = toArrayBuffer(pako.inflate(new Uint8Array(decryptedFrame)));
+                decryptedFrameOpened = toArrayBuffer(pako.inflate(new Uint8Array(decryptedFrameOpened)));
             }
     
-            frames[i] = {frame: decryptedFrame, counter: counter};  
+            frames[i] = {frame: decryptedFrameOpened, counter: counter, frameUncompressed: decryptedFrame};  
         }
     }
     catch (exception)
@@ -139,7 +139,9 @@ MultiDevice.decryptE2EMessage = async function(messageNode)
     var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
     var participant = messageNode.attrs["participant"];
     var participantLid = messageNode.attrs["participant_lid"];
+    
     var fromJid = participant ? participant : remoteJid;
+    fromJid = fromJid.toString();
 
     var decryptedMessages = [];
     var keyDistributionMessage = null;

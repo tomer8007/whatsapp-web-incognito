@@ -36,39 +36,23 @@ wsHook.before = function (originalData, url)
 
     try
     {
-        data = originalData;
-
-        if (!(data instanceof ArrayBuffer || data instanceof Uint8Array))
-        {
-            // textual payload
-            if (WAdebugMode) console.log("[Out] Sending message:");
-            if (data != "" && WAdebugMode) console.log(data);
-            return originalData;
-        }
+        if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return originalData;
 
         // encrytped binary payload
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(data, isIncoming=false);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=false);
         if (decryptedFrames == null) return originalData;
 
         for (var i = 0; i < decryptedFrames.length; i++)
         {
             var decryptedFrameInfo = decryptedFrames[i];
             var decryptedFrame = decryptedFrameInfo.frame;
+            var decryptedFrameOriginal = decryptedFrameInfo.frameUncompressed;
             var counter = decryptedFrameInfo.counter;
 
-            var nodeParser = new NodeParser();
-            var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+            var realNode = await nodeReaderWriter.decodeStanza(decryptedFrameOriginal, gzipInflate);
 
-            if (isInitializing)
-            {
-                isInitializing = false;
-                console.log("WhatsIncognito: Interception is working.");
-                document.dispatchEvent(new CustomEvent('onInterceptionWorking', 
-                        { detail: JSON.stringify({isInterceptionWorking: true}) }));
-            }
-
-            var isAllowed = NodeHandler.isSentNodeAllowed(node);
-            var manipulatedNode = structuredClone(node);
+            var isAllowed = NodeHandler.isSentNodeAllowed(realNode);
+            var manipulatedNode = deepClone(realNode);
             if (!isAllowed)
             {
                 manipulatedNode.tag = "blocked_node";
@@ -79,20 +63,27 @@ wsHook.before = function (originalData, url)
 
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(manipulatedNode, isIncoming=false, decryptedFrame);
+                printNode(manipulatedNode, isIncoming=false, decryptedFrame.byteLength);
                 if (WAPassthroughWithDebug) return originalData;
             }
+
+            // sanity check that our node parsing is complete
+            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
         }
 
-        var packedNode = await WACrypto.packNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await WACrypto.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
 
-        // TODO: compare the original `originalData` with `packet`
-        if (WAdebugMode && isAllowed)
+        var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
+        if (!looksEqual && isAllowed)
         {
-            console.log("original data:");
-            console.log(originalData);
-            console.log("re-built data:");
-            console.log(packedNode);
+            debugger;
+        }
+
+        if (isInitializing)
+        {
+            isInitializing = false;
+            console.log("WhatsIncognito: Interception is working.");
+            document.dispatchEvent(new CustomEvent('onInterceptionWorking', { detail: JSON.stringify({isInterceptionWorking: true}) }));
         }
 
         return packedNode;
@@ -126,19 +117,11 @@ wsHook.after = function (messageEvent, url)
 
     try
     {
-        data = messageEvent.data;
+        var originalData = messageEvent.data;
 
-        if (!(data instanceof ArrayBuffer || data instanceof Uint8Array))
-        {
-             // textual payload
-             if (WAdebugMode) console.log("[In] Received message ");
-             if (data != "" && WAdebugMode)
-                 console.log(data);
- 
-             return messageEvent;
-        }
+        if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return messageEvent;
 
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(data, isIncoming=true);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=true);
         if (decryptedFrames == null) return messageEvent;
 
         var didBlockNode = false;
@@ -146,20 +129,23 @@ wsHook.after = function (messageEvent, url)
         {
             var decryptedFrameInfo = decryptedFrames[i];
             var decryptedFrame = decryptedFrameInfo.frame;
+            var decryptedFrameOriginal = decryptedFrameInfo.frameUncompressed;
             var counter = decryptedFrameInfo.counter;
 
-            var nodeParser = new NodeParser();
-            var node = nodeParser.readNode(new NodeBinaryReader(decryptedFrame));
+            var realNode = await nodeReaderWriter.decodeStanza(decryptedFrameOriginal, gzipInflate);
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(node, isIncoming=true, decryptedFrame);
+                printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            var isAllowed = await NodeHandler.onNodeReceived(node);
-            var manipulatedNode = structuredClone(node);
+            // sanity check that our node parsing is deterministic
+            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
+
+            var isAllowed = await NodeHandler.onNodeReceived(realNode);
+            var manipulatedNode = deepClone(realNode);
 
             manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode);
 
@@ -172,10 +158,10 @@ wsHook.after = function (messageEvent, url)
                 didBlockNode = true;
             }
 
-            decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
+            decryptedFrames[i] = {node: realNode, counter: counter, decryptedFrame: decryptedFrame};
         }
 
-        var packet = await WACrypto.packNodesForSending(decryptedFrames, true);
+        var packet = await WACrypto.encryptAndPackNodesForSending(decryptedFrames, true);
         if (didBlockNode) messageEvent.data = packet;
 
         // TODO: compare the original `data` with `packet`
@@ -240,6 +226,8 @@ NodeHandler.isSentNodeAllowed = function (node)
                 case "read":
                 case "receipt":
                     var jid = data.jid ? data.jid : data.to;
+                    jid = jid.toString();
+
                     var isReadReceiptAllowed = exceptionsList.includes(jid);
                     if (isReadReceiptAllowed)
                     {
@@ -292,7 +280,7 @@ NodeHandler.onSentNode = async function (node)
         //
         // Check for message nodes
         //
-        if (node.tag == "message" || node.tag == "action")
+        if (node.tag == "message")
         {
             // manipulating a message node
 
@@ -303,7 +291,7 @@ NodeHandler.onSentNode = async function (node)
 
                 if (childNode.tag == "enc")
                 {
-                    childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"])
+                    childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"].toString());
                 }
 
                 // list of devices to which a copy of the message is sent
@@ -320,7 +308,7 @@ NodeHandler.onSentNode = async function (node)
                         {
                             var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
 
-                            participant = await this.onSentMessageNode(participant, toJID);
+                            participant = await this.onSentMessageNode(participant, toJID.toString());
                             participants[j] = participant;
                         }
                     }
@@ -368,11 +356,10 @@ NodeHandler.onNodeReceived = async function (node)
 {
     var isAllowed = true;
 
-    var nodeTag = node.tag;
-    var children = node.content;
-
     // if this node does not contain a message, it's allowed
-    if (nodeTag != "action" && nodeTag != "message") return true;
+    if (node.tag != "message") return true;
+
+    var children = node.content;
 
     // scan for message nodes
     var messages = [];
@@ -400,6 +387,7 @@ NodeHandler.onMessageNodeReceived = async function(currentNode, messageNodes)
     var remoteJid = currentNode.attrs["from"];
     var participant = currentNode.attrs["participant"];
     participant = participant ? participant : remoteJid;
+    participant = participant.toString();
 
     // check for device type
     var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
@@ -432,7 +420,7 @@ NodeHandler.onE2EMessageNodeReceived = async function(currentNode, message, encN
     {
         messageId = currentNode.attrs["id"];
 
-        remoteJid = currentNode.attrs["from"];
+        remoteJid = currentNode.attrs["from"].toString();
         participant = currentNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
     }
@@ -577,16 +565,16 @@ async function interceptViewOnceMessages(encNodes, messageId)
     }
 }
 
-function printNode(node, isIncoming = false, decryptedFrame)
+function printNode(node, isIncoming = false, decryptedFrameLength)
 {
     var objectToPrint = xmlDebugging ? nodeToElement(node) : node;
     if (isIncoming)
     {
-        console.log("[In] Received binary (" + decryptedFrame.byteLength + " bytes, decrypted)): ");
+        console.log("[In] Received binary (" + decryptedFrameLength + " bytes, decrypted)): ");
     }
     else
     {
-        console.log("[Out] Sending binary (" + decryptedFrame.byteLength + " bytes, decrypted): ");
+        console.log("[Out] Sending binary (" + decryptedFrameLength + " bytes, decrypted): ");
     }
 
     if (xmlDebugging)
@@ -866,3 +854,30 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
     }
 }
 
+async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
+{
+    var flags = new Uint8Array(originalFrame)[0];
+    var decryptedFrameOpened = originalFrame.slice(1);
+    if (flags & 2)
+    {
+        // zlib compressed. decompress
+        decryptedFrameOpened = toArrayBuffer(pako.inflate(new Uint8Array(decryptedFrameOpened)));
+    }
+
+    var realNode = await nodeReaderWriter.decodeStanza(originalFrame, gzipInflate);
+
+    // sanity check that our node parsing is deterministic
+    var encodedNodeData = await nodeReaderWriter.encodeStanza(realNode, isIncoming);
+    var looksGood = isEqualArray(new Uint8Array(decryptedFrameOpened), encodedNodeData.slice(1));
+    if (!looksGood && !isIncoming)
+    {
+        debugger;
+    }
+    if (!looksGood && isIncoming)
+    {
+        // This can sometimes hit because on the encoding path, strings that represent numbers are always encoded with NIBBLE_8 (255) encoding.
+        // But on the decoding path, WhatsApp servers could send us number strings encoded with regular BINARY_8 (252) encoding, 
+        // which we will re-encode as NIBBLE_8 (255).
+        //debugger;
+    }
+}
