@@ -433,3 +433,21 @@ function deepClone(object)
     // https://stackoverflow.com/questions/41474986/how-to-clone-a-javascript-es6-class-instance
     return Object.assign(Object.create(Object.getPrototypeOf(object)), object)
 }
+
+
+function base64ToArrayBuffer(base64) 
+{
+    var binary_string =  window.atob(base64);
+    var len = binary_string.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i++)        
+    {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+function toArayBufer(array)
+{
+    return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
+}

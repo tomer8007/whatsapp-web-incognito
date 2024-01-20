@@ -20,6 +20,7 @@ async function injectOtherScripts()
 	
 	injectScript('lib/pako.js');
 	await injectScript('core/multi_device.js');
+	await injectScript('core/node_handler.js');
 	injectScript('core/interception.js');
 
 	setTimeout(

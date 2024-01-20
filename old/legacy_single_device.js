@@ -297,3 +297,14 @@ WAPacket.prototype =
         return e + ",," + a;
     },
 }
+
+function getKeys()
+{
+    var useLocalStorage = window.localStorage.getItem("WASecretBundle") != undefined;
+    var storage = useLocalStorage ? window.localStorage : window.sessionStorage;
+    var result = {};
+    var secretBundle = JSON.parse(storage.getItem("WASecretBundle"));
+    result.enc = base64ToArrayBuffer(secretBundle["encKey"]);
+    result.mac = base64ToArrayBuffer(secretBundle["macKey"]);
+    return result;
+}
