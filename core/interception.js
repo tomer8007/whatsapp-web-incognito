@@ -71,7 +71,7 @@ wsHook.before = function (originalData, url)
             await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
         }
 
-        var packedNode = await WACrypto.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
 
         var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
         if (!looksEqual && isAllowed)
@@ -161,7 +161,7 @@ wsHook.after = function (messageEvent, url)
             decryptedFrames[i] = {node: realNode, counter: counter, decryptedFrame: decryptedFrame};
         }
 
-        var packet = await WACrypto.encryptAndPackNodesForSending(decryptedFrames, true);
+        var packet = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, true);
         if (didBlockNode) messageEvent.data = packet;
 
         // TODO: compare the original `data` with `packet`

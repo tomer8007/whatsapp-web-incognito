@@ -13,8 +13,6 @@ async function injectOtherScripts()
 	injectScript('lib/pbf.3.0.5.min.js');
 
 	injectScript('core/utils.js');
-	injectScript('core/wa_packet.js');
-	injectScript('core/crypto.js');
 	injectScript('core/ui_class_names.js');
 	injectScript('core/injected_ui.js');
 	
