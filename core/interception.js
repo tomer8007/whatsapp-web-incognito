@@ -50,15 +50,8 @@ wsHook.before = function (originalData, url)
             var counter = decryptedFrameInfo.counter;
 
             var realNode = await nodeReaderWriter.decodeStanza(decryptedFrameOriginal, gzipInflate);
-
-            var isAllowed = NodeHandler.isSentNodeAllowed(realNode);
-            var manipulatedNode = deepClone(realNode);
-            if (!isAllowed)
-            {
-                manipulatedNode.tag = "blocked_node";
-            }
-
-            manipulatedNode = await NodeHandler.onSentNode(manipulatedNode);
+            
+            var [isAllowed, manipulatedNode] = await NodeHandler.interceptOutgoingNode(realNode);
             decryptedFrames[i] = {node: manipulatedNode, counter: counter};
 
             if (WAdebugMode || WAPassthroughWithDebug)

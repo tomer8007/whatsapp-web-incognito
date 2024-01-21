@@ -83,63 +83,78 @@ NodeHandler.isSentNodeAllowed = function (node)
     return true;
 }
 
-NodeHandler.onSentNode = async function (node)
+NodeHandler.interceptOutgoingNode = async function (node)
 {
-    try
+    var isAllowed = NodeHandler.isSentNodeAllowed(node);
+    if (!isAllowed)
     {
-        //
-        // Check for message nodes
-        //
-        if (node.tag == "message")
+        var manipulatedNode = deepClone(node);
+        manipulatedNode.tag = "blocked_node";
+        return [isAllowed, manipulatedNode];
+    }
+
+    //
+    // Check for message nodes
+    //
+    if (node.tag == "message")
+    {
+        // manipulating a message node
+        node = await NodeHandler.onOutgoingMessageNode(node);
+    }
+
+    return [true, node];
+}
+
+NodeHandler.onOutgoingMessageNode = async function (messageNode)
+{
+    var childNodes = messageNode.content;
+    for (var i = 0; i < childNodes.length; i++)
+    {
+        var childNode = childNodes[i];
+
+        try
         {
-            // manipulating a message node
-
-            var childNodes = node.content;
-            for (var i = 0; i < childNodes.length; i++)
+            if (childNode.tag == "enc")
             {
-                var childNode = childNodes[i];
+                childNodes[i] = await this.onSentEncNode(childNode, messageNode.attrs["to"].toString());
+            }
 
-                if (childNode.tag == "enc")
+            // list of devices to which a copy of the message is sent
+            // say, in a message to a group, will contain copies of the message for each group participant.
+            // in a private chat, will contain copies for the recipient and for the sender's real device
+            if (childNode.tag == "participants")
+            {
+                var participants = childNode.content;
+                for (var j = 0; j < participants.length; j++)
                 {
-                    childNodes[i] = await this.onSentMessageNode(childNode, node.attrs["to"].toString());
-                }
-
-                // list of devices to which a copy of the message is sent
-                if (childNode.tag == "participants")
-                {
-                    var participants = childNode.content;
-                    for (var j = 0; j < participants.length; j++)
+                    var participant = participants[j];
+                    if (participant.tag != "to") continue;
+    
+                    var encNode = participant.content[0];
+                    if (encNode.tag == "enc")
                     {
-                        var participant = participants[j];
-                        if (participant.tag != "to") continue;
-        
-                        var messageNode = participant.content[0];
-                        if (messageNode.tag == "enc")
-                        {
-                            var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
+                        var toJID = participant.attrs["jid"] ? participant.attrs["jid"]: participant.attrs["from"];
 
-                            participant = await this.onSentMessageNode(participant, toJID.toString());
-                            participants[j] = participant;
-                        }
+                        encNode = await this.onSentEncNode(encNode, toJID.toString());
+                        participant.content[0] = encNode;
+                        participants[j] = participant;
                     }
                 }
             }
-
         }
-        
-    }
-    catch (exception)
-    {
-        console.error("WhatsIncognito: Allowing WA packet due to exception:");
-        console.error(exception);
-        console.error(exception.stack);
-        return node;
+        catch (exception)
+        {
+            console.error("WhatsIncognito: Allowing WA packet due to exception:");
+            console.error(exception);
+            console.error(exception.stack);
+            return [true, messageNode]
+        }
     }
 
-    return node;
+    return messageNode;
 }
 
-NodeHandler.onSentMessageNode = async function (messageNode, remoteJid)
+NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
     if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
     {
@@ -159,7 +174,7 @@ NodeHandler.onSentMessageNode = async function (messageNode, remoteJid)
     //         ...
     var putBreakpointHere = 1;
 
-    return messageNode;
+    return encNode;
 }
 
 NodeHandler.onReceivedNode = async function (node)

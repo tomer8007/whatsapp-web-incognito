@@ -156,7 +156,7 @@ WACrypto.encryptWithWebCrypto = function(nodeBuffer, isMultiDevice = false, isIn
     }
 }
 
-NodeHandler.onSentNode = async function (node, isMultiDevice)
+NodeHandler.interceptOutgoingNode = async function (node, isMultiDevice)
 {
     try
     {
@@ -177,7 +177,7 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
                     var child = participants[j];
                     if (child.tag == "message")
                     {
-                        var messageNode = await this.onSentMessageNode(child, isMultiDevice);
+                        var messageNode = await this.onSentEncNode(child, isMultiDevice);
                         participants[j] = messageNode;
                     }
                 }
@@ -196,7 +196,7 @@ NodeHandler.onSentNode = async function (node, isMultiDevice)
     return node;
 }
 
-NodeHandler.onSentMessageNode = async function (messageNode, remoteJid, isMultiDevice)
+NodeHandler.onSentEncNode = async function (messageNode, remoteJid, isMultiDevice)
 {
     if (!isMultiDevice)
     {
