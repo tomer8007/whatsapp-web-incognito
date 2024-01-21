@@ -10,6 +10,7 @@ You can find the original extension in [Chrome Web Store](https://chrome.google.
 - Block "typing"/"seen" updates (Will prevent you from seeing others')
 - Always restore deleted messages of all kinds
 - See whether every message was sent from a phone or a computer
+- Download statuses
 ## Installing from GitHub directly
 To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/tomer8007/whats-incognito/releases) page, or better, just clone the source code
 **to a directory** and add it to Chrome using the 'Load unpacked extension' option when developer mode is turned on.
