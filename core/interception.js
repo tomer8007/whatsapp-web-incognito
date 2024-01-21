@@ -221,7 +221,7 @@ async function decryptE2EMessagesFromNode(node)
     // decrypt the signal message
     try
     {
-        return MultiDevice.decryptE2EMessage(node);
+        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
     }
     catch (exception)
     {
@@ -231,22 +231,22 @@ async function decryptE2EMessagesFromNode(node)
     }
 }
 
-async function interceptViewOnceMessages(encNodes, messageId) 
+async function interceptViewOnceMessages(e2eMessage, messageId) 
 {
-    if (encNodes[0].viewOnceMessageV2 !== null || encNodes[0].viewOnceMessageV2Extension !== null) 
+    if (e2eMessage.viewOnceMessageV2 !== null || e2eMessage.viewOnceMessageV2Extension !== null) 
     {
         var retrievedMsg = {};
         var type = "";
-        if(encNodes[0].viewOnceMessageV2 !== null)
+        if(e2eMessage.viewOnceMessageV2 !== null)
         {
-            if (encNodes[0].viewOnceMessageV2.message.imageMessage !== null) 
+            if (e2eMessage.viewOnceMessageV2.message.imageMessage !== null) 
             {
-                retrievedMsg = encNodes[0].viewOnceMessageV2.message.imageMessage;
+                retrievedMsg = e2eMessage.viewOnceMessageV2.message.imageMessage;
                 type = "image";
             }
-            else if (encNodes[0].viewOnceMessageV2.message.videoMessage !== null) 
+            else if (e2eMessage.viewOnceMessageV2.message.videoMessage !== null) 
             {
-                retrievedMsg = encNodes[0].viewOnceMessageV2.message.videoMessage;
+                retrievedMsg = e2eMessage.viewOnceMessageV2.message.videoMessage;
                 type = "video";
             }
             else
@@ -254,9 +254,9 @@ async function interceptViewOnceMessages(encNodes, messageId)
                 throw new Error("Unknown viewOnceMessageV2 type");
             }
         }
-        else if (encNodes[0].viewOnceMessageV2Extension?.message?.audioMessage !== null) 
+        else if (e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage !== null) 
         {
-            retrievedMsg = encNodes[0].viewOnceMessageV2Extension.message.audioMessage;
+            retrievedMsg = e2eMessage.viewOnceMessageV2Extension.message.audioMessage;
             type = "audio";
         }
         else 
@@ -315,7 +315,7 @@ async function interceptViewOnceMessages(encNodes, messageId)
             // retry in 5 seconds
             // don't know why it's 5 seconds, but that's what is done for decrypting deleted messages 
             setTimeout(function(){
-                interceptViewOnceMessages(encNodes, messageId)
+                interceptViewOnceMessages(e2eMessage, messageId)
             }, 5000);
         }
     }

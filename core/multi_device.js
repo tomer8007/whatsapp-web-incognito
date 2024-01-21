@@ -167,7 +167,7 @@ MultiDevice.sizeOfPacket = function(payload)
 };
 
 
-MultiDevice.decryptE2EMessage = async function(messageNode)
+MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 {
     var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
     var participant = messageNode.attrs["participant"];

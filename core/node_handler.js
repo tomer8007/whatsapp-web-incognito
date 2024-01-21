@@ -4,6 +4,28 @@
 
 var NodeHandler = {};
 
+NodeHandler.interceptOutgoingNode = async function (node)
+{
+    var isAllowed = NodeHandler.isSentNodeAllowed(node);
+    if (!isAllowed)
+    {
+        var manipulatedNode = deepClone(node);
+        manipulatedNode.tag = "blocked_node";
+        return [isAllowed, manipulatedNode];
+    }
+
+    //
+    // Check for message nodes
+    //
+    if (node.tag == "message")
+    {
+        // manipulating a message node
+        node = await NodeHandler.onOutgoingMessageNode(node);
+    }
+
+    return [true, node];
+}
+
 NodeHandler.isSentNodeAllowed = function (node)
 {
     var subNodes = [node];
@@ -83,28 +105,6 @@ NodeHandler.isSentNodeAllowed = function (node)
     return true;
 }
 
-NodeHandler.interceptOutgoingNode = async function (node)
-{
-    var isAllowed = NodeHandler.isSentNodeAllowed(node);
-    if (!isAllowed)
-    {
-        var manipulatedNode = deepClone(node);
-        manipulatedNode.tag = "blocked_node";
-        return [isAllowed, manipulatedNode];
-    }
-
-    //
-    // Check for message nodes
-    //
-    if (node.tag == "message")
-    {
-        // manipulating a message node
-        node = await NodeHandler.onOutgoingMessageNode(node);
-    }
-
-    return [true, node];
-}
-
 NodeHandler.onOutgoingMessageNode = async function (messageNode)
 {
     var childNodes = messageNode.content;
@@ -181,42 +181,21 @@ NodeHandler.interceptReceivedNode = async function (node)
 {
     var isAllowed = true;
 
-    // if this node does not contain a message, it's allowed
-    if (node.tag != "message") return [true, node];
-
-    var children = node.content;
-
-    // scan for message nodes
-    var nodes = [node];
-    if (Array.isArray(children)) nodes = nodes.concat(children);
-
-    var messageNodes = nodes.filter(node => node.tag == "message");
-
-    for (var i = 0 ; i < messageNodes.length; i++)
+    if (node.tag == "message")
     {
-        var currentNode = messageNodes[i];
-        var isMessageNodeAllowed = await NodeHandler.onReceivedMessageNode(currentNode, messageNodes);
-        
-        if (!isMessageNodeAllowed) isAllowed = false;
-    }
-
-    if (!isAllowed)
-    {
-        var manipulatedNode = deepClone(node);
-        manipulatedNode.tag = "blocked_node";
-        return [isAllowed, manipulatedNode];
+        var [isAllowed, node] = await NodeHandler.onReceivedMessageNode(node);
     }
 
     return [isAllowed, node];
 }
 
-NodeHandler.onReceivedMessageNode = async function(currentNode, messageNodes)
+NodeHandler.onReceivedMessageNode = async function(messageNode)
 {
     var isAllowed = true;
 
-    var messageId = currentNode.attrs["id"];
-    var remoteJid = currentNode.attrs["from"];
-    var participant = currentNode.attrs["participant"];
+    var messageId = messageNode.attrs["id"];
+    var remoteJid = messageNode.attrs["from"];
+    var participant = messageNode.attrs["participant"];
     participant = participant ? participant : remoteJid;
     participant = participant.toString();
 
@@ -225,53 +204,68 @@ NodeHandler.onReceivedMessageNode = async function(currentNode, messageNodes)
     var deviceType = looksLikePhone ? "phone" : "computer";
     deviceTypesPerMessage[messageId] = deviceType;
 
-    var encNodes = await decryptE2EMessagesFromNode(currentNode);
-    for (var message of encNodes)
+    var e2eMessagesAllowedStatus = [];
+
+    var e2eMessages = await MultiDevice.decryptE2EMessagesFromMessageNode(messageNode);
+    for (var e2eMessage of e2eMessages)
     {
-        isAllowed = NodeHandler.onReceivedE2EMessageNode(currentNode, message, encNodes, messageNodes);
-        if (!isAllowed) break;
+        var isE2EMessageAllowed = await NodeHandler.onReceivedE2EMessage(messageNode, e2eMessage);
+        e2eMessagesAllowedStatus.push({e2eMessage: e2eMessage, isAllowed: isE2EMessageAllowed});
     }
 
-    if (WAdebugMode && encNodes.length > 0)
+    var numOfE2EMessagesBlocked = e2eMessagesAllowedStatus.filter(status => !status.isAllowed).length;
+    if (numOfE2EMessagesBlocked > 0 && numOfE2EMessagesBlocked == e2eMessages.length)
+    {
+        console.log("WhatsIncogito: Blocking incoming REVOKE message node.");
+        isAllowed = false;
+    }
+    else if (numOfE2EMessagesBlocked > 0 && numOfE2EMessagesBlocked < e2eMessages.length)
+    {
+        // TODO: edit the node to remove only the revoke messages
+        console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
+    }
+
+    if (WAdebugMode && e2eMessages.length > 0)
     {
         console.log("Got messages:");
-        console.log(encNodes);
+        console.log(e2eMessages);
     }
 
-    return isAllowed;
+    if (!isAllowed)
+    {
+        messageNode = deepClone(messageNode);
+        messageNode.content = [];
+    }
+
+    return [isAllowed, messageNode];
 }
 
-NodeHandler.onReceivedE2EMessageNode = async function(currentNode, message, encNodes, messageNodes)
+NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 {
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
     
-    if (currentNode.attrs != null)
+    if (messageNode.attrs != null)
     {
-        messageId = currentNode.attrs["id"];
+        messageId = messageNode.attrs["id"];
 
-        remoteJid = currentNode.attrs["from"].toString();
-        participant = currentNode.attrs["participant"];
+        remoteJid = messageNode.attrs["from"].toString();
+        participant = messageNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
     }
 
-    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(message, messageId, remoteJid);
-    await interceptViewOnceMessages(encNodes, messageId);
+    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
+    await interceptViewOnceMessages(e2eMessage, messageId);
 
     if (!saveDeletedMsgsHookEnabled)
     {
         isAllowed = true;
     }
-    else if (isRevokeMessage && encNodes.length == 1 && messageNodes.length == 1)
-    {
-        console.log("WhatsIncognito: --- Blocking message REVOKE action! ---");
-        isAllowed = false;
-    }
     else if (isRevokeMessage)
     {
-        // TODO: edit the node to remove only the revoke messages
-        console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
+        console.log("WhatsIncognito: --- Detected message REVOKE action! ---");
+        isAllowed = false;
     }
 
     return isAllowed;
