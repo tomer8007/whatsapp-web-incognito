@@ -72,6 +72,7 @@ function createDownloadButton(src)
     a.className = "download-button-incognito";
     a.href = src;
     a.id = src;
+    a.title = "Download this status!";
     a.download = "status";
     document.body.appendChild(a);
 }

@@ -107,6 +107,8 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
+    if (!chat) return;
+
     if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
     {
         markChatAsPendingReciptsSending(chat);

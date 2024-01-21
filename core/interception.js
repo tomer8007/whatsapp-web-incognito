@@ -426,9 +426,13 @@ function hookLogs()
             {
                 console.log(message);
             }
-            else if (errorLevel > 2)
+            else if (errorLevel > 2 && WAdebugMode)
             {
                 console.error(message);
+            }
+            else if (errorLevel > 2)
+            {
+                console.info(message);
             }
 
             var test = originalLog(errorLevel);
