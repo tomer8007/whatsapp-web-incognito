@@ -129,6 +129,7 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
+                console.log(realNode);
                 printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
@@ -137,17 +138,10 @@ wsHook.after = function (messageEvent, url)
             // sanity check that our node parsing is deterministic
             await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
 
-            var isAllowed = await NodeHandler.onReceivedNode(realNode);
-            var manipulatedNode = deepClone(realNode);
-
-            manipulatedNode = await NodeHandler.manipulateReceivedNode(manipulatedNode);
+            var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
             if (!isAllowed)
             {
-                manipulatedNode.tag = "blocked_node";
-                // manipulatedNode.tag = "ib";
-                // manipulatedNode.attrs["from"] = "c.us";
-                // manipulatedNode.content = [{tag: "offline", attrs: {"count": "88"}, content: null}];
                 didBlockNode = true;
             }
 

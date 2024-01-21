@@ -36,7 +36,7 @@ NodeHandler.isSentNodeAllowed = function (node)
                 case "read":
                 case "receipt":
                     var jid = data.jid ? data.jid : data.to;
-                    jid = jid.toString();
+                    jid = normalizeJID(jid.toString());
 
                     var isReadReceiptAllowed = exceptionsList.includes(jid);
                     if (isReadReceiptAllowed)
@@ -177,17 +177,16 @@ NodeHandler.onSentEncNode = async function (encNode, remoteJid)
     return encNode;
 }
 
-NodeHandler.onReceivedNode = async function (node)
+NodeHandler.interceptReceivedNode = async function (node)
 {
     var isAllowed = true;
 
     // if this node does not contain a message, it's allowed
-    if (node.tag != "message") return true;
+    if (node.tag != "message") return [true, node];
 
     var children = node.content;
 
     // scan for message nodes
-    var messages = [];
     var nodes = [node];
     if (Array.isArray(children)) nodes = nodes.concat(children);
 
@@ -201,16 +200,14 @@ NodeHandler.onReceivedNode = async function (node)
         if (!isMessageNodeAllowed) isAllowed = false;
     }
 
-    return isAllowed;
-}
+    if (!isAllowed)
+    {
+        var manipulatedNode = deepClone(node);
+        manipulatedNode.tag = "blocked_node";
+        return [isAllowed, manipulatedNode];
+    }
 
-NodeHandler.manipulateReceivedNode = async function (node)
-{
-    var messages = [];
-    var children = node.content;
-    // var type = node.attrs["type"]; // TODO: fix cannot read properties of undefined (reading 'type')
-
-    return node;
+    return [isAllowed, node];
 }
 
 NodeHandler.onReceivedMessageNode = async function(currentNode, messageNodes)

@@ -198,7 +198,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     var chat = await getChatByJID(data.jid);
 
     // add an exception and remove it after a short time at any case
-    exceptionsList.push(data.jid);
+    exceptionsList.push(normalizeJID(data.jid));
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
 
     if (WhatsAppAPI.Communication)
