@@ -223,7 +223,7 @@ function generateDropContent(options)
     var autoReceiptTitle = "Auto-Send receipts on reply";
     var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
 
-    var allowStatusDownloadTitle = "Allow Status downloading";
+    var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
