@@ -158,7 +158,7 @@ wsHook.after = function (messageEvent, url)
                 didBlockNode = true;
             }
 
-            decryptedFrames[i] = {node: realNode, counter: counter, decryptedFrame: decryptedFrame};
+            decryptedFrames[i] = {node: manipulatedNode, counter: counter, decryptedFrame: decryptedFrame};
         }
 
         var packet = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, true);
