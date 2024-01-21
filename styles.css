@@ -179,9 +179,12 @@
   transition: all .1s ease;
 }
 
-#incognito-options-view2
+.incognito-options-view-container
 {
-  transform: translate(100%, 0%);
+  position: absolute;
+  left: 0px;
+  right: 0px;
+  transition: all .1s ease;
 }
 
 .incognito-options-title

@@ -5,6 +5,7 @@ if (typeof chrome !== "undefined") {
   var browser = chrome;
 }
 
+// TODO: We need to remove this bad code dupliation
 browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 {
     if (messageEvent.name == "setOptions")
@@ -37,6 +38,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({"autoReceiptOnReplay": messageEvent.autoReceiptOnReplay});
         }
+        if ("allowStatusDownload" in messageEvent)
+        {
+            chrome.storage.local.set({"allowStatusDownload": messageEvent.allowStatusDownload});
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -48,6 +53,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var saveDeletedMsgs = false;
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
+        var allowStatusDownload = true;
 
         chrome.storage.local.get(['presenceUpdatesHook', 
                                 'readConfirmationsHook', 
@@ -55,7 +61,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'safetyDelay', 
                                 'saveDeletedMsgs', 
                                 'showDeviceTypes',
-                                'autoReceiptOnReplay']).then(function(storage)
+                                'autoReceiptOnReplay',
+                                'allowStatusDownload']).then(function(storage)
         {
             if (storage["presenceUpdatesHook"] != undefined)
             {
@@ -85,6 +92,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 autoReceiptOnReplay = storage["autoReceiptOnReplay"];
             }
+            if (storage["allowStatusDownload"] != undefined)
+            {
+                allowStatusDownload = storage["allowStatusDownload"];
+            }
             callback(
             {
                 presenceUpdatesHook: presenceUpdatesHook,
@@ -93,7 +104,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 safetyDelay: safetyDelay,
                 saveDeletedMsgs: saveDeletedMsgs,
                 showDeviceTypes: showDeviceTypes,
-                autoReceiptOnReplay: autoReceiptOnReplay
+                autoReceiptOnReplay: autoReceiptOnReplay,
+                allowStatusDownload: allowStatusDownload
             });
         });   
     }

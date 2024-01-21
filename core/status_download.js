@@ -2,6 +2,8 @@
 // When a photo/video status is being viewed, create a button to download it that appears, and then handle downloading it
 //
 
+var allowStatusDownload = true;
+
 function determineIfNodeIsStatus(node) 
 {
     var isNodeStatus = false;
@@ -79,7 +81,9 @@ function createDownloadButton(src)
 
 function handleSRCAdd(src, node)
 {
-    if(determineIfNodeIsStatus(node))
+    if (!allowStatusDownload) return;
+
+    if (determineIfNodeIsStatus(node))
     {
         if (src.startsWith("blob:")) 
         {
@@ -124,40 +128,40 @@ function checkNodeAndChildrenForSRC(node, functionToCall)
 // create a mutation observer that looks for any img or video tags being added to the page, any of their src attributes changing, or any of them being removed
 var observer = new MutationObserver(function (mutations) 
 {
-        mutations.forEach(function (mutation) 
+    mutations.forEach(function (mutation) 
+    {
+        if (mutation.type == "childList") 
         {
-            if (mutation.type == "childList") 
+            // if a child is added, loop through the added nodes
+            for (var i = 0; i < mutation.addedNodes.length; i++) 
             {
-                // if a child is added, loop through the added nodes
-                for (var i = 0; i < mutation.addedNodes.length; i++) 
-                {
-                    checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
-                }
-                // if a child is removed, loop through the removed nodes
-                for(var i = 0; i < mutation.removedNodes.length; i++)
-                {
-                    checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
-                }
-            } 
-            else if (mutation.type == "attributes") 
+                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
+            }
+            // if a child is removed, loop through the removed nodes
+            for(var i = 0; i < mutation.removedNodes.length; i++)
             {
-                // if an attribute is changed, and it's the src attribute
-                if (mutation.attributeName == "src") 
+                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
+            }
+        } 
+        else if (mutation.type == "attributes") 
+        {
+            // if an attribute is changed, and it's the src attribute
+            if (mutation.attributeName == "src") 
+            {
+                // check that the oldValue is different from the new value
+                if (mutation.oldValue == mutation.target.src) 
                 {
-                    // check that the oldValue is different from the new value
-                    if (mutation.oldValue == mutation.target.src) 
-                    {
-                        // if it's not, then the mutation is not a change in src
-                        return;
-                    }
-                    // pass the element's old src to the handler
-                    handleSRCRemove(mutation.oldValue)
-                    // pass the element's new src to the handler
-                    handleSRCAdd(mutation.target.src, mutation.target)
+                    // if it's not, then the mutation is not a change in src
+                    return;
                 }
+                // pass the element's old src to the handler
+                handleSRCRemove(mutation.oldValue)
+                // pass the element's new src to the handler
+                handleSRCAdd(mutation.target.src, mutation.target)
             }
         }
-    );
+    }
+);
 });
 
 // start observing the body for changes
@@ -166,4 +170,12 @@ observer.observe(document.body, {
     subtree: true,
     attributes: true,
     attributeOldValue: true,
+});
+
+document.addEventListener('onOptionsUpdate', function (e)
+{
+    // update enforcing globals
+    // TODO: move outside injected_ui.js
+    var options = JSON.parse(e.detail);
+    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
 });

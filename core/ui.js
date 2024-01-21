@@ -158,9 +158,16 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
-                document.getElementsByClassName('incognito-next-button')[0].addEventListener("click", onNextButtonClicked);
-                document.getElementsByClassName('incognito-back-button')[0].addEventListener("click", onBackButtonClicked);
-
+                document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
+                {
+                    nextButton.addEventListener("click", onNextButtonClicked);
+                };
+                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
+                {
+                    nextButton.addEventListener("click", onBackButtonClicked);
+                };
+                
                 //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
                 //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
                 //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
@@ -174,9 +181,15 @@ async function addIconIfNeeded()
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
-                
-                document.getElementsByClassName('incognito-next-button')[0].removeEventListener("click", onNextButtonClicked);
-                document.getElementsByClassName('incognito-back-button')[0].removeEventListener("click", onBackButtonClicked);
+
+                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
+                {
+                    nextButton.removeEventListener("click", onNextButtonClicked);
+                };
+                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
+                {
+                    nextButton.removeEventListener("click", onBackButtonClicked);
+                };
 
                 //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
                 //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
@@ -210,6 +223,9 @@ function generateDropContent(options)
     var autoReceiptTitle = "Auto-Send receipts on reply";
     var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
 
+    var allowStatusDownloadTitle = "Allow Status downloading";
+    var allowStatusDownloadCaption = "Adds a button to download statuses";
+
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
@@ -225,6 +241,9 @@ function generateDropContent(options)
     var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
 
 
     var dropContent = ` \
@@ -232,7 +251,10 @@ function generateDropContent(options)
             <div class='incognito-options-title'>Incognito options</div>
 
             <div class='incognito-options-navigator'>
-                <div class='incognito-options-view' id='incognito-options-view1'>                                                                            
+                <div class='incognito-options-view-container' style='transform: translate(0%, 0%);' id='incognito-options-view1'>
+
+                    <!---- First Page ---!>
+                                                                            
                     <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'> 
                         <div class='checkbox-container-incognito' style=''>
                             <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
@@ -265,8 +287,11 @@ function generateDropContent(options)
                     <button class='incognito-next-button'>Next &gt</button>
                 </div>
 
-                <div class='incognito-options-view' id='incognito-options-view2'>
-                    <div class='incognito-options-view' id='incognito-options-view1'>
+                <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
+
+                    <!---- Second Page ---!>
+
+                    <div class='incognito-options-view' id='incognito-options-view-internal2'>
                         <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
                             <div class='checkbox-container-incognito' style=''>
                                 <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
@@ -283,9 +308,33 @@ function generateDropContent(options)
                             ${autoReceiptTitle}
                             <div class='incognito-options-description'>${autoReceiptCaption}</div>
                         </div>
+                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
+                                </div>
+                            </div>
+                            ${allowStatusDownloadTitle}
+                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
+                        </div>
+                        <br>
+                        <button class='incognito-next-button'>Next &gt</button>
                         <button class='incognito-back-button'>&lt Back</button>
                     </div>
                 </div>
+
+                <div class='incognito-options-view-container' style='transform: translate(200%, 0%);' id='incognito-options-view3'>
+
+                    <!---- Third Page ---!>
+
+                    <div class='incognito-options-view' id='incognito-options-view-internal3'>
+                        <div class='incognito-options-item' style='cursor: pointer;'>
+                            More options coming soon!
+                        </div>
+                        <button class='incognito-back-button'>&lt Back</button>
+                    </div>
+                </div>
+
+                
             </div>
             
         </div>`;
@@ -508,26 +557,63 @@ function onAutoReceiptsTick()
     }));
 }
 
+function onStatusDownloadingTick()
+{
+    var allowStatusDownload = false;
+    var checkbox = document.querySelector("#incognito-option-status-downloading .checkbox-incognito");
+    
+    var checkmark = checkbox.firstElementChild;
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        allowStatusDownload = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        
+        allowStatusDownload = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", allowStatusDownload: allowStatusDownload });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
+    }));
+}
+
 function onNextButtonClicked()
 {
-    var views = document.getElementsByClassName("incognito-options-view");
-    var prevView = views[0];
-    var nextView = views[1];
+    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
+    
     requestAnimationFrame(() => {
-        prevView.style.transform = `translate(-100%,0%)`;
-        nextView.style.transform = `translate(0%,0%)`;
+        for (var view of views)
+        {
+            var prevViewX = getTransformXOfView(view);
+            view.style.transform = "translate(" + (prevViewX - 100) + "%, 0%)";
+        }
     });
 }
 
 function onBackButtonClicked()
 {
-    var views = document.getElementsByClassName("incognito-options-view");
-    var prevView = views[0];
-    var nextView = views[1];
+    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
+    
     requestAnimationFrame(() => {
-        prevView.style.transform = `translate(0%,0%)`;
-        nextView.style.transform = `translate(100%,0%)`;
+        for (var view of views)
+        {
+            var prevViewX = getTransformXOfView(view);
+            view.style.transform = "translate(" + (prevViewX + 100) + "%, 0%)";
+        }
     });
+}
+
+function getTransformXOfView(view)
+{
+    if (view.style.transform.includes("translate"))
+        return parseInt(view.style.transform.match(/-?[\d\.]+/g)[0]);
+    else
+        return 0;
 }
 
 //

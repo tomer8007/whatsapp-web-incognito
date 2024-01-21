@@ -64,6 +64,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
+    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
