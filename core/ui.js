@@ -470,11 +470,20 @@ function onPresenseUpdatesTick()
     {
         tickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = true;
+        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
     }
     else
     {
         untickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = false;
+        Swal.fire({
+            title: "Presence updates",
+            html: 'Online status won\'t work until the page is refreshed, but typing indicators will.',
+            icon: "info",
+            width: 600,
+            confirmButtonColor: "#000",
+            confirmButtonText: "Got it",
+        })
     }
     browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
