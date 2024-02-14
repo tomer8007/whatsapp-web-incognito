@@ -476,14 +476,7 @@ function onPresenseUpdatesTick()
     {
         untickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = false;
-        Swal.fire({
-            title: "Presence updates",
-            html: 'Online status won\'t work until the page is refreshed, but typing indicators will.',
-            icon: "info",
-            width: 600,
-            confirmButtonColor: "#000",
-            confirmButtonText: "Got it",
-        })
+        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
     }
     browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
