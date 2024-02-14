@@ -470,11 +470,13 @@ function onPresenseUpdatesTick()
     {
         tickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = true;
+        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
     }
     else
     {
         untickCheckbox(checkbox, checkmark);
         presenceUpdatesHook = false;
+        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
     }
     browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',

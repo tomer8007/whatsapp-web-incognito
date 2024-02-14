@@ -7,6 +7,17 @@ document.addEventListener('onMainUIReady', function (e)
     setTimeout(exposeWhatsAppAPI, 100);
 });
 
+document.addEventListener('onPresenceOptionTicked', function (e)
+{
+    WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"unavailable"})
+});
+
+document.addEventListener('onPresenceOptionUnticked', function (e)
+{
+    WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"available"})
+});
+
+
 document.addEventListener('onIncognitoOptionsOpened', function (e)
 {
     var drop = document.getElementsByClassName("drop")[0];
