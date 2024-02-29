@@ -215,8 +215,16 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var onlineStatusCaption = "Will prevent you from being online. If you enable this, you won't be able to see others' status.";
+    var onlineStatusTitle = "Hide \"Online\" status";
+    var onlineStatusCaption = "Stops sending presence updates. If enabled, will prevent you from seeing others' online status.";
+
+    var typingStatusTitle = "Hide \"Typing...\" status";
     var typingStatusCaption = "Will prevent you from sending 'Typing...' status.";
+
+    var readConfirmationsTitle = "Don't send read confirmations";
+    var readConfirmationsCaption = "Blocked messages will be marked with a button.";
+    var readConfirmationsNote = "Also works for stories and audio messages.";
+
     var deletedMessagesTitle = "Restore deleted messages";
     var deletedMessagesCaption = "Marks deleted messages in red";
 
@@ -266,11 +274,11 @@ function generateDropContent(options)
                             <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
                             </div>
                         </div>
-                        Don't send read confirmations
-                        <div class='incognito-options-description'>Blocked messages will be marked with a button.</div>
+                        ${readConfirmationsTitle}
+                        <div class='incognito-options-description'>${readConfirmationsCaption}</div>
                         <br>
                         <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
-                            Also works for stories and audio messages.
+                            ${readConfirmationsNote}
                         </div> 
                     </div> 
                             
@@ -279,7 +287,7 @@ function generateDropContent(options)
                             <div class='checkbox checkbox checkbox-incognito ${onlineUpdatesCheckbox}
                             </div>
                         </div>
-                        Hide \"Online\" status
+                        ${onlineStatusTitle}
                         <div class='incognito-options-description'>${onlineStatusCaption}</div>
                     </div>
                     <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
@@ -287,7 +295,7 @@ function generateDropContent(options)
                             <div class='checkbox checkbox checkbox-incognito ${typingUpdatesCheckbox}
                             </div>
                         </div>
-                        Hide \"Typing...\" status
+                        ${typingStatusTitle}
                         <div class='incognito-options-description'>${typingStatusCaption}</div>
                     </div>
                     <button class='incognito-next-button'>Next &gt</button>
