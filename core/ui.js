@@ -215,10 +215,10 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var onlineStatusTitle = "Hide \"Online\" status";
-    var onlineStatusCaption = "Stops sending presence updates. If enabled, will prevent you from seeing others' online status.";
+    var onlineStatusTitle = "Hide \"online\" status";
+    var onlineStatusCaption = "Stops sending presence updates. Will prevent you from seeing others' online status.";
 
-    var typingStatusTitle = "Hide \"Typing...\" status";
+    var typingStatusTitle = "Hide \"typing...\" status";
     var typingStatusCaption = "Stops sending typing updates.";
 
     var readConfirmationsTitle = "Don't send read confirmations";
