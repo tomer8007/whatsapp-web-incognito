@@ -154,7 +154,8 @@ async function addIconIfNeeded()
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
 
                 document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-presence-updates").addEventListener("click", onPresenseUpdatesTick);
+                document.getElementById("incognito-option-online-status").addEventListener("click", onOnlineUpdatesTick);
+                document.getElementById("incognito-option-typing-status").addEventListener("click", onTypingUpdatesTick);
                 document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
@@ -180,7 +181,8 @@ async function addIconIfNeeded()
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-presence-updates").removeEventListener("click", onPresenseUpdatesTick);
+                document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
+                document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
 
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
@@ -213,7 +215,16 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
-    var presenceCaption = "Will prevent you from seeing other people's last seen and typing status";
+    var onlineStatusTitle = "Hide \"Online\" status";
+    var onlineStatusCaption = "Stops sending presence updates. If enabled, will prevent you from seeing others' online status.";
+
+    var typingStatusTitle = "Hide \"Typing...\" status";
+    var typingStatusCaption = "Stops sending typing updates.";
+
+    var readConfirmationsTitle = "Don't send read confirmations";
+    var readConfirmationsCaption = "Blocked messages will be marked with a button.";
+    var readConfirmationsNote = "Also works for stories and audio messages.";
+
     var deletedMessagesTitle = "Restore deleted messages";
     var deletedMessagesCaption = "Marks deleted messages in red";
 
@@ -229,7 +240,10 @@ function generateDropContent(options)
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var presenceUpdatesChcekbox = (options.presenceUpdatesHook ? "checked incognito-checked'> \
+    var onlineUpdatesCheckbox = (options.onlineUpdatesHook ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
@@ -260,29 +274,29 @@ function generateDropContent(options)
                             <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
                             </div>
                         </div>
-                        Don't send read confirmations
-                        <div class='incognito-options-description'>Blocked messages will be marked with a button.</div>
+                        ${readConfirmationsTitle}
+                        <div class='incognito-options-description'>${readConfirmationsCaption}</div>
                         <br>
                         <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
-                            Also works for stories and audio messages.
+                            ${readConfirmationsNote}
                         </div> 
                     </div> 
                             
-                    <div id='incognito-option-presence-updates' class='incognito-options-item' style='cursor: pointer;'>
+                    <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
                         <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${presenceUpdatesChcekbox}
+                            <div class='checkbox checkbox checkbox-incognito ${onlineUpdatesCheckbox}
                             </div>
                         </div>
-                        Don't send \"Last Seen\" and \"Typing\" updates
-                        <div class='incognito-options-description'>${presenceCaption}</div>
+                        ${onlineStatusTitle}
+                        <div class='incognito-options-description'>${onlineStatusCaption}</div>
                     </div>
-                    <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
+                    <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
                         <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
+                            <div class='checkbox checkbox checkbox-incognito ${typingUpdatesCheckbox}
                             </div>
                         </div>
-                        ${deletedMessagesTitle}
-                        <div class='incognito-options-description'>${deletedMessagesCaption}</div>
+                        ${typingStatusTitle}
+                        <div class='incognito-options-description'>${typingStatusCaption}</div>
                     </div>
                     <button class='incognito-next-button'>Next &gt</button>
                 </div>
@@ -290,8 +304,16 @@ function generateDropContent(options)
                 <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
 
                     <!---- Second Page ---!>
-
+                    
                     <div class='incognito-options-view' id='incognito-options-view-internal2'>
+                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
+                                </div>
+                            </div>
+                            ${deletedMessagesTitle}
+                            <div class='incognito-options-description'>${deletedMessagesCaption}</div>
+                        </div>
                         <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
                             <div class='checkbox-container-incognito' style=''>
                                 <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
@@ -308,14 +330,6 @@ function generateDropContent(options)
                             ${autoReceiptTitle}
                             <div class='incognito-options-description'>${autoReceiptCaption}</div>
                         </div>
-                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
-                                </div>
-                            </div>
-                            ${allowStatusDownloadTitle}
-                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
-                        </div>
                         <br>
                         <button class='incognito-next-button'>Next &gt</button>
                         <button class='incognito-back-button'>&lt Back</button>
@@ -325,8 +339,15 @@ function generateDropContent(options)
                 <div class='incognito-options-view-container' style='transform: translate(200%, 0%);' id='incognito-options-view3'>
 
                     <!---- Third Page ---!>
-
                     <div class='incognito-options-view' id='incognito-options-view-internal3'>
+                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
+                                </div>
+                            </div>
+                            ${allowStatusDownloadTitle}
+                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
+                        </div>
                         <div class='incognito-options-item' style='cursor: pointer;'>
                             More options coming soon!
                         </div>
@@ -459,27 +480,53 @@ function onReadConfirmaionsTick()
     }));
 }
 
-function onPresenseUpdatesTick()
+function onOnlineUpdatesTick()
 {
-    var presenceUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-presence-updates .checkbox-incognito");
+    var onlineUpdatesHook = false;
+    var checkbox = document.querySelector("#incognito-option-online-status .checkbox-incognito");
     var checkboxClass = checkbox.getAttribute("class");
     var checkmark = checkbox.firstElementChild;
     var chekmarkClass = checkmark.getAttribute("class");
     if (checkboxClass.indexOf("unchecked") > -1)
     {
         tickCheckbox(checkbox, checkmark);
-        presenceUpdatesHook = true;
+        onlineUpdatesHook = true;
+        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
     }
     else
     {
         untickCheckbox(checkbox, checkmark);
-        presenceUpdatesHook = false;
+        onlineUpdatesHook = false;
+        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
     }
-    browser.runtime.sendMessage({ name: "setOptions", presenceUpdatesHook: presenceUpdatesHook });
+    browser.runtime.sendMessage({ name: "setOptions", onlineUpdatesHook: onlineUpdatesHook });
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
     {
-        detail: JSON.stringify({ presenceUpdatesHook: presenceUpdatesHook })
+        detail: JSON.stringify({ onlineUpdatesHook: onlineUpdatesHook })
+    }));
+}
+
+function onTypingUpdatesTick()
+{
+    var typingUpdatesHook = false;
+    var checkbox = document.querySelector("#incognito-option-typing-status .checkbox-incognito");
+    var checkboxClass = checkbox.getAttribute("class");
+    var checkmark = checkbox.firstElementChild;
+    var chekmarkClass = checkmark.getAttribute("class");
+    if (checkboxClass.indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        typingUpdatesHook = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        typingUpdatesHook = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", typingUpdatesHook: typingUpdatesHook });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ typingUpdatesHook: typingUpdatesHook })
     }));
 }
 

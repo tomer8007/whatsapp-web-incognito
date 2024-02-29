@@ -10,9 +10,13 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 {
     if (messageEvent.name == "setOptions")
     {
-        if ("presenceUpdatesHook" in messageEvent)
+        if ("onlineUpdatesHook" in messageEvent)
 		{
-            chrome.storage.local.set({"presenceUpdatesHook": messageEvent.presenceUpdatesHook});
+            chrome.storage.local.set({"onlineUpdatesHook": messageEvent.onlineUpdatesHook});
+		}
+        if ("typingUpdatesHook" in messageEvent)
+		{
+            chrome.storage.local.set({"typingUpdatesHook": messageEvent.typingUpdatesHook});
 		}
 		if ("readConfirmationsHook" in messageEvent)
 		{
@@ -46,7 +50,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
     else if (messageEvent.name == "getOptions")
     {
         // these are the default values. we will update them according to the storage
-		var presenceUpdatesHook = true;
+		var onlineUpdatesHook = false;
+        var typingUpdatesHook = true;
         var readConfirmationsHook = true;
         var showReadWarning = true;
 		var safetyDelay = 0;
@@ -55,7 +60,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var autoReceiptOnReplay = true;
         var allowStatusDownload = true;
 
-        chrome.storage.local.get(['presenceUpdatesHook', 
+        chrome.storage.local.get(['onlineUpdatesHook',
+                                'typingUpdatesHook',
                                 'readConfirmationsHook', 
                                 'showReadWarning', 
                                 'safetyDelay', 
@@ -64,9 +70,13 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'autoReceiptOnReplay',
                                 'allowStatusDownload']).then(function(storage)
         {
-            if (storage["presenceUpdatesHook"] != undefined)
+            if (storage["onlineUpdatesHook"] != undefined)
             {
-                presenceUpdatesHook = storage["presenceUpdatesHook"];
+                onlineUpdatesHook = storage["onlineUpdatesHook"];
+            }
+            if (storage["typingUpdatesHook"] != undefined)
+            {
+                typingUpdatesHook = storage["typingUpdatesHook"];
             }
             if (storage["readConfirmationsHook"] != undefined)
             {
@@ -98,7 +108,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             }
             callback(
             {
-                presenceUpdatesHook: presenceUpdatesHook,
+                onlineUpdatesHook: onlineUpdatesHook,
+                typingUpdatesHook: typingUpdatesHook,
                 readConfirmationsHook: readConfirmationsHook,
                 showReadWarning: showReadWarning,
                 safetyDelay: safetyDelay,

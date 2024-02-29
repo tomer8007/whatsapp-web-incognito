@@ -377,6 +377,7 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
     window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
     window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
+    window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol
 
     if (window.WhatsAppAPI.Seen == undefined)
     {
