@@ -219,7 +219,7 @@ function generateDropContent(options)
     var onlineStatusCaption = "Stops sending presence updates. If enabled, will prevent you from seeing others' online status.";
 
     var typingStatusTitle = "Hide \"Typing...\" status";
-    var typingStatusCaption = "Will prevent you from sending 'Typing...' status.";
+    var typingStatusCaption = "Stops sending typing updates.";
 
     var readConfirmationsTitle = "Don't send read confirmations";
     var readConfirmationsCaption = "Blocked messages will be marked with a button.";
