@@ -47,9 +47,9 @@ NodeHandler.isSentNodeAllowed = function (node)
             (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
             (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
 
-            (presenceUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-            (presenceUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-            (presenceUpdatesHookEnabled && action == "chatstate" && child.content[0].tag == "composing");
+            (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
+            (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
+            (typingUpdatesHookEnabled && action == "chatstate" && child.content[0].tag == "composing");
 
         if (shouldBlock)
         {
