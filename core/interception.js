@@ -237,7 +237,7 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
     {
         var retrievedMsg = {};
         var type = "";
-        if(e2eMessage.viewOnceMessageV2 !== null)
+        if (e2eMessage.viewOnceMessageV2 !== null)
         {
             if (e2eMessage.viewOnceMessageV2.message.imageMessage !== null) 
             {
@@ -267,7 +267,7 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
         const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
         const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
         
-        if(window.WhatsAppAPI !== undefined)
+        if (window.WhatsAppAPI !== undefined)
         {
             const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
                 directPath: retrievedMsg.directPath,
