@@ -70,7 +70,8 @@ document.addEventListener('onOptionsUpdate', function (e)
     // TODO: move outside injected_ui.js
     var options = JSON.parse(e.detail);
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
-    if ('presenceUpdatesHook' in options) presenceUpdatesHookEnabled = options.presenceUpdatesHook;
+    if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
+    if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
