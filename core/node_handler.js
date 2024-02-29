@@ -28,79 +28,76 @@ NodeHandler.interceptOutgoingNode = async function (node)
 
 NodeHandler.isSentNodeAllowed = function (node)
 {
-    var subNodes = [node];
-    if (Array.isArray(node.content)) 
+    var action = node.tag;
+    var data = node.attrs;
+    var shouldBlock = 
+        (readConfirmationsHookEnabled && action === "read") ||
+        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
+        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
+        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
+        (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+
+        (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
+        (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
+        (typingUpdatesHookEnabled && action == "chatstate" && node.content[0].tag == "composing");
+
+    if (shouldBlock)
     {
-        subNodes = subNodes.concat(node.content);
-    }
-
-    for (var i = 0; i < subNodes.length; i++)
-    {
-        var child = subNodes[i];
-
-        var action = child.tag;
-        var data = child.attrs;
-        var shouldBlock = 
-            (readConfirmationsHookEnabled && action === "read") ||
-            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-            (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-            (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
-            (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
-
-            (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-            (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-            (typingUpdatesHookEnabled && action == "chatstate" && child.content[0].tag == "composing");
-
-        if (shouldBlock)
+        switch (action)
         {
-            switch (action)
-            {
-                case "read":
-                case "receipt":
-                    var jid = data.jid ? data.jid : data.to;
-                    jid = normalizeJID(jid.toString());
+            case "read":
+            case "receipt":
+                var jid = data.jid ? data.jid : data.to;
+                jid = normalizeJID(jid.toString());
 
-                    var isReadReceiptAllowed = exceptionsList.includes(jid);
-                    if (isReadReceiptAllowed)
+                var isReadReceiptAllowed = exceptionsList.includes(jid);
+                if (isReadReceiptAllowed)
+                {
+                    // this is the user trying to send out a read receipt.
+                    console.log("WhatsIncongito: Allowing read receipt to " + jid);
+
+                    // exceptions are one-time operation, so remove it from the list after some time
+                    setTimeout(function() {
+                        exceptionsList = exceptionsList.filter(i => i !== jid);
+                    }, 2000);
+
+                    return true;
+                }
+                else
+                {
+                    // We do not allow sending this read receipt.
+                    // invoke the callback and fake a failure response from server
+                    document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
+
+                    // TODO: Is the unsent message problem due to blocking read-self?
+                    // why there are read receipts we need to block after sending a message to a lot of people?
+                    setTimeout(function()
                     {
-                        // this is the user trying to send out a read receipt.
-                        console.log("WhatsIncongito: Allowing read receipt to " + jid);
-
-                        // exceptions are one-time operation, so remove it from the list after some time
-                        setTimeout(function() {
-                            exceptionsList = exceptionsList.filter(i => i !== jid);
-                        }, 2000);
-
-                        return true;
-                    }
-                    else
-                    {
-                        // We do not allow sending this read receipt.
-                        // invoke the callback and fake a failure response from server
-                        document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
-
-                        if (action == "read" && wsHook.onMessage)
+                        if (WhatsAppAPI.Communication)
                         {
-                            // TODO: in multi-device, not sending an error message back to the client results in a lot of repeated attempts.
-                            var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 403}" });
-                            wsHook.onMessage(messageEvent);
+                            console.log("Clearing ack expections after blocking a receipt.");
+                            // clear expectations for acks that will never be received (becase we blocked them earlier)
+                            WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
+                                                                                                                    ack.stanza.attrs.to.toString() != jid);
                         }
+            
+                    }, 200);
 
-                    }
-                    break;
+                }
+                break;
 
-                case "presence":
-                    //var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 200}" });
-                    //wsHook.onMessage(messageEvent);
-                    break;
-            }
-
-            console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
-            console.log(node);
-
-            return false;
+            case "presence":
+                //var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 200}" });
+                //wsHook.onMessage(messageEvent);
+                break;
         }
+
+        console.log("WhatsIncognito: --- Blocking " + action.toUpperCase() + " action! ---");
+        console.log(node);
+
+        return false;
     }
+
 
     return true;
 }
