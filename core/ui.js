@@ -322,6 +322,7 @@ function generateDropContent(options)
                             ${autoReceiptTitle}
                             <div class='incognito-options-description'>${autoReceiptCaption}</div>
                         </div>
+                        <br>
                         <button class='incognito-next-button'>Next &gt</button>
                         <button class='incognito-back-button'>&lt Back</button>
                     </div>
