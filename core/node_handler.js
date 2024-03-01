@@ -77,8 +77,8 @@ NodeHandler.isSentNodeAllowed = function (node)
                         {
                             console.log("Clearing ack expections after blocking a receipt.");
                             // clear expectations for acks that will never be received (becase we blocked them earlier)
-                            WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
-                                                                                                                    ack.stanza.attrs.to.toString() != jid);
+                            WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => !(ack.stanza.attrs.type == "read" && 
+                                                                                                                    ack.stanza.attrs.to.toString() == jid));
                         }
             
                     }, 200);
@@ -151,6 +151,23 @@ NodeHandler.onOutgoingMessageNode = async function (messageNode)
     return messageNode;
 }
 
+//
+// `enc` nodes seem to represnet an encryption of the message for one device.
+// <message id="..." to="....@s.whatsapp.net" type="text">
+//   <participants>
+//      <to jid="...@s.whatsapp.net">               // <----- your own phone
+//          <enc v="2" type="msg">...</enc>
+//      </to>
+//      <to jid="...@s.whatsapp.net">               // <---  one device of the recipant
+//          <enc v="2" type="msg">...</enc>
+//      </to>
+//  </participants>
+//  </message>
+//
+//  or
+// <message id="..." to="....@s.whatsapp.net" type="text">
+//     <enc v="2" type="pkmsg">...</enc>
+// </message>
 NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
     if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)

@@ -215,14 +215,6 @@ document.addEventListener('sendReadConfirmation', async function (e)
     // add an exception and remove it after a short time at any case
     exceptionsList.push(normalizeJID(data.jid));
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
-
-    // TODO: maybe we can delete the following code if we do it also after blocking a receipt
-    if (WhatsAppAPI.Communication)
-    {
-        // clear expectations for acks that will never be received (becase we blocked them earlier)
-        WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => ack.stanza.attrs.type != "read" && 
-                                                                                                ack.stanza.attrs.to.toString() != data.jid);
-    }
     
     WhatsAppAPI.Seen.sendSeen(chat).then(result =>
     {

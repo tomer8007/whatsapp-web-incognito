@@ -51,7 +51,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
     {
         // these are the default values. we will update them according to the storage
 		var onlineUpdatesHook = false;
-        var typingUpdatesHook = true;
+        var typingUpdatesHook = false;
         var readConfirmationsHook = true;
         var showReadWarning = true;
 		var safetyDelay = 0;
