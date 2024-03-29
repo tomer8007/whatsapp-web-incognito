@@ -5,7 +5,7 @@ var UIClassNames = {};
 
 (function() {
 
-UIClassNames.MENU_ITEM_CLASS = "_3OtEr";
+UIClassNames.MENU_ITEM_CLASS = "_ajv7";
 UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_2Qn52";
 
 UIClassNames.OUTER_DROPDOWN_CLASS = "_2sDI2"; // outside class of dropdown with "mark as unread"
