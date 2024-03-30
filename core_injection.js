@@ -11,12 +11,13 @@ async function injectOtherScripts()
 	injectScript('core/parsing/protobuf/WAProto.js');
 
 	injectScript('lib/pbf.3.0.5.min.js');
+	injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
+	injectScript('lib/pako.js');
 
 	injectScript('core/utils.js');
 	injectScript('core/ui_class_names.js');
 	injectScript('core/injected_ui.js');
 	
-	injectScript('lib/pako.js');
 	await injectScript('core/multi_device.js');
 	await injectScript('core/node_handler.js');
 	injectScript('core/interception.js');

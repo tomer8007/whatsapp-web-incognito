@@ -101,6 +101,7 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         else
         {
             console.error("Could not decrypt Noise packet");
+            console.error(exception);
             debugger;
             throw exception;
         }
@@ -182,7 +183,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     // get the storage
     if (!window.WhatsAppAPI) exposeWhatsAppAPI();
 
-    var storageModule = window.WhatsAppAPI.Storage;
+    var storageModule = window.WhatsAppAPI.SignalStore;
     storage = storageModule.getSignalProtocolStore();
     if (storage == undefined) 
     {
@@ -199,7 +200,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
         var chiphertextType = message.attrs["type"];
 
         // decrypt the message
-        var address = new libsignal.SignalProtocolAddress(fromJid.substring(0, fromJid.indexOf("@")), 0);
+        var address = fromJid.substring(0, fromJid.indexOf("@")) + "." + "0";
         var message = null;
 
         try

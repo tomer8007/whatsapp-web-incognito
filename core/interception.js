@@ -2,8 +2,10 @@
 // Interception of WhatsApp packets and handling nodes
 //
 
+// Global enforcing variables
 var readConfirmationsHookEnabled = true;
-var presenceUpdatesHookEnabled = true;
+var onlineUpdatesHookEnabled = false;
+var typingUpdatesHookEnabled = false;
 var saveDeletedMsgsHookEnabled = false;
 var showDeviceTypesEnabled = true;
 var autoReceiptOnReplay = true;
@@ -400,7 +402,7 @@ function hookLogs()
 
     var originalSendLogs = window.SEND_LOGS;
     var originalOnUnhandledRejection = window.onunhandledrejection;
-    var originalLog = window.__LOG__;
+    var originalLog = window.__LOG__; // TODO: Find log function for 2.3000 ( d("WALogger").LOG,  d("WALogger").ERROR ?)
 
     Object.defineProperty(window, 'onunhandledrejection', {
         set: function(value) { originalOnUnhandledRejection = value; },
@@ -442,10 +444,6 @@ function hookLogs()
             {
                 var originalLogFn = originalLog(errorLevel);
                 return originalLogFn.apply(null, arguments);
-            }
-            else
-            {
-                console.error(message);
             }
             
         };

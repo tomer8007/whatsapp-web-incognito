@@ -110,10 +110,10 @@ function nodeToXML(node)
 
 function getCurrentChat()
 {
-    if (window.WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
+    if (window.WhatsAppAPI &&  WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
         return WhatsAppAPI.ChatCollection.getActive();
 
-    // fallback to old method
+    // fallback to old method. TODO: this is not currently working
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
     var reactResult = FindReact(elements[0], traverseUp = 2);
     var chat = reactResult.props.children.props.children.props.chat;
