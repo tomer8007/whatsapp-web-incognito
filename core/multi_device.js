@@ -180,8 +180,9 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     var keyDistributionMessage = null;
 
     // get the storage
-    var moduleFinder = getModuleFinder();
-    var storageModule = moduleFinder.findModule("getSignalProtocolStore")[0];
+    if (!window.WhatsAppAPI) exposeWhatsAppAPI();
+
+    var storageModule = window.WhatsAppAPI.Storage;
     storage = storageModule.getSignalProtocolStore();
     if (storage == undefined) 
     {

@@ -110,8 +110,8 @@ function nodeToXML(node)
 
 function getCurrentChat()
 {
-    if (window.WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.getActive)
-        return WhatsAppAPI.Store.Chat.getActive();
+    if (window.WhatsAppAPI && WhatsAppAPI.Store &&  WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
+        return WhatsAppAPI.ChatCollection.getActive();
 
     // fallback to old method
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
@@ -145,11 +145,11 @@ async function getChatByJID(jid)
     if (jid == undefined) debugger;
     jid = normalizeJID(jid);
 
-    if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.Store.Chat && WhatsAppAPI.Store.Chat.find)
+    if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
     {
         try
         {
-            var chat = await WhatsAppAPI.Store.Chat.find(jid);
+            var chat = await WhatsAppAPI.ChatCollection.find(jid);
             return chat;
         }
         catch (e)

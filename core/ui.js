@@ -31,7 +31,7 @@ function initialize()
     });
 
     // initialize mutation observer
-    var appElem = document.getElementById("app");
+    var appElem = document.getElementsByTagName("body")[0];
     if (appElem != undefined)
     {
         var mutationObserver = new MutationObserver(function (mutations)

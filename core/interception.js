@@ -354,30 +354,32 @@ function exposeWhatsAppAPI()
 {
     window.WhatsAppAPI = {};
 
-    var moduleFinder = getModuleFinder();
-
-    /*
-    var suspectedModules = moduleFinder.findModule("isLegitErrorStack");
-    if (suspectedModules.length > 0)
+    if (window.webpackChunkwhatsapp_web_client)
     {
-        suspectedModules[0].isLegitErrorStack = function() {return true;};
-        Object.defineProperty(suspectedModules[0], "isLegitErrorStack", {
-            get()
-            {
-                debugger;
-                return function() {return true;};
-            }
-        })
+        var moduleFinder = getModuleFinder();
+
+        window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
+        window.WhatsAppAPI.ChatCollection = moduleFinder.findModule("Msg")[0].default.Chat;
+        window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
+        window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
+        window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
+        window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol;
+        window.WhatsAppAPI.SignalStore = moduleFinder.findModule("getSignalProtocolStore")[0];
+    }
+    else if (window.require)
+    {
+        // React Native
+        window.WhatsAppAPI.downloadManager = require("WAWebDownloadManager").downloadManager;
+        window.WhatsAppAPI.ChatCollection = require("WAWebChatCollection").ChatCollection;
+        window.WhatsAppAPI.Seen = require("WAWebUpdateUnreadChatAction");
+        window.WhatsAppAPI.Communication = require("WAComms");
+        window.WhatsAppAPI.LoadEarlierMessages = require("WAWebChatLoadMessages");
+        window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol");
+        window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
 
     }
-    */
 
-    window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
-    window.WhatsAppAPI.Store = moduleFinder.findModule("Msg")[0].default;
-    window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
-    window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
-    window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
-    window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol
+    
 
     if (window.WhatsAppAPI.Seen == undefined)
     {
@@ -436,8 +438,16 @@ function hookLogs()
                 console.info(message);
             }
 
-            var test = originalLog(errorLevel);
-            return test.apply(null, arguments);
+            if (originalLog)
+            {
+                var originalLogFn = originalLog(errorLevel);
+                return originalLogFn.apply(null, arguments);
+            }
+            else
+            {
+                console.error(message);
+            }
+            
         };
     }
 }
