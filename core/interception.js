@@ -376,7 +376,7 @@ function exposeWhatsAppAPI()
         window.WhatsAppAPI.Seen = require("WAWebUpdateUnreadChatAction");
         window.WhatsAppAPI.Communication = require("WAComms");
         window.WhatsAppAPI.LoadEarlierMessages = require("WAWebChatLoadMessages");
-        window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol");
+        window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol").sendPresenceStatusProtocol;
         window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
 
     }
