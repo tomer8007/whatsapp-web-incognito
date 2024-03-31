@@ -356,19 +356,7 @@ function exposeWhatsAppAPI()
 {
     window.WhatsAppAPI = {};
 
-    if (window.webpackChunkwhatsapp_web_client)
-    {
-        var moduleFinder = getModuleFinder();
-
-        window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
-        window.WhatsAppAPI.ChatCollection = moduleFinder.findModule("Msg")[0].default.Chat;
-        window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
-        window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
-        window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
-        window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol;
-        window.WhatsAppAPI.SignalStore = moduleFinder.findModule("getSignalProtocolStore")[0];
-    }
-    else if (window.require)
+    if (window.require)
     {
         // React Native
         window.WhatsAppAPI.downloadManager = require("WAWebDownloadManager").downloadManager;
@@ -380,8 +368,18 @@ function exposeWhatsAppAPI()
         window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
 
     }
+    else if (window.webpackChunkwhatsapp_web_client)
+    {
+        var moduleFinder = getModuleFinder();
 
-    
+        window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
+        window.WhatsAppAPI.ChatCollection = moduleFinder.findModule("Msg")[0].default.Chat;
+        window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
+        window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
+        window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
+        window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol;
+        window.WhatsAppAPI.SignalStore = moduleFinder.findModule("getSignalProtocolStore")[0];
+    }
 
     if (window.WhatsAppAPI.Seen == undefined)
     {
