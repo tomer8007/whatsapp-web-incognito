@@ -451,3 +451,29 @@ input[type=number]::-webkit-inner-spin-button {
 .incognito-view-once-learn-more{
   display: block;
 }
+
+.side-pane-autohide{
+  opacity: 0;
+  -webkit-transition: opacity 0.3s;
+  -moz-transition: opacity 0.3s;
+  transition: opacity 0.3s;
+}
+
+.side-pane-autohide:hover{
+  opacity: 1;
+}
+
+#whatsapp-incognito-hide-sidebar-container{
+  text-align: center;
+  font-style: italic;
+  padding:10px;
+}
+
+#whatsapp-incognito-hide-sidebar-message{
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+#whatsapp-incognito-hide-sidebar-caption{
+  font-size: 13px;
+}
