@@ -241,7 +241,7 @@ function generateDropContent(options)
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
     var hideSidebarTitle = "Hide contacts + message previews";
-    var hideSidebarCaption = "When the mouse isn't over the sidebar (which shows contacts and message previews, they will become invisible.";
+    var hideSidebarCaption = "When the mouse isn't over the sidebar (which shows contacts and message previews), they will become invisible.";
 
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
