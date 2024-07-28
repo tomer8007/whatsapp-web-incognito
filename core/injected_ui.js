@@ -17,6 +17,27 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
     WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"available"})
 });
 
+document.addEventListener('hideSidebar', function (e)
+{
+    const textNode = `
+    <div id="whatsapp-incognito-hide-sidebar-container">
+        <p id="whatsapp-incognito-hide-sidebar-message">Hiding Contacts and Message Previews</p>
+        <p id="whatsapp-incognito-hide-sidebar-caption">You can disable this in WhatsApp Incognito options, or temporarily show them by hovering over this area.</p>
+    </div>
+    `
+    paneSide = document.getElementById("pane-side");
+    paneSide.insertAdjacentHTML('beforebegin', textNode);
+    paneSide.classList.add("side-pane-autohide");
+});
+
+document.addEventListener('unhideSidebar', function (e)
+{
+    if(document.getElementById("whatsapp-incognito-hide-sidebar-container")){
+        document.getElementById("whatsapp-incognito-hide-sidebar-container").remove()
+    }
+    paneSide = document.getElementById("pane-side")
+    paneSide.classList.remove("side-pane-autohide")
+});
 
 document.addEventListener('onIncognitoOptionsOpened', function (e)
 {
@@ -77,6 +98,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    if ('hideSidebar' in options) hideSidebar = options.hideSidebar;
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
