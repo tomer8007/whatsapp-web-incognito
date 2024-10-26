@@ -69,7 +69,7 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         for (var i = 0; i < frames.length; i++)
         {
             var frameInfo = frames[i];
-    
+            
             var currentFrame = frameInfo.frame;
             var counter = frameInfo.counter;
             
