@@ -455,7 +455,7 @@ function markChatAsBlocked(chat)
         warningMessage.messageID = messageID;
 
         //
-        // Put that warning under in the chat panel, under the unread counter or at the bottom
+        // Put that warning in the chat panel, under the unread counter or at the bottom
         //
 
         var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];

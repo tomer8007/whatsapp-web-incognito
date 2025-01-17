@@ -18,6 +18,7 @@ MultiDevice.initialize = function()
     MultiDevice.outgoingQueue = new PromiseQueue();
 
     // install our hook in order to discover the Noise keys
+    // ("WACryptoDependencies").getCrypto().subtle.importKey
     window.crypto.subtle.importKey = async function(format, keyData, algorithm, extractable, keyUsages)
     {
         if (format == "raw" && algorithm == "AES-GCM" && keyData.length == 32 && extractable == false && keyUsages.length == 1)
@@ -45,10 +46,15 @@ MultiDevice.initialize = function()
 };
 
 MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
-{    
-    if (MultiDevice.looksLikeHandshakePacket(payload) || MultiDevice.readKey == null) return null;
+{
+    // relevant functions: WANoiseSocket.sendFrmae, onFrame
+    var looksLikeHandshakePacket = MultiDevice.looksLikeHandshakePacket(payload);
+    
+    await MultiDevice.waitForNoiseKeyIfNeeded(looksLikeHandshakePacket);
+    if (looksLikeHandshakePacket || MultiDevice.readKey == null) return null;
 
     // split to frames
+    // WAFrameSocket.convertBufferedToFrames
     var binaryReader = new BinaryReader();
     binaryReader.writeBuffer(payload);
     binaryReader._readIndex = 0;
@@ -96,7 +102,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
             if (isIncoming) MultiDevice.readCounter--;
             else MultiDevice.writeCounter--;
 
-            throw "Wrong counter in decryption";
+            var counter = isIncoming ? MultiDevice.readCounter : MultiDevice.writeCounter;
+
+            throw ("Couldn't decrypt Noise packet: wrong counter (" + counter + ") in decryption, isIncoming: " + isIncoming);
         }
         else
         {
@@ -500,6 +508,7 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     //    <-- e, s (encrypted), payload (encrypted NoiseCertificate)        [server hello]
     //    --> s (encrypted public key), payload (encrypted ClientPayload)   [client finish]
     // https://noiseprotocol.org/noise.html#handshake-patterns
+    // relevenat functions: WAWebOpenChatSocket, WANoiseHandshake
 
     if (payload.byteLength < 8)
     {
@@ -518,15 +527,19 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     if (startOffset > 3) MultiDevice.numPacketsSinceHandshake = 0; // client hello
     if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
 
+    var handshakeMessage = {};
+    var looksLikeHandshakePacket = false;
     var binary = payload.slice(startOffset, payload.length);
     try
     {
-        var handshakeMessage = HandshakeMessage.read(new Pbf(binary));
+        handshakeMessage = HandshakeMessage.read(new Pbf(binary));
     }
     catch
     {
-        return false;
+        looksLikeHandshakePacket = false;
     }
+
+    looksLikeHandshakePacket = handshakeMessage.clientHello || handshakeMessage.serverHello || handshakeMessage.clientFinish;
 
     if (window.WAdebugMode)
     {
@@ -535,8 +548,18 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
         if (handshakeMessage.clientFinish) console.log("WAIncognito: client finish", handshakeMessage.clientFinish);
     }
 
-    return handshakeMessage.clientHello || handshakeMessage.serverHello || handshakeMessage.clientFinish;
+    return looksLikeHandshakePacket;
 };
+
+MultiDevice.waitForNoiseKeyIfNeeded = async function(looksLikeHandshakePacket)
+{
+    if (!looksLikeHandshakePacket && MultiDevice.readKey == null)
+    {
+        console.log("Warning: Got noise packet without valid key");
+        //debugger;
+        await sleep(1000);
+    }
+}
 
 MultiDevice.counterToIV = function(counter)
 {
@@ -548,6 +571,10 @@ MultiDevice.counterToIV = function(counter)
 function toArrayBuffer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // https://medium.com/@karenmarkosyan/how-to-manage-promises-into-dynamic-queue-with-vanilla-javascript-9d0d1f8d4df5
