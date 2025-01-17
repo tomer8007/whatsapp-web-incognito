@@ -557,7 +557,7 @@ MultiDevice.waitForNoiseKeyIfNeeded = async function(looksLikeHandshakePacket)
     {
         console.log("Warning: Got noise packet without valid key");
         //debugger;
-        await sleep(1000);
+        await sleep(3000);
     }
 }
 
