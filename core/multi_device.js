@@ -548,6 +548,13 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
         if (handshakeMessage.clientFinish) console.log("WAIncognito: client finish", handshakeMessage.clientFinish);
     }
 
+    if (handshakeMessage.clientHello)
+    {
+        // reset the counters on a new connection to avoid weird stuff
+        MultiDevice.readKey = null;
+        MultiDevice.writeKey = null;
+    }
+
     return looksLikeHandshakePacket;
 };
 
@@ -555,9 +562,9 @@ MultiDevice.waitForNoiseKeyIfNeeded = async function(looksLikeHandshakePacket)
 {
     if (!looksLikeHandshakePacket && MultiDevice.readKey == null)
     {
-        console.log("Warning: Got noise packet without valid key");
+        console.log("Warning: Waiting for the noise key to arrive");
         //debugger;
-        await sleep(3000);
+        await sleep(2000);
     }
 }
 
