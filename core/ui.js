@@ -110,6 +110,7 @@ function onMainUIReady()
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
+    checkSidebarHideStatus();
 }
 
 async function addIconIfNeeded()
@@ -160,6 +161,7 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
                 document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+                document.getElementById("incognito-option-hide-sidebar").addEventListener("click", onHideSidebarClicked);
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
                     nextButton.addEventListener("click", onNextButtonClicked);
@@ -183,6 +185,7 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
                 document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
+                document.getElementById("incognito-option-hide-sidebar").removeEventListener("click", onHideSidebarClicked);
 
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
@@ -237,6 +240,9 @@ function generateDropContent(options)
     var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
+    var hideSidebarTitle = "Hide contacts + message previews";
+    var hideSidebarCaption = "When the mouse isn't over the sidebar (which shows contacts and message previews), they will become invisible.";
+
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
@@ -256,6 +262,9 @@ function generateDropContent(options)
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var hideSidebarCheckbox = (options.hideSidebar ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
 
@@ -347,6 +356,14 @@ function generateDropContent(options)
                             </div>
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
+                        </div>
+                        <div id='incognito-option-hide-sidebar' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${hideSidebarCheckbox}
+                                </div>
+                            </div>
+                            ${hideSidebarTitle}
+                            <div class='incognito-options-description'>${hideSidebarCaption}</div>
                         </div>
                         <div class='incognito-options-item' style='cursor: pointer;'>
                             More options coming soon!
@@ -628,6 +645,39 @@ function onStatusDownloadingTick()
         detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
     }));
 }
+
+
+function onHideSidebarClicked()
+{
+    var hideSidebar = false;
+    var checkbox = document.querySelector("#incognito-option-hide-sidebar .checkbox-incognito");
+    
+    var checkmark = checkbox.firstElementChild;
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        hideSidebar = true;
+        document.dispatchEvent(new CustomEvent('hideSidebar',
+        {
+            detail: JSON.stringify({ hideSidebar: hideSidebar })
+        }));
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        hideSidebar = false;
+        document.dispatchEvent(new CustomEvent('unhideSidebar',
+        {
+            detail: JSON.stringify({ hideSidebar: hideSidebar })
+        }));
+    }
+    browser.runtime.sendMessage({ name: "setOptions", hideSidebar: hideSidebar });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ hideSidebar: hideSidebar })
+    }));
+}  
 
 function onNextButtonClicked()
 {
@@ -1110,6 +1160,27 @@ function checkInterception()
     }
 
     return true;
+}
+
+function checkSidebarHideStatus()
+{    
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    {
+        if (options.hideSidebar)
+        {
+            document.dispatchEvent(new CustomEvent('hideSidebar',
+            {
+                detail: JSON.stringify({ hideSidebar: options.hideSidebar })
+            }));
+        }
+        else
+        {
+            document.dispatchEvent(new CustomEvent('unhideSidebar',
+            {
+                detail: JSON.stringify({ hideSidebar: options.hideSidebar })
+            }));
+        }
+    });
 }
 
 function isNumberKey(evt)
