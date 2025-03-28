@@ -356,37 +356,20 @@ function exposeWhatsAppAPI()
 {
     window.WhatsAppAPI = {};
 
-    if (window.require)
-    {
-        // React Native
-        window.WhatsAppAPI.downloadManager = require("WAWebDownloadManager").downloadManager;
-        window.WhatsAppAPI.ChatCollection = require("WAWebChatCollection").ChatCollection;
-        window.WhatsAppAPI.Seen = require("WAWebUpdateUnreadChatAction");
-        window.WhatsAppAPI.Communication = require("WAComms").getComms();
-        window.WhatsAppAPI.LoadEarlierMessages = require("WAWebChatLoadMessages");
-        window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol").sendPresenceStatusProtocol;
-        window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
-        window.WhatsAppAPI.WAWebSignalCommonUtils = require("WAWebSignalCommonUtils");
-        window.WhatsAppAPI.WAWebWidFactory = require("WAWebWidFactory");
-
-    }
-    else if (window.webpackChunkwhatsapp_web_client)
-    {
-        // not supported anymore
-        var moduleFinder = getModuleFinder();
-
-        window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;
-        window.WhatsAppAPI.ChatCollection = moduleFinder.findModule("Msg")[0].default.Chat;
-        window.WhatsAppAPI.Seen = moduleFinder.findModule("sendSeen")[0];
-        window.WhatsAppAPI.Communication = moduleFinder.findModule("getComms")[0].getComms();
-        window.WhatsAppAPI.LoadEarlierMessages = moduleFinder.findModule("loadEarlierMsgs")[0];
-        window.WhatsAppAPI.sendPresenceStatusProtocol = moduleFinder.findModule("sendPresenceStatusProtocol")[0].sendPresenceStatusProtocol;
-        window.WhatsAppAPI.SignalStore = moduleFinder.findModule("getSignalProtocolStore")[0];
-    }
+    // React Native
+    window.WhatsAppAPI.downloadManager = require("WAWebDownloadManager").downloadManager;
+    window.WhatsAppAPI.ChatCollection = require("WAWebChatCollection").ChatCollection;
+    window.WhatsAppAPI.Seen = require("WAWebUpdateUnreadChatAction");
+    window.WhatsAppAPI.Communication = require("WAComms").getComms();
+    window.WhatsAppAPI.LoadEarlierMessages = require("WAWebChatLoadMessages");
+    window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol").sendPresenceStatusProtocol;
+    window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
+    window.WhatsAppAPI.WAWebSignalCommonUtils = require("WAWebSignalCommonUtils");
+    window.WhatsAppAPI.WAWebWidFactory = require("WAWebWidFactory");
 
     if (window.WhatsAppAPI.Seen == undefined)
     {
-        console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Sending read receipts might not work.");
+        console.error("WhatsAppWebIncognito: Can't find the WhatsApp API. Stuff might not work.");
     }
 }
 
