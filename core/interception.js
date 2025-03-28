@@ -366,10 +366,13 @@ function exposeWhatsAppAPI()
         window.WhatsAppAPI.LoadEarlierMessages = require("WAWebChatLoadMessages");
         window.WhatsAppAPI.sendPresenceStatusProtocol = require("WASendPresenceStatusProtocol").sendPresenceStatusProtocol;
         window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
+        window.WhatsAppAPI.WAWebSignalCommonUtils = require("WAWebSignalCommonUtils");
+        window.WhatsAppAPI.WAWebWidFactory = require("WAWebWidFactory");
 
     }
     else if (window.webpackChunkwhatsapp_web_client)
     {
+        // not supported anymore
         var moduleFinder = getModuleFinder();
 
         window.WhatsAppAPI.downloadManager = moduleFinder.findModule("downloadManager")[0].downloadManager;

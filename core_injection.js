@@ -4,15 +4,15 @@ injectOtherScripts();
 
 async function injectOtherScripts() 
 {
+	injectScript('lib/pbf.3.0.5.min.js');
+	injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
+	injectScript('lib/pako.js');
+
 	injectScript('core/parsing/binary_reader.js');
 	injectScript('core/parsing/binary_writer.js');
 	injectScript('core/parsing/node_reader_writer.js');
 	injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
 	injectScript('core/parsing/protobuf/WAProto.js');
-
-	injectScript('lib/pbf.3.0.5.min.js');
-	injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
-	injectScript('lib/pako.js');
 
 	injectScript('core/utils.js');
 	injectScript('core/ui_class_names.js');

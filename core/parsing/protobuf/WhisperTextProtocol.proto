@@ -1,6 +1,6 @@
 // Based on 
 // https://github.com/signalapp/libsignal-protocol-javascript/blob/master/protos/WhisperTextProtocol.proto
-// https://github.com/adiwajshing/Baileys/blob/master/WASignalGroup/group.proto
+// https://github.com/WhiskeySockets/Baileys/blob/master/WASignalGroup/group.proto
 
 package textsecure;
 

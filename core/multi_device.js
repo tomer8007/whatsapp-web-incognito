@@ -208,7 +208,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
         var chiphertextType = message.attrs["type"];
 
         // decrypt the message
-        var address = fromJid.substring(0, fromJid.indexOf("@")) + "." + "0";
+        var address = fromJid.substring(0, fromJid.indexOf("@")) + ":" + "0@s.whatsapp.net";
         var message = null;
 
         try
@@ -234,8 +234,9 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
         }
         catch (e)
         {
-            console.warn("Skipping decryption of " + chiphertextType + " from " + address + " due to exception.");
+            console.warn("WhatsIncognito: Skipping decryption of " + chiphertextType + " from " + address + " due to exception.");
             console.warn(e);
+            if (e.name) console.warn(e.name);
             continue;
         }
         
@@ -263,7 +264,9 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
-    var sessionObject = await storage.loadSession(address.toString());
+    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWid(address);
+    var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
+    var sessionObject = await storage.loadSession(lidAddress);
     if (sessionObject == null)
     {
         console.error("Can't get session for " + address.toString());
@@ -311,11 +314,12 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     
 }
 
+// decryptPkMsg
 MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMessageBuffer, storage, address)
 {
-    var sessionObject = await storage.loadSession(address.toString());
-
-    var sessions = sessionObject ? sessionObject.sessions : {};
+    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWid(address);
+    var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
+    var sessionObject = await storage.loadSession(lidAddress);
 
     var version = (new Uint8Array(prekeyWhisperMessageBuffer))[0];
     var messageProto = prekeyWhisperMessageBuffer.slice(1, prekeyWhisperMessageBuffer.byteLength);
@@ -330,10 +334,13 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
     var chainKeyData = null;
+    var isNewSession = false;
     var messageKeys = {};
 
+    // decryptMsgFromSession
     if (sessionObject)
     {
+        // version 2
         var recvChains = sessionObject.recvChains;
         var chainIndex = recvChains.findIndex((e => isEqualArray(e.ratchetPubKey, whisperMessage.ephemeralKey)))
         if (chainIndex != -1)
@@ -345,7 +352,8 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     }
     else
     {
-        // new session, see initiateSessionIncoming
+        // new session, see decryptPkMsgWithNewSession, // initiateSessionIncoming
+        isNewSession = true;
         var sharedSecret = (ourEphemeralKey === undefined || prekeyMessage.baseKey === undefined) ? 
                             sharedSecret = new Uint8Array(32 * 4) : new Uint8Array(32 * 5);
         for (var i = 0; i < 32; i++) {
@@ -374,7 +382,17 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 
     var messageKey = await MultiDevice.signalGetMessageKey(chainKeyData.key, chainKeyData.counter, whisperMessage.counter, messageKeys);
     var keys = await libsignal.HKDF.deriveSecrets(messageKey, new ArrayBuffer(32), "WhisperMessageKeys");
-    var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
+    try
+    {
+        var plaintext = await libsignal.crypto.decrypt(keys[0], toArrayBuffer(whisperMessage.ciphertext), keys[2].slice(0, 16));
+        return plaintext;
+    }
+    catch (exception)
+    {
+        console.error("E2E plaintext decryption failed at signalDecryptPrekeyWhisperMessage. is new session: " + isNewSession);
+        debugger;
+        throw exception;
+    }
     // plaintext makes sense? good.
     return plaintext;
         
@@ -382,7 +400,8 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 
 MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffer, storage, groupId, address, keyDistributionMessage)
 {
-    var senderKeyName = `${groupId}::${address.toString()}`;
+    var widAdress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(WhatsAppAPI.WAWebWidFactory.createDeviceWid(address), false);
+    var senderKeyName = `${groupId}::${widAdress}`;
     var senderKey = await storage.loadSenderKey(senderKeyName);
 
     var version = new Uint8Array(senderKeyMessageBuffer)[0];
@@ -394,7 +413,7 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
 
     if (senderKey)
     {
-        // vesrion 2
+        // version 2
         for (var e = 0; e < senderKey.senderKeyStates.length; e++)
         {
             if (senderKey.senderKeyStates[e].senderKeyId === id) 
