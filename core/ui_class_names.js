@@ -10,8 +10,8 @@ if (document.getElementById("whatsapp-web"))
 {
     // Seems to be WhatsApp version 2.3000+
 
-    UIClassNames.MENU_ITEM_CLASS = "_ajv7";
-    UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "_ajv9";
+    UIClassNames.MENU_ITEM_CLASS = "_ajv7 x1n2onr6 x1okw0bk x5yr21d x14yjl9h xudhj91 x18nykt9 xww2gxu xlkovuz x16j0l1c xyklrzc x1mh8g0r x1anpbxc x18wx58x xo92w5m";
+    UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "x1786zcw";
     
     UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w"; // outside class of dropdown with "mark as unread"
     UIClassNames.DROPDOWN_CLASS = "_ak5b";
