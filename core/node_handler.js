@@ -237,6 +237,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
     {
         // TODO: edit the node to remove only the revoke messages
         console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
+        debugger;
     }
 
     if (WAdebugMode && e2eMessages.length > 0)
