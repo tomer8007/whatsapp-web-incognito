@@ -160,6 +160,7 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
                 document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+                document.getElementById("incognito-option-notify-typing").addEventListener("click", onNotifyTyping);
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
                     nextButton.addEventListener("click", onNextButtonClicked);
@@ -237,6 +238,9 @@ function generateDropContent(options)
     var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
+    var typingStatusNotiTitle = "Nofify typing..."
+    var typingStatusNoti = "Notify when someone is typing a message to you"
+
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
@@ -244,6 +248,9 @@ function generateDropContent(options)
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
@@ -255,9 +262,10 @@ function generateDropContent(options)
     var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+    var notifiTypingCheckbox = (options.notifytyping ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+
 
 
     var dropContent = ` \
@@ -347,6 +355,14 @@ function generateDropContent(options)
                             </div>
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
+                        </div>
+                        <div id='incognito-option-notify-typing' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${notifiTypingCheckbox}
+                                </div>
+                            </div>
+                            ${typingStatusNotiTitle}
+                            <div class='incognito-options-description'>${typingStatusNoti}</div>
                         </div>
                         <div class='incognito-options-item' style='cursor: pointer;'>
                             More options coming soon!
@@ -577,6 +593,42 @@ function onShowDeviceTypesTick()
     {
         detail: JSON.stringify({ showDeviceTypes: showDeviceTypes })
     }));
+}
+
+function onNotifyTyping()
+{
+    var notifyTyping = false;
+    var checkbox = document.querySelector("#incognito-option-notify-typing .checkbox-incognito");
+    
+    var checkmark = checkbox.firstElementChild;
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        notifyTyping = true;
+
+        if(Notification.permission !== "granted"){
+            Notification.requestPermission();
+        }
+
+        setInterval(() => {
+            const event = new Event('focus');
+            window.dispatchEvent(event);
+        }, 1500);
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        
+        notifyTyping = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", notifytyping: notifyTyping });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ notifyTyping: notifyTyping })
+    }));
+
+    // starting interval for always focusing window
 }
 
 function onAutoReceiptsTick()
