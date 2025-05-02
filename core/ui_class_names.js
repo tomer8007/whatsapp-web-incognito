@@ -11,6 +11,7 @@ if (document.getElementById("whatsapp-web"))
     // Seems to be WhatsApp version 2.3000+
 
     UIClassNames.MENU_ITEM_CLASS = "x1c4vz4f xs83m0k xdl72j9 x1g77sc7 x78zum5 xozqiw3 x1oa3qoh x12fk4p8 xeuugli x2lwn1j x1nhvcw1 x1q0g3np x1cy8zhl x100vrsf x1vqgdyp xhgddhk xdxvlk3 x1fglp x1rp6h8o xg6i1s1 x1277o0a x13i9f1t xr9ek0c xjpr12u";
+    UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf xcfux6l x1qhh985 xm0m39n xh8yej3 x1y1aw1k x1sxyh0 xwib8y2 xurb0ha"; // inner button
     UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "xw2npq5 xzs022t";
     
     UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
