@@ -84,7 +84,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if (readConfirmationsHookEnabled)
     {
         // set unread counters to transperent
-        document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 0.3)');
+        setGlobalColorVaraibleString("--unread-marker-background", 'rgba(9, 210, 97, 0.3)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
@@ -93,7 +93,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     else
     {
         // set unread counters to solid
-        document.querySelector(':root').style.setProperty("--unread-marker-background", 'rgba(9, 210, 97, 1)');
+        setGlobalColorVaraibleString("--unread-marker-background", 'rgba(9, 210, 97, 1)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
@@ -503,6 +503,12 @@ function markChatAsBlocked(chat)
 
     if (warningMessage)
         warningMessage.firstChild.textContent = "Read receipts were blocked.";
+}
+
+function setGlobalColorVaraibleString(variable, colorString)
+{
+    document.querySelector('.color-refresh').style.setProperty(variable, colorString);
+    document.querySelector(':root').style.setProperty(variable, colorString);
 }
 
 setTimeout(function() {

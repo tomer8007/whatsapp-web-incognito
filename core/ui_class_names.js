@@ -10,12 +10,12 @@ if (document.getElementById("whatsapp-web"))
 {
     // Seems to be WhatsApp version 2.3000+
 
-    UIClassNames.MENU_ITEM_CLASS = "_ajv7 x1n2onr6 x1okw0bk x5yr21d x14yjl9h xudhj91 x18nykt9 xww2gxu xlkovuz x16j0l1c xyklrzc x1mh8g0r x1anpbxc x18wx58x xo92w5m";
-    UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "x1786zcw";
+    UIClassNames.MENU_ITEM_CLASS = "x1c4vz4f xs83m0k xdl72j9 x1g77sc7 x78zum5 xozqiw3 x1oa3qoh x12fk4p8 xeuugli x2lwn1j x1nhvcw1 x1q0g3np x1cy8zhl x100vrsf x1vqgdyp xhgddhk xdxvlk3 x1fglp x1rp6h8o xg6i1s1 x1277o0a x13i9f1t xr9ek0c xjpr12u";
+    UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "xw2npq5 xzs022t";
     
-    UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w"; // outside class of dropdown with "mark as unread"
-    UIClassNames.DROPDOWN_CLASS = "_ak5b";
-    UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_";
+    UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
+    UIClassNames.DROPDOWN_CLASS = "_ap4_";
+    UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_ _asi6 _ap51";
     
     UIClassNames.UNREAD_COUNTER_CLASS = "x18ba5f9"; // the class that sets background-color to var(--unread-marker-background)
     

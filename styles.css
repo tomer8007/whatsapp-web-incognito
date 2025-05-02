@@ -5,9 +5,11 @@
 
 .menu-item-incognito
 {
-    cursor: pointer !important;
+    /*
+     cursor: pointer !important;
     padding: 8px;
     height: auto !important;
+    */
 }
 
 .icon-incognito
