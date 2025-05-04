@@ -46,6 +46,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({"allowStatusDownload": messageEvent.allowStatusDownload});
         }
+        if ("hideSidebar" in messageEvent)
+        {
+            chrome.storage.local.set({"hideSidebar": messageEvent.hideSidebar});
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -59,6 +63,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
         var allowStatusDownload = true;
+        var hideSidebar = false;
 
         chrome.storage.local.get(['onlineUpdatesHook',
                                 'typingUpdatesHook',
@@ -68,7 +73,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'saveDeletedMsgs', 
                                 'showDeviceTypes',
                                 'autoReceiptOnReplay',
-                                'allowStatusDownload']).then(function(storage)
+                                'allowStatusDownload',
+                                'hideSidebar']).then(function(storage)
         {
             if (storage["onlineUpdatesHook"] != undefined)
             {
@@ -106,6 +112,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 allowStatusDownload = storage["allowStatusDownload"];
             }
+            if (storage["hideSidebar"] != undefined)
+            {
+                hideSidebar = storage["hideSidebar"];
+            }
             callback(
             {
                 onlineUpdatesHook: onlineUpdatesHook,
@@ -116,7 +126,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 saveDeletedMsgs: saveDeletedMsgs,
                 showDeviceTypes: showDeviceTypes,
                 autoReceiptOnReplay: autoReceiptOnReplay,
-                allowStatusDownload: allowStatusDownload
+                allowStatusDownload: allowStatusDownload,
+                hideSidebar: hideSidebar
             });
         });   
     }
