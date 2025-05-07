@@ -507,8 +507,22 @@ function markChatAsBlocked(chat)
 
 function setGlobalColorVaraibleString(variable, colorString)
 {
-    document.querySelector('.color-refresh').style.setProperty(variable, colorString);
-    document.querySelector(':root').style.setProperty(variable, colorString);
+    try
+    {
+        document.querySelector(':root').style.setProperty(variable, colorString);
+    }
+    catch
+    {
+        // maybe it's the newer GUI
+    }
+    try
+    {
+        document.querySelector('.color-refresh').style.setProperty(variable, colorString);
+    }
+    catch 
+    {
+        // maybe it's just the older GUI
+    }
 }
 
 setTimeout(function() {
