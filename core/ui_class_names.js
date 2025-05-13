@@ -17,7 +17,7 @@ var UIClassNames = {};
     UIClassNames.UNREAD_COUNTER_CLASS = "x18ba5f9"; // the class that sets background-color to var(--unread-marker-background)
     
     UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class (was used in the past for safety delay feature)
-    UIClassNames.INNER_CHAT_PANEL_CLASS = "x3psx0u"; // the innermost chat panel class ('conversation-panel-messages')
+    UIClassNames.INNER_CHAT_PANEL_CLASS = "xrmvbpv"; // the innermost chat panel class ('conversation-panel-messages')
     
     UIClassNames.CHAT_ENTRY_CLASS = "x10l6tqk "; // the chat entry in the chats list
     UIClassNames.UNREAD_MARKER_CLASS = "_agtk"; // the "X unread messages" warning inside the chat panel; the class inside the top-level item
