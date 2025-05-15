@@ -338,8 +338,7 @@ function markChatAsPendingReciptsSending(chat)
         var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
         if (previousMessage != null)
             parent.removeChild(previousMessage);
-        var unreadMarker = parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ?
-            parent.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+        var unreadMarker = getUnreadMarkerElement(parent);
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
         else
@@ -459,8 +458,7 @@ function markChatAsBlocked(chat)
         //
 
         var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        var unreadMarker = innerChatPanel.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS).length > 0 ? 
-                                innerChatPanel.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)[0] : null;
+        var unreadMarker = getUnreadMarkerElement(innerChatPanel);
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
         else
@@ -523,6 +521,19 @@ function setGlobalColorVaraibleString(variable, colorString)
     {
         // maybe it's just the older GUI
     }
+}
+
+function getUnreadMarkerElement(parentElement = null)
+{
+    if (parentElement == null) parentElement = document;
+
+    var elements1 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)
+    var elements2 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS_2);
+
+    if (elements1.length > 0) return elements1[0];
+    if (elements2.length > 0) return elements2[0];
+
+    return null;
 }
 
 setTimeout(function() {
