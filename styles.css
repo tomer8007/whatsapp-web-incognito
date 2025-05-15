@@ -1,15 +1,17 @@
-
 /*
   Menu/Icon
 */
 
 .menu-item-incognito
 {
-    /*
-     cursor: pointer !important;
-    padding: 8px;
-    height: auto !important;
-    */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+}
+
+.menu-item-incognito svg {
+  margin: auto;
 }
 
 .icon-incognito
