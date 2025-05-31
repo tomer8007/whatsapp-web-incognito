@@ -366,6 +366,7 @@ function exposeWhatsAppAPI()
     window.WhatsAppAPI.SignalStore = require("WAWebSignalProtocolStore");
     window.WhatsAppAPI.WAWebSignalCommonUtils = require("WAWebSignalCommonUtils");
     window.WhatsAppAPI.WAWebWidFactory = require("WAWebWidFactory");
+    window.WhatsAppAPI.WAWebWidToJid = require("WAWebWidToJid");
 
     if (window.WhatsAppAPI.Seen == undefined)
     {

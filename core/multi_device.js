@@ -208,7 +208,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
         var chiphertextType = message.attrs["type"];
 
         // decrypt the message
-        var address = fromJid.substring(0, fromJid.indexOf("@")) + ":" + "0@s.whatsapp.net";
+        var address = fromJid;
         var message = null;
 
         try
@@ -390,6 +390,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     catch (exception)
     {
         console.error("E2E plaintext decryption failed at signalDecryptPrekeyWhisperMessage. is new session: " + isNewSession);
+        console.error("session address: " + lidAddress);
         debugger;
         throw exception;
     }
@@ -401,7 +402,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffer, storage, groupId, address, keyDistributionMessage)
 {
     var widAdress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(WhatsAppAPI.WAWebWidFactory.createDeviceWid(address), false);
-    var senderKeyName = `${groupId}::${widAdress}`;
+    var senderKeyName = `${groupId}::${widAdress}`; // createSignalLikeSenderKeyName
     var senderKey = await storage.loadSenderKey(senderKeyName);
 
     var version = new Uint8Array(senderKeyMessageBuffer)[0];
