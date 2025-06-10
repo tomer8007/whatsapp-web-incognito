@@ -221,23 +221,18 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
     var e2eMessagesAllowedStatus = [];
 
     var e2eMessages = await MultiDevice.decryptE2EMessagesFromMessageNode(messageNode);
-    for (var e2eMessage of e2eMessages)
+    for (var i = 0; i < e2eMessages.length ;i++)
     {
+        var e2eMessage = e2eMessages[i];
         var isE2EMessageAllowed = await NodeHandler.onReceivedE2EMessage(messageNode, e2eMessage);
-        e2eMessagesAllowedStatus.push({e2eMessage: e2eMessage, isAllowed: isE2EMessageAllowed});
+        e2eMessagesAllowedStatus.push({e2eMessage: e2eMessage, isAllowed: isE2EMessageAllowed, indexInEncNodes : i});
     }
 
     var numOfE2EMessagesBlocked = e2eMessagesAllowedStatus.filter(status => !status.isAllowed).length;
-    if (numOfE2EMessagesBlocked > 0 && numOfE2EMessagesBlocked == e2eMessages.length)
+    if (numOfE2EMessagesBlocked > 0)
     {
         console.log("WhatsIncogito: Blocking incoming REVOKE message node.");
         isAllowed = false;
-    }
-    else if (numOfE2EMessagesBlocked > 0 && numOfE2EMessagesBlocked < e2eMessages.length)
-    {
-        // TODO: edit the node to remove only the revoke messages
-        console.log("WhatsIncognito: Not blocking node with revoked message because it will block other information.");
-        debugger;
     }
 
     if (WAdebugMode && e2eMessages.length > 0)
@@ -246,13 +241,42 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         console.log(e2eMessages);
     }
 
+    var modifiedMessageNode = messageNode;
+    
     if (!isAllowed)
     {
-        messageNode = deepClone(messageNode);
-        messageNode.content = [];
+        modifiedMessageNode = deepClone(messageNode);
+        modifiedMessageNode.content = [];
+
+        indexOfEncNode = 0;
+        for (var i = 0; i < messageNode.content.length; i++)
+        {
+            var node = messageNode.content[i];
+            if (node.tag != "enc") 
+            {
+                modifiedMessageNode.content.push(node);
+                continue;
+            }
+    
+            var isNodeAllowed = true;
+            for (var status of e2eMessagesAllowedStatus)
+            {
+                if (!status.isAllowed && status.indexInEncNodes == indexOfEncNode)
+                {
+                    isNodeAllowed = false;
+                }
+            }
+
+            if (isNodeAllowed)
+            {
+                modifiedMessageNode.content.push(node);
+            }
+    
+            indexOfEncNode++;
+        }
     }
 
-    return [isAllowed, messageNode];
+    return [isAllowed, modifiedMessageNode];
 }
 
 NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)

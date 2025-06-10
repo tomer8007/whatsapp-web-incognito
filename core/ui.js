@@ -1123,7 +1123,7 @@ function updateUIClassNamesIfNeeded()
     if (document.getElementsByClassName(newMenuItemClass).length == 0) return;
 
     UIClassNames.MENU_ITEM_CLASS = newMenuItemClass;
-    UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf x10w94by x1qhh985 x14e42zd x1fmog5m xu25z0z x140muxe xo1y3bh xtnn1bt x9v5kkp xmw7ebm xrdum7p xh8yej3 x1y1aw1k xf159sx xwib8y2 xmzvs34"; // inner button
+    UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf x1qhh985 xh8yej3 x1y1aw1k xwib8y2"; // inner button
     UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "xw2npq5 xzs022t";
     
     UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
