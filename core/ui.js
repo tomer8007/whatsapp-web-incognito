@@ -1118,12 +1118,12 @@ function updateUIClassNamesIfNeeded()
 {
     // Seems to be WhatsApp version 2.3000+, newer GUI
 
-    var newMenuItemClass = "x1c4vz4f xs83m0k xdl72j9 x1g77sc7 x78zum5 xozqiw3 x1oa3qoh x12fk4p8 xeuugli x2lwn1j x1nhvcw1 x1q0g3np x1cy8zhl x100vrsf x1vqgdyp xhgddhk xdxvlk3 x1fglp x1rp6h8o xg6i1s1 x1277o0a x13i9f1t xr9ek0c xjpr12u";
+    var newMenuItemClass = "x1c4vz4f xs83m0k xdl72j9 x1g77sc7 x78zum5 xozqiw3 x1oa3qoh x12fk4p8 xeuugli x2lwn1j x1nhvcw1 x1q0g3np x1cy8zhl x100vrsf x1vqgdyp xhgddhk x1ekkm8c x1143rjc xum4auv xj21bgg x1277o0a x13i9f1t xr9ek0c xjpr12u";
 
     if (document.getElementsByClassName(newMenuItemClass).length == 0) return;
 
     UIClassNames.MENU_ITEM_CLASS = newMenuItemClass;
-    UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf xcfux6l x1qhh985 xm0m39n xh8yej3 x1y1aw1k x1sxyh0 xwib8y2 xurb0ha"; // inner button
+    UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf x10w94by x1qhh985 x14e42zd x1fmog5m xu25z0z x140muxe xo1y3bh xtnn1bt x9v5kkp xmw7ebm xrdum7p xh8yej3 x1y1aw1k xf159sx xwib8y2 xmzvs34"; // inner button
     UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = "xw2npq5 xzs022t";
     
     UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
@@ -1137,7 +1137,7 @@ function updateUIClassNamesIfNeeded()
     
     UIClassNames.CHAT_ENTRY_CLASS = "x10l6tqk "; // the chat entry in the chats list
     UIClassNames.UNREAD_MARKER_CLASS = "_agtk"; // the "X unread messages" warning inside the chat panel; the class inside the top-level item
-    UIClassNames.UNREAD_MARKER_CLASS_2 = "xqhmz9w";
+    UIClassNames.UNREAD_MARKER_CLASS_2 = "x1mnlqng";
     
     UIClassNames.CHAT_MESSAGE = "messag-in";
     UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV = "x1lliihq xh8yej3";
