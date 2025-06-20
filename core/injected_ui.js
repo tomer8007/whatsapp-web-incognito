@@ -529,9 +529,11 @@ function getUnreadMarkerElement(parentElement = null)
 
     var elements1 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)
     var elements2 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS_2);
+    var elements3 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS_3);
 
     if (elements1.length > 0) return elements1[0];
     if (elements2.length > 0) return elements2[0];
+    if (elements3.length > 0) return elements3[0];
 
     return null;
 }
