@@ -21,7 +21,7 @@ function determineIfNodeIsStatus(node)
     // traverse the DOM to get the element with the data-icon "status-media-controls"
     var child = parent?.children[1]?.children[2]?.children[0]?.children[0]?.children[0]?.children[0]?.children[0];
     // if the element has a data-icon of "status-media-controls-pause", then the original element is a status
-    if (child?.getAttribute("data-icon") === "status-media-controls-pause") 
+    if (child?.getAttribute("data-icon") === "status-media-controls-pause" || child?.getAttribute("data-icon") === "pause")
     {
         isNodeStatus = true;
     }
