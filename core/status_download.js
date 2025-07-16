@@ -21,7 +21,7 @@ function determineIfNodeIsStatus(node)
     // traverse the DOM to get the element with the data-icon "status-media-controls"
     var child = parent?.children[1]?.children[2]?.children[0]?.children[0]?.children[0]?.children[0]?.children[0];
     // if the element has a data-icon of "status-media-controls-pause", then the original element is a status
-    if (child?.getAttribute("data-icon") === "status-media-controls-pause") 
+    if (child?.getAttribute("data-icon") === "pause" || child?.getAttribute("data-icon") === "status-media-controls-play")
     {
         isNodeStatus = true;
     }
@@ -76,7 +76,8 @@ function createDownloadButton(src)
     a.id = src;
     a.title = "Download this status!";
     a.download = "status";
-    document.body.appendChild(a);
+    const container = document.querySelector('[data-icon="pause"]').parentElement.parentElement.parentElement;
+    container.insertBefore(a, container.children[1].nextElementSibling);
 }
 
 function handleSRCAdd(src, node)
