@@ -84,7 +84,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if (readConfirmationsHookEnabled)
     {
         // set unread counters to transperent
-        setGlobalColorVaraibleString("--unread-marker-background", 'rgba(9, 210, 97, 0.3)');
+        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
@@ -93,7 +93,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     else
     {
         // set unread counters to solid
-        setGlobalColorVaraibleString("--unread-marker-background", 'rgba(9, 210, 97, 1)');
+        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
         if (safetyDelayPanel != null)
         {
             Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
@@ -505,21 +505,22 @@ function markChatAsBlocked(chat)
 
 function setGlobalColorVaraibleString(variable, colorString)
 {
-    try
+    var selector2 = ".xnw4er1.xnw4er1, .xnw4er1.xnw4er1:root";
+    
+    if (document.querySelector(selector2))
+    {
+        // maybe it's the newer GUI
+        document.querySelector(selector2).style.setProperty(variable, colorString);
+    }
+    
+    if (document.querySelector(":root"))
     {
         document.querySelector(':root').style.setProperty(variable, colorString);
     }
-    catch
-    {
-        // maybe it's the newer GUI
-    }
-    try
+    
+    if (document.querySelector("'.color-refresh'"))
     {
         document.querySelector('.color-refresh').style.setProperty(variable, colorString);
-    }
-    catch 
-    {
-        // maybe it's just the older GUI
     }
 }
 

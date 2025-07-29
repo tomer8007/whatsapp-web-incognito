@@ -1133,7 +1133,7 @@ function updateUIClassNamesIfNeeded()
         UIClassNames.DROPDOWN_CLASS = "_ap4_";
         UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_ _asi6 _ap51";
         
-        UIClassNames.UNREAD_COUNTER_CLASS = "x18ba5f9"; // the class that sets background-color to var(--unread-marker-background)
+        UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the class that sets background-color to var(--unread-marker-background)
         
         UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class (was used in the past for safety delay feature)
         UIClassNames.INNER_CHAT_PANEL_CLASS = "x3psx0u"; // the innermost chat panel class ('conversation-panel-messages')
@@ -1158,7 +1158,7 @@ function updateUIClassNamesIfNeeded()
         UIClassNames.DROPDOWN_CLASS = "_ap4_";
         UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_ _asi6 _ap51";
         
-        UIClassNames.UNREAD_COUNTER_CLASS = "x18ba5f9"; // the class that sets background-color to var(--unread-marker-background)
+        UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the class that sets background-color to var(--unread-marker-background)
         
         UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class (was used in the past for safety delay feature)
         UIClassNames.INNER_CHAT_PANEL_CLASS = "x3psx0u"; // the innermost chat panel class ('conversation-panel-messages')

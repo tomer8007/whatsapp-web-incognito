@@ -3,7 +3,7 @@
   "name": "WAIncognito",
   "short_name": "WAIncognito",
   "description": "Be invisible on WhatsApp™ Web by disabling read receipts and presence updates",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "permissions": ["storage"],
    "icons":  { "128": "images/icon_128_blue.png" },
    "action": {
