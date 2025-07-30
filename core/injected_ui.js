@@ -506,11 +506,15 @@ function markChatAsBlocked(chat)
 function setGlobalColorVaraibleString(variable, colorString)
 {
     var selector2 = ".xnw4er1.xnw4er1, .xnw4er1.xnw4er1:root";
+    var selector3 = ".x1bapj5e.x1bapj5e, .x1bapj5e.x1bapj5e:root";
     
     if (document.querySelector(selector2))
     {
-        // maybe it's the newer GUI
         document.querySelector(selector2).style.setProperty(variable, colorString);
+    }
+    if (document.querySelector(selector3))
+    {
+        document.querySelector(selector3).style.setProperty(variable, colorString);
     }
     
     if (document.querySelector(":root"))
@@ -518,7 +522,7 @@ function setGlobalColorVaraibleString(variable, colorString)
         document.querySelector(':root').style.setProperty(variable, colorString);
     }
     
-    if (document.querySelector("'.color-refresh'"))
+    if (document.querySelector(".color-refresh"))
     {
         document.querySelector('.color-refresh').style.setProperty(variable, colorString);
     }
