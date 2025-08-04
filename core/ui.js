@@ -1064,7 +1064,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
         imageElement.className = "device-type-image";
 
-        var topMessageNode = messageNode.parentNode.parentNode;
+        var topMessageNode = messageNode.parentNode.parentNode.parentNode;
         if (topMessageNode.innerHTML.includes("chat-profile-picture") || messageNode.innerHTML.includes("Open chat details"))
         {
             imageElement.className += " below-profile-picture";
