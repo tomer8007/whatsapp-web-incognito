@@ -732,7 +732,7 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 function onNewMessageNodeAdded(messageNode)
 {
     var data_id = messageNode.getAttribute("data-id");
-    if (!data_id) data_id = messageNode.parentElement.getAttribute("data-id");
+    if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
     if (data_id == null)
         debugger;
     var msgID = data_id.split("_")[2];
