@@ -505,7 +505,7 @@ function markChatAsBlocked(chat)
 
 function setGlobalColorVaraibleString(variable, colorString)
 {
-    var selector2 = ".xnw4er1.xnw4er1, .xnw4er1.xnw4er1:root";
+    var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
     
     if (document.querySelector(selector2))
