@@ -264,7 +264,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
-    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWid(address);
+    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThow(address);
     var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
     if (sessionObject == null)
