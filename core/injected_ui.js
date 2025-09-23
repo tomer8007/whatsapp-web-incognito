@@ -507,11 +507,18 @@ function setGlobalColorVaraibleString(variable, colorString)
 {
     var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
+    var selector4 = ".x1h89ln0.x1h89ln0, .x1h89ln0.x1h89ln0:root";
     
     if (document.querySelector(selector2))
     {
         document.querySelector(selector2).style.setProperty(variable, colorString);
     }
+
+    if (document.querySelector(selector4))
+    {
+        document.querySelector(selector4).style.setProperty(variable, colorString);
+    }
+
     if (document.querySelector(selector3))
     {
         document.querySelector(selector3).style.setProperty(variable, colorString);

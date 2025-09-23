@@ -264,7 +264,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
-    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThow(address);
+    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address);
     var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
     if (sessionObject == null)
@@ -317,7 +317,7 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
 // decryptPkMsg
 MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMessageBuffer, storage, address)
 {
-    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWid(address);
+    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address);
     var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
 
@@ -401,7 +401,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 
 MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffer, storage, groupId, address, keyDistributionMessage)
 {
-    var widAdress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(WhatsAppAPI.WAWebWidFactory.createDeviceWid(address), false);
+    var widAdress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address), false);
     var senderKeyName = `${groupId}::${widAdress}`; // createSignalLikeSenderKeyName
     var senderKey = await storage.loadSenderKey(senderKeyName);
 
