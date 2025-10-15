@@ -514,9 +514,9 @@ function setGlobalColorVaraibleString(variable, colorString)
         document.querySelector(selector2).style.setProperty(variable, colorString);
     }
 
-    if (document.querySelector(selector4))
+    if (document.querySelector(UIClassNames.GLOBAL_COLORS_CONTAINER_SELECTOR))
     {
-        document.querySelector(selector4).style.setProperty(variable, colorString);
+        document.querySelector(UIClassNames.GLOBAL_COLORS_CONTAINER_SELECTOR).style.setProperty(variable, colorString);
     }
 
     if (document.querySelector(selector3))
