@@ -131,7 +131,6 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                console.log(realNode);
                 printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
@@ -334,6 +333,8 @@ function printNode(node, isIncoming = false, decryptedFrameLength)
     {
         console.log("[Out] Sending binary (" + decryptedFrameLength + " bytes, decrypted): ");
     }
+
+    console.log(node);
 
     if (xmlDebugging)
     {
