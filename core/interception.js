@@ -93,6 +93,8 @@ wsHook.before = function (originalData, url)
         
         console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
         console.error(exception);
+        console.error("outgoing noise packet was:");
+        console.error(originalData);
         return originalData;
     }
 
@@ -167,6 +169,8 @@ wsHook.after = function (messageEvent, url)
 
         console.error("Passing-through incoming packet due to error:");
         console.error(exception);
+        console.error("incoming noise packet was:");
+        console.error(originalData);
         debugger;
         return messageEvent;
     };

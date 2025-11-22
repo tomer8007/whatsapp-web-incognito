@@ -62,9 +62,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     var frames = [];
     while (binaryReader._readIndex + 3 < payload.byteLength)
     {
+        var counter = isIncoming ? MultiDevice.readCounter++ : MultiDevice.writeCounter++;
         var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
         var frame = binaryReader.readBuffer(size);
-        var counter = isIncoming ? MultiDevice.readCounter++ : MultiDevice.writeCounter++;
         var frameInfo = {frame: frame, counter: counter};
 
         frames.push(frameInfo);
@@ -543,6 +543,7 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     var startOffset = 3;
     if (binaryReader._readIndex = 0, binaryReader.readUint16() == 0x5741) startOffset = 0x7; // chat
     if (binaryReader._readIndex = 0xB, binaryReader.readUint16() == 0x5741) startOffset = 0x12; // chat?ED={routingToken}
+    if (binaryReader._readIndex = 0xD, binaryReader.readUint16() == 0x5741) startOffset = 0x14; // chat?ED={routingToken} version 2
 
     if (startOffset > 3) MultiDevice.numPacketsSinceHandshake = 0; // client hello
     if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
