@@ -2,6 +2,9 @@
 // Helper functions
 // --------------------
 
+
+// TODO: this function currently does not support @lid JIDs, 
+//       I need to find a way to get the React element's LID
 function findChatEntryElementForJID(jid)
 {
     var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
@@ -146,7 +149,7 @@ async function getChatByJID(jid)
     if (jid == undefined) debugger;
     jid = normalizeJID(jid);
 
-    if (window.WhatsAppAPI && WhatsAppAPI.Store && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
+    if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
     {
         try
         {

@@ -349,6 +349,11 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
             chainKeyData = {key: currentChain.chainKey, counter: currentChain.nextMsgIndex};
             messageKeys = currentChain.unusedMsgKeys;
         }
+        else
+        {
+            console.warn("Could not find recevier chain for " + lidAddress.toString());
+            debugger;
+        }
     }
     else
     {
@@ -583,9 +588,16 @@ MultiDevice.waitForNoiseKeyIfNeeded = async function(looksLikeHandshakePacket)
 {
     if (!looksLikeHandshakePacket && MultiDevice.readKey == null)
     {
-        console.log("Warning: Waiting for the noise key to arrive");
+        console.log("WAIncognito: Waiting for the noise key to arrive");
         //debugger;
         await sleep(2000);
+
+        if (MultiDevice.readKey == null)
+        {
+            console.warn("Warning: The Noise key did not arrive despite waiting. Interception might not work.");
+            console.warn("window.crypto.subtle.importKey:")
+            console.warn(window.crypto.subtle.importKey);
+        }
     }
 }
 

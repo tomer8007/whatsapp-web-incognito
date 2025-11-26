@@ -218,6 +218,10 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 }
             }
         }
+        else
+        {
+            console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
+        }
     }, waitTime);
 }
 
@@ -491,7 +495,12 @@ function initializeDeletedMessagesDB()
 async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
-    let author = deletedMessageKey.participant.split("@")[0].split(":")[0]
+    var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
+    if (author == "")
+    {
+        // maybe it's an @lid
+        author = deletedMessageKey.remoteJid;
+    }
 
     let body = "";
     let isMedia = false;

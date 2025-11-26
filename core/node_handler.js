@@ -292,6 +292,12 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         remoteJid = messageNode.attrs["from"].toString();
         participant = messageNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
+
+        if (messageNode.attrs["sender_pn"] != null)
+        {
+            // we prefer the full phone number JID over the possible LID
+            remoteJid = messageNode.attrs["sender_pn"].toString();
+        }
     }
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
