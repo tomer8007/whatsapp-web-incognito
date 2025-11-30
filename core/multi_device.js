@@ -40,6 +40,22 @@ MultiDevice.initialize = function()
                 console.log("WAIncognito: Noise decryption key has been replaced.");
             }
         }
+        else if (format == "raw" && algorithm == "AES-GCM" && keyData.length == 32 && extractable == false && keyUsages.length == 2)
+        {
+            // TODO: need to check if it makes sense to catch these kind of keys, that are imported in the start of the noise handshake
+            //      called from WANoiseHandshake.start
+            //debugger;
+            var key = await originalImportKey.apply(window.crypto.subtle, ["raw", new Uint8Array(keyData), algorithm, false, ["decrypt", "encrypt"]]);
+
+            MultiDevice.writeKey = keyData;
+            MultiDevice.writeCounter = 0;
+            MultiDevice.writeKeyImported = key;
+            MultiDevice.readKey = keyData;
+            MultiDevice.readKeyImported = key;
+            MultiDevice.readCounter = 0;
+            console.log("WAIncognito: Noise keys were replaced, started handshake.");
+
+        }
 
         return originalImportKey.call(window.crypto.subtle, format, keyData, algorithm, extractable, keyUsages);
     };
@@ -219,7 +235,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
             switch (chiphertextType)
             {
                 case "pkmsg":
-                    // Pre-Key message
+                    // Pre-Key message, aka establishing new secure session
                     message = await MultiDevice.signalDecryptPrekeyWhisperMessage(ciphertext, storage, address);
                     break;
                 case "msg":
@@ -577,6 +593,7 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     if (handshakeMessage.clientHello)
     {
         // reset the counters on a new connection to avoid weird stuff
+        // TODO: what happens if mutliple WS connections are queued to start, then one of them completes, then another one starts, but then gets canceled?
         MultiDevice.readKey = null;
         MultiDevice.writeKey = null;
     }

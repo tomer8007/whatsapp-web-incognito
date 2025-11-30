@@ -188,7 +188,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
     if (messageNode)
     {
-        messageNode.setAttribute("deleted-message", "true");     // mark the message in red
+        if (messageNode.parentNode)
+            messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
     }
 
     document.dispatchEvent(new CustomEvent("pseudoMsgs", {
@@ -398,6 +399,7 @@ function hookLogs()
     var originalOnUnhandledRejection = window.onunhandledrejection;
     var originalLog = window.__LOG__; // TODO: Find log function for 2.3000 ( d("WALogger").LOG,  d("WALogger").ERROR ?)
 
+
     Object.defineProperty(window, 'onunhandledrejection', {
         set: function(value) { originalOnUnhandledRejection = value; },
         get: function() {return hookedPromiseError;}
@@ -407,6 +409,59 @@ function hookLogs()
         get: function() {return hookedLog;}
     });
 
+    setTimeout(() => {
+        var originalWALoggerLog = require("WALogger").LOG;
+        var originalWALoggerDev = require("WALogger").LOG;
+        var originalWALoggerERROR = require("WALogger").ERROR;
+
+        require("WALogger").LOG = hookedWALoggerLog;
+        require("WALogger").DEV = hookedWALoggerDev;
+        require("WALogger").ERROR = hookedWALoggerError;
+        require("WALogger").WARN = hookedWALoggerWarn;
+
+        function hookedWALoggerDev(n)
+        {
+            if (WAdebugMode)
+            {
+                for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
+                    r[a - 1] = arguments[a];
+                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                console.log("[WhatsApp DEV] " + logLine);
+            }
+            return originalWALoggerDev.apply(null, arguments);
+        }
+        function hookedWALoggerLog(n)
+        {
+            if (WAdebugMode)
+            {
+                for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
+                    r[a - 1] = arguments[a];
+                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                console.log("[WhatsApp LOG] " + logLine);
+            }
+            return originalWALoggerLog.apply(null, arguments);
+        }
+        function hookedWALoggerError(n)
+        {
+            for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
+                    r[a - 1] = arguments[a];
+            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+            console.error("[WhatsApp ERROR] " + logLine);
+            return originalWALoggerERROR.apply(null, arguments);
+        }
+        function hookedWALoggerWarn(n)
+        {
+            for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
+                    r[a - 1] = arguments[a];
+            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+            console.warn("[WhatsApp WARN] " + logLine);
+            return originalWALoggerERROR.apply(null, arguments);
+        }
+        
+    }, 2000);
+
+    
+
     function hookedPromiseError(event)
     {
         debugger;
@@ -414,6 +469,8 @@ function hookLogs()
         console.error(errorObject);
         return originalOnUnhandledRejection.call(event);
     }
+
+    
 
     function hookedLog(errorLevel)
     {        
