@@ -505,14 +505,19 @@ function markChatAsBlocked(chat)
 
 function setGlobalColorVaraibleString(variable, colorString)
 {
+    // TODO: I must think of a way to auto detect the selector, or set the global color in a better way
+    //       it it currently very hacky
+
     var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
     var selector4 = ".x1h89ln0.x1h89ln0, .x1h89ln0.x1h89ln0:root";
+    var selector5 = ".x9ux0ua.x9ux0ua, .x9ux0ua.x9ux0ua:root";
     
     if (document.querySelector(selector2))
-    {
         document.querySelector(selector2).style.setProperty(variable, colorString);
-    }
+
+    if (document.querySelector(selector5))
+        document.querySelector(selector5).style.setProperty(variable, colorString);
 
     if (document.querySelector(UIClassNames.GLOBAL_COLORS_CONTAINER_SELECTOR))
     {

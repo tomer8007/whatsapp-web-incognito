@@ -39,6 +39,7 @@ var wsHook = {};
 			//data = wsHook.before(data, WSObject.url) || data;
 			new wsHook.before(data, WSObject.url).then(function (newData)
 			{
+				// TODO: there could be an error "WebSocket is already in CLOSING or CLOSED state."
 				if (newData != null)
 					_send.apply(WSObject, [newData]);
 				
