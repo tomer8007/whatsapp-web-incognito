@@ -211,13 +211,15 @@ document.addEventListener('sendReadConfirmation', async function (e)
     var messageID = data.jid + messageIndex;
 
     var chat = await getChatByJID(data.jid);
+    var chatContainer = {chat: chat};
 
     // add an exception and remove it after a short time at any case
     exceptionsList.push(normalizeJID(data.jid));
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
     
-    WhatsAppAPI.Seen.sendSeen(chat).then(result =>
+    WhatsAppAPI.Seen.sendSeen(chatContainer).then(result =>
     {
+        // TODO: remove the old blinking chats code
         if (data.jid in blinkingChats)
         {
             clearInterval(blinkingChats[data.jid]["timerID"]);
