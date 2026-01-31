@@ -5,12 +5,18 @@ name: Convert to Safari (macOS & iOS) Extension
 on:
   # Runs on every push to the 'master' branch.
   push:
-    branches: [ master ]
+    branches: [ improve-safari-build ]
 
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:
 
 jobs:
+  check-version:
+    runs-on: macos-latest
+    steps:
+      - name: Show Xcode Version
+        run: xcodebuild -version
+
   convert-to-safari-extension:
     # Specifies the runner environment. macOS is required for 'xcrun'.
     runs-on: macos-latest
