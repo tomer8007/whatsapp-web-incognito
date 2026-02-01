@@ -11,19 +11,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-version:
-    runs-on: macos-latest
-    steps:
-            # 2. DANN Xcode einrichten (das ist der Teil, den du gesucht hast)
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: 'latest-stable'
-      - name: Show Xcode Version
-        run: xcodebuild -version
-      - name: List installed Xcode versions
-        run: ls -d /Applications/Xcode*
-
   convert-to-safari-extension:
     # Specifies the runner environment. macOS is required for 'xcrun'.
     runs-on: macos-latest
@@ -33,13 +20,14 @@ jobs:
       # Step 1: Check out the repository's code so the runner can access it.
       - name: Check out the repository code
         uses: actions/checkout@v4
-
-      - name: Install latest Xcode
+      
+        # Step 2: Install latest Xcode
+      - name: Install latest stable Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: 'latest-stable'
 
-      # Step 2: Run the core conversion command.
+      # Step 3: Run the core conversion command.
       - name: Convert Chrome Extension to Safari/iOS
         run: |
           # Move WAIncognito sources to separate folder
@@ -48,15 +36,18 @@ jobs:
           mv !(extension-source|.github) extension-source/
           echo "Source files moved into ./extension-source"
 
+          # Display Xcode version
+          xcodebuild -version
+
           # Execute Apple's web extension converter tool
           xcrun safari-web-extension-packager \
             --project-location ./safari-extension-build \
             --no-open \
             --no-prompt \
             ./extension-source
-          echo "Safari Extension created in ./safari-extension-build"
+            echo "Safari Extension created in ./safari-extension-build"
 
-      # Step 3: Upload the output as a build artifact.
+      # Step 4: Upload the output as a build artifact.
       - name: Upload the generated Xcode project
         uses: actions/upload-artifact@v4
         with:
