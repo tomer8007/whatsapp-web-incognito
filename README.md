@@ -33,7 +33,7 @@ If you want to see what kind of messages WhatsApp is sending and receiving over 
 This is more experimental, but should work.
 If you want to use this extension in Firefox, you can load it using the developer page as explained in issue [#38](https://github.com/tomer8007/whatsapp-web-incognito/issues/38)
 
-Safari support for macOS was implemented in [@taksh108](https://github.com/taksh108)'s fork [here](https://github.com/tomer8007/whatsapp-web-incognito/pull/63)
+For Safari (macOS & iOS), you can use the automatically converted Xcode project. Simply download the latest artifact from the [GitHub Actions tab](../../actions), open it in Xcode, and run the extension on your device.
 
 ## Privacy
 No data is ever transmitted to anywhere. Privacy policy [here](https://github.com/tomer8007/whatsapp-web-incognito/wiki/Chrome-Extension-Privacy-Policy).
