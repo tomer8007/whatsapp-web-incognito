@@ -15,19 +15,17 @@ jobs:
     # Specifies the runner environment. macOS is required for 'xcrun'.
     runs-on: macos-latest
 
+    env:
+      # Sets the DEVELOPER_DIR environment variable to use a specific Xcode version.
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+
     # Contains the sequence of steps for this job.
     steps:
       # Step 1: Check out the repository's code so the runner can access it.
       - name: Check out the repository code
         uses: actions/checkout@v4
-      
-        # Step 2: Install latest Xcode
-      - name: Install latest stable Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: 'latest-stable'
 
-      # Step 3: Run the core conversion command.
+      # Step 2: Run the core conversion command.
       - name: Convert Chrome Extension to Safari/iOS
         run: |
           # Move WAIncognito sources to separate folder
@@ -47,7 +45,7 @@ jobs:
             ./extension-source
             echo "Safari Extension created in ./safari-extension-build"
 
-      # Step 4: Upload the output as a build artifact.
+      # Step 3: Upload the output as a build artifact.
       - name: Upload the generated Xcode project
         uses: actions/upload-artifact@v4
         with:
