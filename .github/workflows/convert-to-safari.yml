@@ -15,6 +15,10 @@ jobs:
     # Specifies the runner environment. macOS is required for 'xcrun'.
     runs-on: macos-latest
 
+    env:
+      # Sets the DEVELOPER_DIR environment variable to use a specific Xcode version.
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+
     # Contains the sequence of steps for this job.
     steps:
       # Step 1: Check out the repository's code so the runner can access it.
@@ -30,13 +34,16 @@ jobs:
           mv !(extension-source|.github) extension-source/
           echo "Source files moved into ./extension-source"
 
+          # Display Xcode version
+          xcodebuild -version
+
           # Execute Apple's web extension converter tool
-          xcrun safari-web-extension-converter \
+          xcrun safari-web-extension-packager \
             --project-location ./safari-extension-build \
             --no-open \
             --no-prompt \
             ./extension-source
-          echo "Safari Extension created in ./safari-extension-build"
+            echo "Safari Extension created in ./safari-extension-build"
 
       # Step 3: Upload the output as a build artifact.
       - name: Upload the generated Xcode project
