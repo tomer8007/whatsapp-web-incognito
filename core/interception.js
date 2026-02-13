@@ -180,8 +180,12 @@ wsHook.after = function (messageEvent, url)
     return MultiDevice.enqueuePromise(promise, messageEvent, true);
 }
 
+//
+// Message restore feauture
+//
 
 
+// called from node_handler.js when a message node is blocked
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
     // In case the message already appears on screen, mark it in red
@@ -200,46 +204,145 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
     setTimeout(async function() 
     {
-        var chat = await getChatByJID(remoteJid);
-        if (chat)
-        {
-            if (chat.loadEarlierMsgs)
-                await chat.loadEarlierMsgs();
-            else
-                await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs(chat);
-
-            var msgs = chat.msgs.getModelsArray();
-        
-            for (let i = 0; i < msgs.length; i++)
-            {
-                if (msgs[i].id.id == deletedMessageId)
-                {
-                    saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                    break;
-                }
-            }
-        }
-        else
-        {
-            console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
-        }
+        findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
     }, waitTime);
 }
 
-async function decryptE2EMessagesFromNode(node)
+var deletedMessageSaveAttempts = 0;
+var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
+
+async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId)
 {
-    // decrypt the signal message
-    try
+    var chat = await getChatByJID(remoteJid);
+    if (chat)
     {
-        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
+        if (chat.loadEarlierMsgs)
+            await chat.loadEarlierMsgs();
+        else
+            await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs(chat);
+
+        var msgs = chat.msgs.getModelsArray();
+    
+        var foundOriginalMessage = false;
+        for (let i = 0; i < msgs.length; i++)
+        {
+            if (msgs[i].id.id == deletedMessageId)
+            {
+                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                foundOriginalMessage = true;
+                break;
+            }
+        }
+
+        if (!foundOriginalMessage && deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
+        {
+            // We are probably starting up and the original message is not added yet to the message store,
+            // just schedule the search for later
+            console.warn("WAIncognito: Scheduling deleted message save for later");
+            deletedMessageSaveAttempts++;
+            setTimeout(async function() 
+            {
+                findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+            }, 1000);
+        }
     }
-    catch (exception)
+    else
     {
-        console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
-        console.error(exception);
-        debugger;
+        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
+
+        if (deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
+        {
+            console.warn("WAIncognito: Scheduling deleted message save for later");
+            deletedMessageSaveAttempts++;
+            setTimeout(async function() 
+            {
+                findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+            }, 1000);
+        }
     }
 }
+
+async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
+{
+    // Determine author data
+    var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
+    if (author == "")
+    {
+        // maybe it's an @lid
+        author = deletedMessageKey.remoteJid;
+    }
+
+    let body = "";
+    let isMedia = false;
+
+    // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
+    if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
+    {
+        isMedia = true;
+
+        // get extended media key              
+        try
+        {
+            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: retrievedMsg.directPath, 
+                encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, 
+                type: retrievedMsg.type, signal: (new AbortController).signal });
+
+            body = arrayBufferToBase64(decryptedData);
+
+        }
+        catch (e) { console.error(e); }
+    }
+    else 
+    {   
+        body = retrievedMsg.body;
+    }
+
+    let deletedMsgContents = {}
+    deletedMsgContents.id = revokeMessageID;
+    deletedMsgContents.originalID = retrievedMsg.id.id;
+    deletedMsgContents.body = body;
+    deletedMsgContents.timestamp = retrievedMsg.t;
+    deletedMsgContents.from = author;
+    deletedMsgContents.isMedia = isMedia;
+    deletedMsgContents.fileName = retrievedMsg.filename;
+    deletedMsgContents.mimetype = retrievedMsg.mimetype;
+    deletedMsgContents.type = retrievedMsg.type;
+    deletedMsgContents.mediaText = retrievedMsg.text;
+    deletedMsgContents.Jid = deletedMessageKey.remoteJid;
+    deletedMsgContents.lng = retrievedMsg.lng;
+    deletedMsgContents.lat = retrievedMsg.lat;
+
+    if ("id" in deletedMsgContents)
+    {
+        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
+        let request = transcation.objectStore("msgs").add(deletedMsgContents);
+        request.onerror = (e) =>
+        {
+            if (request.error.name == "ConstraintError")
+            {
+                // ConstraintError occurs when an object with the same id already exists
+                // This will happen when we get the revoke message again from the server
+                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
+            } 
+            else
+            {
+                console.log("WhatsIncognito: Unexpected error saving deleted message");
+            }
+        };
+        request.onsuccess = (e) =>
+        {
+            console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
+        }
+    }
+    else
+    {
+        console.log("WhatsIncognito: Deleted message contents not found");
+    }
+}
+
+//
+// View once feature
+//
 
 async function interceptViewOnceMessages(e2eMessage, messageId) 
 {
@@ -331,6 +434,27 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
     }
 }
 
+
+
+//
+// Miscellaneous 
+//
+
+async function decryptE2EMessagesFromNode(node)
+{
+    // decrypt the signal message
+    try
+    {
+        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
+    }
+    catch (exception)
+    {
+        console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
+        console.error(exception);
+        debugger;
+    }
+}
+
 function printNode(node, isIncoming = false, decryptedFrameLength)
 {
     var objectToPrint = xmlDebugging ? nodeToElement(node) : node;
@@ -355,12 +479,6 @@ function printNode(node, isIncoming = false, decryptedFrameLength)
         console.log(objectToPrint);
     }
 }
-
-
-
-//
-// Miscellaneous 
-//
 
 function exposeWhatsAppAPI()
 {
@@ -549,83 +667,6 @@ function initializeDeletedMessagesDB()
     }
 }
 
-async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
-{
-    // Determine author data
-    var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
-    if (author == "")
-    {
-        // maybe it's an @lid
-        author = deletedMessageKey.remoteJid;
-    }
-
-    let body = "";
-    let isMedia = false;
-
-    // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
-    if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
-    {
-        isMedia = true;
-
-        // get extended media key              
-        try
-        {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: retrievedMsg.directPath, 
-                encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, 
-                type: retrievedMsg.type, signal: (new AbortController).signal });
-
-            body = arrayBufferToBase64(decryptedData);
-
-        }
-        catch (e) { console.error(e); }
-    }
-    else 
-    {   
-        body = retrievedMsg.body;
-    }
-
-    let deletedMsgContents = {}
-    deletedMsgContents.id = revokeMessageID;
-    deletedMsgContents.originalID = retrievedMsg.id.id;
-    deletedMsgContents.body = body;
-    deletedMsgContents.timestamp = retrievedMsg.t;
-    deletedMsgContents.from = author;
-    deletedMsgContents.isMedia = isMedia;
-    deletedMsgContents.fileName = retrievedMsg.filename;
-    deletedMsgContents.mimetype = retrievedMsg.mimetype;
-    deletedMsgContents.type = retrievedMsg.type;
-    deletedMsgContents.mediaText = retrievedMsg.text;
-    deletedMsgContents.Jid = deletedMessageKey.remoteJid;
-    deletedMsgContents.lng = retrievedMsg.lng;
-    deletedMsgContents.lat = retrievedMsg.lat;
-
-    if ("id" in deletedMsgContents)
-    {
-        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
-        let request = transcation.objectStore("msgs").add(deletedMsgContents);
-        request.onerror = (e) =>
-        {
-            if (request.error.name == "ConstraintError")
-            {
-                // ConstraintError occurs when an object with the same id already exists
-                // This will happen when we get the revoke message again from the server
-                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-            } 
-            else
-            {
-                console.log("WhatsIncognito: Unexpected error saving deleted message");
-            }
-        };
-        request.onsuccess = (e) =>
-        {
-            console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
-        }
-    }
-    else
-    {
-        console.log("WhatsIncognito: Deleted message contents not found");
-    }
-}
 
 async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
 {
