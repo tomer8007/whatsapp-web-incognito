@@ -658,9 +658,16 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
 
     if (handshakeMessage.serverHello)
     {
-        // reset the counters on a new connection to avoid weird stuff
         // TODO: what happens if mutliple WS connections are queued to start, then one of them completes, then another one starts, but then gets canceled?
         //       there is openWebSocketsConcurrently
+        // we back up our keys, in case we'll discover we should try to use them again
+        if (MultiDevice.readKey != null)
+        {
+            MultiDevice.prevReadKey = MultiDevice.readKey;
+            MultiDevice.prevWriteKey = MultiDevice.prevWriteKey;
+        }
+
+        // reset the counters on a new connection to avoid weird stuff
         MultiDevice.readKey = null;
         MultiDevice.writeKey = null;
     }
@@ -682,6 +689,10 @@ MultiDevice.waitForNoiseKeyIfNeeded = async function(looksLikeHandshakePacket)
             console.warn("window.crypto.subtle.importKey:")
             console.warn(window.crypto.subtle.importKey);
             WAdebugMode = true;
+
+            console.warn("WAIcognito: Trying to use previous keys");
+            MultiDevice.readKey = MultiDevice.prevReadKey;
+            MultiDevice.writeKey = MultiDevice.prevWriteKey;
         }
     }
 }
