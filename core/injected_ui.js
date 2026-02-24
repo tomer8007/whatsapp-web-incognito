@@ -509,11 +509,17 @@ function setGlobalColorVaraibleString(variable, colorString)
 {
     // TODO: I must think of a way to auto detect the selector, or set the global color in a better way
     //       it it currently very hacky
+    // To get the new selector, look in e.g https://static.whatsapp.net/rsrc.php/v5/yK/l/0,cross/W3PYxWkG2-yfN1x-cay_sOU0sr-k7QgkZlwij8nbyzl0.css
+    // search for --WDS-persistent-always-branded
 
     var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
     var selector4 = ".x1h89ln0.x1h89ln0, .x1h89ln0.x1h89ln0:root";
     var selector5 = ".x9ux0ua.x9ux0ua, .x9ux0ua.x9ux0ua:root";
+    var selector6 = ".x1646n1n.x1646n1n,.x1646n1n.x1646n1n:root";
+
+    if (document.querySelector(selector6))
+        document.querySelector(selector6).style.setProperty(variable, colorString);
     
     if (document.querySelector(selector2))
         document.querySelector(selector2).style.setProperty(variable, colorString);
