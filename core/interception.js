@@ -189,11 +189,13 @@ wsHook.after = function (messageEvent, url)
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
     // In case the message already appears on screen, mark it in red
-    var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
-    if (messageNode)
+    var messageNodeWithId = document.querySelector("[data-id*='" + deletedMessageId + "']");
+
+    if (messageNodeWithId)
     {
-        if (messageNode.parentNode)
-            messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
+        var messageNode = messageNodeWithId.querySelector(".message-in");
+        var bubbleElement = messageNode.querySelector('div > div')?.querySelector('div > div');
+        if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
     }
 
     document.dispatchEvent(new CustomEvent("pseudoMsgs", {
@@ -262,7 +264,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
     }
 }
 
-async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessageID)
+async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
     var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
@@ -276,16 +278,16 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
     let isMedia = false;
 
     // Stickers & Documents are not considered media for some reason, so we have to check if it has a mediaKey and also set isMedia == true
-    if (retrievedMsg.isMedia || retrievedMsg.mediaKey)
+    if (deletedMessage.isMedia || deletedMessage.mediaKey)
     {
         isMedia = true;
 
         // get extended media key              
         try
         {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: retrievedMsg.directPath, 
-                encFilehash: retrievedMsg.encFilehash, filehash: retrievedMsg.filehash, mediaKey: retrievedMsg.mediaKey, 
-                type: retrievedMsg.type, signal: (new AbortController).signal });
+            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: deletedMessage.directPath, 
+                encFilehash: deletedMessage.encFilehash, filehash: deletedMessage.filehash, mediaKey: deletedMessage.mediaKey, 
+                type: deletedMessage.type, signal: (new AbortController).signal });
 
             body = arrayBufferToBase64(decryptedData);
 
@@ -294,28 +296,29 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
     }
     else 
     {   
-        body = retrievedMsg.body;
+        body = deletedMessage.body;
     }
 
-    let deletedMsgContents = {}
-    deletedMsgContents.id = revokeMessageID;
-    deletedMsgContents.originalID = retrievedMsg.id.id;
-    deletedMsgContents.body = body;
-    deletedMsgContents.timestamp = retrievedMsg.t;
-    deletedMsgContents.from = author;
-    deletedMsgContents.isMedia = isMedia;
-    deletedMsgContents.fileName = retrievedMsg.filename;
-    deletedMsgContents.mimetype = retrievedMsg.mimetype;
-    deletedMsgContents.type = retrievedMsg.type;
-    deletedMsgContents.mediaText = retrievedMsg.text;
-    deletedMsgContents.Jid = deletedMessageKey.remoteJid;
-    deletedMsgContents.lng = retrievedMsg.lng;
-    deletedMsgContents.lat = retrievedMsg.lat;
+    let deletedMsgRecord = {}
+    deletedMsgRecord.id = deletedMessage.id.id;
+    deletedMsgRecord.originalID = deletedMessage.id.id;
+    deletedMsgRecord.revokeMessageID = revokeMessageID;
+    deletedMsgRecord.body = body;
+    deletedMsgRecord.timestamp = deletedMessage.t;
+    deletedMsgRecord.from = author;
+    deletedMsgRecord.isMedia = isMedia;
+    deletedMsgRecord.fileName = deletedMessage.filename;
+    deletedMsgRecord.mimetype = deletedMessage.mimetype;
+    deletedMsgRecord.type = deletedMessage.type;
+    deletedMsgRecord.mediaText = deletedMessage.text;
+    deletedMsgRecord.Jid = deletedMessageKey.remoteJid;
+    deletedMsgRecord.lng = deletedMessage.lng;
+    deletedMsgRecord.lat = deletedMessage.lat;
 
-    if ("id" in deletedMsgContents)
+    if ("id" in deletedMsgRecord)
     {
         const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
-        let request = transcation.objectStore("msgs").add(deletedMsgContents);
+        let request = transcation.objectStore("msgs").add(deletedMsgRecord);
         request.onerror = (e) =>
         {
             if (request.error.name == "ConstraintError")
@@ -331,7 +334,7 @@ async function saveDeletedMessage(retrievedMsg, deletedMessageKey, revokeMessage
         };
         request.onsuccess = (e) =>
         {
-            console.log("WhatsIncognito: Saved deleted message with ID " + deletedMsgContents.id + " from " + deletedMsgContents.from + " successfully.");
+            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
         }
     }
     else

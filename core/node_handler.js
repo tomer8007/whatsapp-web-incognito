@@ -220,6 +220,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
 
     var e2eMessagesAllowedStatus = [];
 
+    // Decrypt the inner messages and decide if we want to block some of them
     var e2eMessages = await MultiDevice.decryptE2EMessagesFromMessageNode(messageNode);
     for (var i = 0; i < e2eMessages.length ;i++)
     {
@@ -241,6 +242,10 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         console.log(e2eMessages);
     }
 
+    //
+    // Now, edit the message node so that "enc" sub-nodes that we don't like will be ignored by the original WA client
+    //
+
     var modifiedMessageNode = messageNode;
     
     if (!isAllowed)
@@ -258,6 +263,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
                 continue;
             }
     
+            // Check if this specific "enc" message node is allowed, as was decided previously.
             var isNodeAllowed = true;
             for (var status of e2eMessagesAllowedStatus)
             {
@@ -267,9 +273,16 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
                 }
             }
 
+            // If the "enc" is allowed, include it in our modified clone  
             if (isNodeAllowed)
             {
                 modifiedMessageNode.content.push(node);
+            }
+            else
+            {
+                // TODO: simply removing the <enc> from the <message> might result in WhatsApp saying "[WhatsApp LOG] failedParsingMessage: '....' (XmppParsingFailure)"
+                //      and uploading logs. We could find a better way to edit the message
+                
             }
     
             indexOfEncNode++;

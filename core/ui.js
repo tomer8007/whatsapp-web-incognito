@@ -77,7 +77,12 @@ function onMutationsObserved(mutations)
             }
 
             // Scan for added message nodes and modify if needed
-            var msgNodes = addedNode.querySelectorAll("div.message-in, div.message-out");
+            var msgNodes = [];
+            if (addedNode.matches("div.message-in, div.message-out")) {
+                msgNodes.push(addedNode);
+            }
+            msgNodes.push(...addedNode.querySelectorAll("div.message-in, div.message-out"));
+
             for (let i = 0; i < msgNodes.length; i++)
             {
                 const currentNode = msgNodes[i];
@@ -888,8 +893,8 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         if (didFindInDeletedMessagesDB)
         {
             // This message was deleted and we have the original data.
-            if (messageNode.parentNode)
-            messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
+            var bubbleElement = messageNode.querySelector('div > div')?.querySelector('div > div');
+            if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             
             if (!shouldTryToSyntehesizeMessage)
             {
