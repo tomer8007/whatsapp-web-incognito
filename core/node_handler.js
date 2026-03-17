@@ -194,13 +194,27 @@ NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 NodeHandler.interceptReceivedNode = async function (node)
 {
     var isAllowed = true;
+    var tag = node.tag;
 
-    if (node.tag == "message")
+    if (tag == "message")
     {
         var [isAllowed, node] = await NodeHandler.onReceivedMessageNode(node);
+    }else if(tag == 'chatstate' ){
+        NodeHandler.onChatStateReceived(node);
     }
 
     return [isAllowed, node];
+}
+
+NodeHandler.onChatStateReceived = async function(node){
+    const chatState = node.content[0].tag;
+    const user = node.attrs.from?._jid?.user || 'Someone';
+
+    if(chatState === 'composing'){
+        console.warn(`${user} is typing...`);
+        // push notification to windows
+        new Notification(`${user} is typing...`);
+    }
 }
 
 NodeHandler.onReceivedMessageNode = async function(messageNode)
