@@ -10,13 +10,13 @@ function determineIfNodeIsStatus(node)
     // is node a picture
     if(node.nodeName == "IMG")
     {
-        // get the element 12 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
+        // get the element 13 levels up
+        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
     }
     else if (node.nodeName == "VIDEO")
     {
-        // get the element 11 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement;
+        // get the element 12 levels up
+        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;;
     }
     // traverse the DOM to get the element with the data-icon "status-media-controls"
     //var child = parent?.children[1]?.children[2]?.children[0]?.children[0]?.children[0]?.children[0]?.children[0];

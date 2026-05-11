@@ -547,43 +547,54 @@ MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIn
 
     var foundCounterIndex = -1;
 
-    // try to look at the other counters
+    // Prepeare the known tracked counters,
     var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
 
     for (var i = 0; i < countersArray.length; i++)
     {
         var counter = countersArray[i];
 
-        var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
-
-        try
+        var isCounterCorrect = await MultiDevice.testFrameDecryption(counter, key, currentFrame);
+        if (isCounterCorrect)
         {
-            var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
-        }
-        catch (exception)
-        {
-            if (exception.name.includes("OperationError"))
+            // decryption seemed successful
+            foundCounterIndex = i;
+            // remember the good one
+            if (isIncoming)
             {
-                // wrong counter
-                continue;
+                MultiDevice.readCounterIndex = i;
             }
             else
-                throw exception;
-        }
+            {
+                MultiDevice.writeCounterIndex = i;
+            }
 
-        // decryption seemed successful
-        foundCounterIndex = i;
-        // remember the good one
-        if (isIncoming)
-        {
-            MultiDevice.readCounterIndex = i;
+            break;
         }
-        else
-        {
-            MultiDevice.writeCounterIndex = i;
-        }
+    }
 
-        break;
+    if (foundCounterIndex == -1)
+    {
+        // try the one stolen from within WA's javascript state
+        if (WhatsAppAPI.Communication.socket)
+        {
+            var counter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
+            if (MultiDevice.testFrameDecryption(counter, key, currentFrame))
+            {
+                // add this counter
+                if (isIncoming) 
+                {
+                    MultiDevice.readCounters.push(WhatsAppAPI.Communication.socket.$7);
+                    foundCounterIndex = MultiDevice.readCounters.length - 1;
+                }
+                else
+                {
+                    MultiDevice.writeCounters.push(WhatsAppAPI.Communication.socket.$8);
+                    foundCounterIndex = MultiDevice.writeCounters.length - 1;
+                }
+            }
+        }
+       
     }
 
     if (foundCounterIndex == -1)
@@ -593,6 +604,28 @@ MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIn
     }
 
     return foundCounterIndex;
+}
+
+MultiDevice.testFrameDecryption = async function(counter, key, currentFrame)
+{
+    var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
+
+    try
+    {
+        var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+    }
+    catch (exception)
+    {
+        if (exception.name.includes("OperationError"))
+        {
+            // wrong counter
+            return false;
+        }
+        else
+            throw exception;
+    }
+
+    return true;
 }
 
 MultiDevice.HMAC_SHA256 = async function(toSign, key)
