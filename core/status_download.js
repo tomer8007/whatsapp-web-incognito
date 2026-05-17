@@ -8,27 +8,25 @@ function determineIfNodeIsStatus(node)
 {
     var isNodeStatus = false;
     // is node a picture
-    if(node.nodeName == "IMG")
+    if (node.nodeName == "IMG")
     {
         // get the element 12 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
+        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
+        if (parent?.getAttribute("data-animate-status-viewer") != null)
+        {
+            isNodeStatus = true;
+        }
     }
     else if (node.nodeName == "VIDEO")
     {
-        // get the element 11 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement;
+        // get the element 8 levels up
+        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
+        if (parent?.getAttribute("data-testid") == "status-video")
+        {
+            isNodeStatus = true;
+        }
     }
-    // traverse the DOM to get the element with the data-icon "status-media-controls"
-    //var child = parent?.children[1]?.children[2]?.children[0]?.children[0]?.children[0]?.children[0]?.children[0];
-    // if the element has a data-icon of "status-media-controls-pause", then the original element is a status
-    if (parent?.getAttribute("data-animate-status-viewer") != null)
-    {
-        isNodeStatus = true;
-    }
-    else
-    {
-        isNodeStatus = false;
-    }
+
     return isNodeStatus;
 }
 
@@ -100,7 +98,8 @@ function handleSRCAdd(src, node)
 
 function handleSRCRemove(src, node) 
 {
-    destroyOldButton(src)
+    if (src != null)
+        destroyOldButton(src)
 }
 
 function checkNodeAndChildrenForSRC(node, functionToCall)

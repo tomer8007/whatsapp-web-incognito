@@ -747,7 +747,8 @@ function onNewMessageNodeAdded(messageNode)
     if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
     if (data_id == null)
         debugger;
-    var msgID = data_id.split("_")[2];
+
+    var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 
     // check if there are any view-once messages for this message ID
     // open viewOnce indexedDB
@@ -865,7 +866,7 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 
 // This function gets called on every new message node that gets added to the screen,
 // and takes care of "deleted" messages - 
-// attempts to syntethise a message that was deleted from our DB
+// attempts to syntethise a message that was deleted from our DB / just mark it in red
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));

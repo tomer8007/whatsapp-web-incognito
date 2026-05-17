@@ -206,7 +206,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
     setTimeout(async function() 
     {
-        findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
     }, waitTime);
 }
 
@@ -221,7 +221,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
         if (chat.loadEarlierMsgs)
             await chat.loadEarlierMsgs();
         else
-            await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs(chat);
+            await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
 
         var msgs = chat.msgs.getModelsArray();
     
@@ -244,7 +244,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
             deletedMessageSaveAttempts++;
             setTimeout(async function() 
             {
-                findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
             }, 1000);
         }
     }
@@ -258,7 +258,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
             deletedMessageSaveAttempts++;
             setTimeout(async function() 
             {
-                findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
             }, 1000);
         }
     }
@@ -270,7 +270,7 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
     if (author == "")
     {
-        // maybe it's an @lid
+        // maybe it's an @lid or @g.us
         author = deletedMessageKey.remoteJid;
     }
 
