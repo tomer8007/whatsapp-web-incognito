@@ -28,6 +28,10 @@ function findChatEntryElementForJID(jid)
         {
             matches = true;
         }
+        else if(data.data.accountLid.toString() == jid)
+        {
+            matches = true;
+        }
 
         if (matches)
         {
@@ -154,7 +158,8 @@ async function getChatByJID(jid)
         try
         {
             var chat = await WhatsAppAPI.ChatCollection.find(jid);
-            return chat;
+            if (chat != null)
+                return chat;
         }
         catch (e)
         {
@@ -176,6 +181,12 @@ async function getChatByJID(jid)
     }
 
     return chat;
+}
+
+function getJidOfChat(chat)
+{
+    var jid = chat.accountLid ? chat.accountLid.toString() : chat.id.toString();
+    return normalizeJID(jid);
 }
 
 function normalizeJID(jid)

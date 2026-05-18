@@ -120,13 +120,17 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
-    if (!chat) return;
+    if (!chat) 
+    {
+        console.warn("WAIncognito: Did not find chat for JID " + blockedJid);
+        return;
+    }
 
     if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
     {
         markChatAsPendingReciptsSending(chat);
     }
-    else if (readConfirmationsHookEnabled && chat.id.user == blockedUser)
+    else if (readConfirmationsHookEnabled && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
     {
         markChatAsBlocked(chat);
     }
@@ -185,7 +189,7 @@ document.addEventListener('onDropdownOpened', function (e)
     {
         var name = props.chat.name;
         var formattedName = props.chat.contact.name;
-        var jid = props.chat.id;
+        var jid = getJidOfChat(chat);
         var lastMessageIndex = props.chat.lastReceivedKey.id;
         var unreadCount = props.chat.unreadCount;
         var isGroup = props.chat.isGroup;
@@ -310,7 +314,7 @@ function markChatAsPendingReciptsSending(chat)
         return;
     }
 
-    var messageID = chat.id + chat.lastReceivedKey.id;
+    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
     var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
                             document.getElementsByClassName("incognito-message")[0] : null;
     var seconds = safetyDelay;
@@ -384,7 +388,7 @@ function markChatAsPendingReciptsSending(chat)
             {
                 // time's up, sending receipt
                 clearInterval(id);
-                var data = { jid: chat.id, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
+                var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
                 document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
 
                 var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
@@ -412,7 +416,7 @@ function markChatAsBlocked(chat)
     }
 
     var currentChat = getCurrentChat();
-    var messageID = chat.id + chat.lastReceivedKey.id;
+    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
 
     if (currentChat.id.user == chat.id.user)
     {
@@ -446,7 +450,7 @@ function markChatAsBlocked(chat)
         sendButton.onclick = function ()
         {
             var data = {
-                name: chat.name, jid: chat.id, lastMessageIndex: chat.lastReceivedKey.id,
+                name: chat.name, jid: getJidOfChat(chat), lastMessageIndex: chat.lastReceivedKey.id,
                 fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
                 formattedName: chat.contact.name
             };
