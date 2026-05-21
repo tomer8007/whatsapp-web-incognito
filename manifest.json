@@ -5,16 +5,26 @@
   "description": "Be invisible on WhatsApp™ Web by disabling read receipts and presence updates",
   "version": "2.5.1",
   "permissions": ["storage"],
-   "icons":  { "128": "images/icon_128_blue.png" },
-   "action": {
+  "icons":  { "128": "images/icon_128_blue.png" },
+  "action": {
     "default_icon": "images/icon_128_reshaped.png"
-   },
-   "background":
-   {
-    "service_worker": "background.js"
-   },
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "waincognito@wa-incognito.com",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+          "required": [
+             "none"
+          ]  }
+    }
+  },
+  "background":
+  {
+    "scripts": ["background.js"]
+  },
    "host_permissions": ["https://web.whatsapp.com/*"],
-   "content_scripts": 
+   "content_scripts":
    [
   	{
       "matches": ["https://web.whatsapp.com/*"],
