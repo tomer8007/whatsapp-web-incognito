@@ -522,6 +522,10 @@ function setGlobalColorVaraibleString(variable, colorString)
     var selector5 = ".xul6ihk.xul6ihk, .xul6ihk.xul6ihk:root";
     var selector6 = ".x1646n1n.x1646n1n,.x1646n1n.x1646n1n:root";
     var selector7 = ".x8rilwt.x8rilwt, .x8rilwt.x8rilwt:root";
+    var selector8 = ".xfmqtgv.xfmqtgv, .xfmqtgv.xfmqtgv:root";
+
+    if (document.querySelector(selector8))
+        document.querySelector(selector8).style.setProperty(variable, colorString);
 
     if (document.querySelector(selector6))
         document.querySelector(selector6).style.setProperty(variable, colorString);

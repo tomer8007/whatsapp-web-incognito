@@ -28,7 +28,7 @@ function findChatEntryElementForJID(jid)
         {
             matches = true;
         }
-        else if(data.data.accountLid.toString() == jid)
+        else if (data.data.accountLid && data.data.accountLid.toString() == jid)
         {
             matches = true;
         }
