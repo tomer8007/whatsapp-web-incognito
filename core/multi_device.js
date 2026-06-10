@@ -379,7 +379,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
         else
         {
             console.warn("Could not find recevier chain for " + lidAddress.toString());
-            debugger;
+            //debugger;
         }
     }
     else

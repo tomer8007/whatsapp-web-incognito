@@ -188,26 +188,38 @@ wsHook.after = function (messageEvent, url)
 // called from node_handler.js when a message node is blocked
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
 {
-    // In case the message already appears on screen, mark it in red
-    var messageNodeWithId = document.querySelector("[data-id*='" + deletedMessageId + "']");
-
-    if (messageNodeWithId)
+    // do GUI operations after a small timeout. TODO: move it to injected_ui.js
+    setTimeout(function()
     {
-        var messageNode = messageNodeWithId.querySelector(".message-in");
-        var bubbleElement = messageNode.querySelector('div > div')?.querySelector('div > div');
-        if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
+        try
+        {
+            // In case the message already appears on screen, mark it in red
+            var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
+
+            if (messageNode)
+            {
+                var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
+                if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
+            }
+
+            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
+                detail: deletedMessageId
+            }));
+
+            // Now, save the deleted message in the DB after a short wait
+            var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
+            setTimeout(async function() 
+            {
+                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+            }, waitTime);
+        }
+        catch (e)
+        {
+            console.error(e);
+        }
+        
     }
-
-    document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-        detail: deletedMessageId
-    }));
-
-    // Now, save the deleted message in the DB after a short wait
-    var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
-    setTimeout(async function() 
-    {
-        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-    }, waitTime);
+    , 10);
 }
 
 var deletedMessageSaveAttempts = 0;
