@@ -61,6 +61,12 @@
   Checkbox
 */
 
+:root {
+  --primary-rgb: #008069;
+  --checkbox-background: #008069;
+  --checkbox-mark: #f4f9f8;
+}
+
 .checkbox-container-incognito
 {
     display: inline-block !important;

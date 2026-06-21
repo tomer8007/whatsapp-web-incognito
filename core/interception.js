@@ -171,7 +171,7 @@ wsHook.after = function (messageEvent, url)
         console.error(exception);
         console.error("incoming noise packet was:");
         console.error(originalData);
-        debugger;
+        //debugger;
         return messageEvent;
     };
 
