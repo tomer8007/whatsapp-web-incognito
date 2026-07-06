@@ -55,6 +55,7 @@
 {
   z-index: 1100 !important;
 	transform-origin: left top 0px;
+  background: var(--app-background);
 }
 
 /*
