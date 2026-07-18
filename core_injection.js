@@ -23,7 +23,9 @@ async function injectOtherScripts()
 	injectScript('core/interception.js');
 
 	setTimeout(
-		function() {injectScript('lib/moduleraid.js');},
+		function() {
+			injectScript('lib/moduleraid.js');
+		},
 		10);
 }
 

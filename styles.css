@@ -55,11 +55,18 @@
 {
   z-index: 1100 !important;
 	transform-origin: left top 0px;
+  background: var(--app-background);
 }
 
 /*
   Checkbox
 */
+
+:root {
+  --primary-rgb: #008069;
+  --checkbox-background: #008069;
+  --checkbox-mark: #f4f9f8;
+}
 
 .checkbox-container-incognito
 {

@@ -77,11 +77,21 @@ function onMutationsObserved(mutations)
             }
 
             // Scan for added message nodes and modify if needed
+            function isMessageNode(node)
+            {
+                if (node.childNodes[0] && node.childNodes[0].getAttribute)
+                {
+                    if (node.childNodes[0].getAttribute("data-testid"))
+                        return node.childNodes[0].getAttribute("data-testid").startsWith("conv-msg")
+                }
+
+                return false;
+            }
             var msgNodes = [];
-            if (addedNode.matches("div.message-in, div.message-out")) {
+            if (isMessageNode(addedNode)) {
                 msgNodes.push(addedNode);
             }
-            msgNodes.push(...addedNode.querySelectorAll("div.message-in, div.message-out"));
+            msgNodes.push(...addedNode.querySelectorAll('[data-testid^="conv-msg"]'));
 
             for (let i = 0; i < msgNodes.length; i++)
             {
@@ -894,7 +904,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         if (didFindInDeletedMessagesDB)
         {
             // This message was deleted and we have the original data.
-            var bubbleElement = messageNode.querySelector('div > div')?.querySelector('div > div');
+            var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
             if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             
             if (!shouldTryToSyntehesizeMessage)
@@ -1044,7 +1054,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 
 function markMessageNodeDeviceIfPossible(messageNode, msgID)
 {
-    var isOutgoingMessage = messageNode.className.includes("message-out");
+    var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
     if (isOutgoingMessage)
     {
         // we don't want to mark our own messages
