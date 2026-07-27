@@ -30,12 +30,15 @@ NodeHandler.isSentNodeAllowed = function (node)
 {
     var action = node.tag;
     var data = node.attrs;
+
+    var jid = data.jid ? data.jid : data.to;
+    if (jid) jid = normalizeJID(jid.toString());
+
     var shouldBlock = 
         (readConfirmationsHookEnabled && action === "read") ||
         (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
         (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played") ||
-        (readConfirmationsHookEnabled && action == "received" && data["type"] === "played") ||
+        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
         (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
@@ -47,8 +50,6 @@ NodeHandler.isSentNodeAllowed = function (node)
         {
             case "read":
             case "receipt":
-                var jid = data.jid ? data.jid : data.to;
-                jid = normalizeJID(jid.toString());
 
                 var isReadReceiptAllowed = exceptionsList.includes(jid);
                 if (isReadReceiptAllowed)
