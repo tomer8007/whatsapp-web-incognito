@@ -1055,6 +1055,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 function markMessageNodeDeviceIfPossible(messageNode, msgID)
 {
     var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
+    isOutgoingMessage = messageNode.innerHTML.includes("aria-label=\"You:\"");
     if (isOutgoingMessage)
     {
         // we don't want to mark our own messages
