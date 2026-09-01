@@ -141,7 +141,8 @@ function isChatBlocked(jid)
 
     for (jid in blockedChats)
     {
-        if (jid.split("@")[0].split(":")[0] == user)
+        var possibleLid = blockedChats[jid].accountLid ? blockedChats[jid].accountLid.toString() : "";
+        if (jid.split("@")[0].split(":")[0] == user || possibleLid.split("@")[0].split(":")[0] == user)
             return true;
     }
 

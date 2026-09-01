@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "WAIncognito",
+  "name": "WAIncognito - Incognito for WhatsApp™",
   "short_name": "WAIncognito",
-  "description": "Be invisible on WhatsApp™ Web by disabling read receipts and presence updates",
-  "version": "2.5.7",
+  "description": "Be invisible on WhatsApp™ Web by controlling read receipts and presence updates",
+  "version": "2.5.8",
   "permissions": ["storage"],
    "icons":  { "128": "images/icon_128_blue.png" },
    "action": {
