@@ -1,0 +1,48 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (leave empty to use manifest version)'
+        required: false
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Get version from manifest
+        if: ${{ github.event.inputs.version == '' }}
+        id: version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set version
+        id: set-version
+        run: |
+          VERSION="${{ github.event.inputs.version || steps.version.outputs.version }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create release files
+        run: |
+          mkdir release
+          shopt -s extglob
+          mv !(release|.github) release/
+          cd release
+          zip -r ../WAIncognito-${{ steps.set-version.outputs.version }}.zip .
+
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.set-version.outputs.version }}
+          name: WAIncognito v${{ steps.set-version.outputs.version }}
+          draft: false
+          files: WAIncognito-${{ steps.set-version.outputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
