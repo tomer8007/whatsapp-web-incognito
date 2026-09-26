@@ -23,12 +23,20 @@ const DEBUG_LOG = !!process.env.WAI_DEBUG;
 // SVG first (it is what the extension ships and it scales to any tray density), PNG
 // second. A tray icon that fails to load is an invisible app, so the fallbacks are
 // explicit and each failure is logged rather than swallowed.
-// PNG first, deliberately. A tray icon is the one image in this app that is NOT loaded
-// through the page: it goes straight to the OS, and on Linux the panel/indicator APIs
-// only accept raster formats. nativeImage.createFromPath returns an EMPTY image for an
-// SVG here rather than throwing, so an SVG-first list burns two candidates and logs two
-// scary warnings on every launch before reaching a PNG that works. The SVGs stay in the
-// list as a fallback for platforms that do accept them.
+// PNG first, and not as a preference — as a measured requirement.
+//
+// On Electron 44.4.5 / Chromium 152, nativeImage.createFromPath returns an EMPTY image
+// (isEmpty() === true, size 0x0) for every SVG in images/, while all four PNGs load at
+// 128x128. createFromPath resolves empty rather than throwing, so an SVG-first list
+// silently burns candidates and logs warnings on every launch. Measured, not assumed:
+//
+//   incognito_gray.png        empty=false 128x128
+//   incognito.png             empty=false 128x128
+//   icon_128_reshaped.png     empty=false 128x128
+//   icon_128_blue.png         empty=false 128x128
+//   incognito_gray_hollow.svg empty=true  0x0
+//
+// The SVGs stay last as a fallback for platforms that do accept them.
 const ICON_CANDIDATES = [
   'incognito_gray.png',
   'incognito.png',
@@ -228,17 +236,24 @@ function createTray(opts) {
     return null;                     // main degrades to normal close semantics
   }
 
+  // Measured on Electron 44.4.5 (Chromium 152):
+  //   typeof tray.setMenu        -> 'undefined'   (throws if called)
+  //   typeof tray.setContextMenu -> 'function'
+  //   typeof tray.setToolTip     -> 'function'
+  // So setContextMenu is the API that actually exists, and setMenu is probed only as a
+  // fallback for older Electron. Hard-coding setMenu threw on every single status change.
+  const setMenuCompat = (t, menu) => {
+    if (typeof t.setContextMenu === 'function') return t.setContextMenu(menu);
+    if (typeof t.setMenu === 'function') return t.setMenu(menu);
+    return undefined;   // no menu API at all: leave the tray as-is rather than throw
+  };
+
   function update() {
     if (!tray || (typeof tray.isDestroyed === 'function' && tray.isDestroyed())) return;
     try {
       // Only the menu is rebuilt. Rebuilding the icon would drop the platform's
       // animation and re-decode the file on every status change.
-      //
-      // setMenu/setToolTip are feature-detected: on a host with no usable system tray
-      // (a bare X session, some containers) Electron hands back a Tray whose methods are
-      // not present, and calling them unconditionally throws on every single status
-      // change — which floods the log and buries anything that actually matters.
-      if (typeof tray.setMenu === 'function') tray.setMenu(buildMenu());
+      setMenuCompat(tray, buildMenu());
       if (typeof tray.setToolTip === 'function') tray.setToolTip(toolTip(safeStatus()));
     } catch (e) {
       warn(`tray update failed: ${(e && e.message) || e}`);
