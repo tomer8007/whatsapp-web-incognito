@@ -1,0 +1,65 @@
+{
+  "name": "waincognito",
+  "productName": "WAIncognito",
+  "version": "2.5.6",
+  "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
+  "license": "GPL-3.0",
+  "private": true,
+  "main": "app/electron/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:ext": "node scripts/build.mjs --target=extension",
+    "build:chrome": "node scripts/build.mjs --target=chrome",
+    "build:firefox": "node scripts/build.mjs --target=firefox",
+    "build:electron": "node scripts/build.mjs --target=electron",
+    "verify": "node scripts/verify-bundles.mjs",
+    "check:shell": "node scripts/check-shell.cjs",
+    "test": "node --test \"app/electron/*.test.js\"",
+    "dev": "node scripts/dev.mjs",
+    "dev:once": "node scripts/dev.mjs --once",
+    "check": "npm run build && npm run verify && npm test",
+    "clean": "node scripts/build.mjs --clean",
+    "start": "electron .",
+    "start:dev": "electron . --dev",
+    "dist": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.wa-incognito.app",
+    "productName": "WAIncognito",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "app/packaging"
+    },
+    "files": [
+      "app/electron/**/*",
+      "app/.build/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    }
+  }
+}

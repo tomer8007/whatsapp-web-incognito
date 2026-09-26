@@ -1,0 +1,127 @@
+{
+  "$comment": "The patch-set record. This is the budget for local divergence from upstream: docs/ELECTRON_APP_PLAN.md §1. A7 in scripts/verify-bundles.mjs diffs core/ and lib/ against upstreamRef and fails the build if the changed file set differs from patchedFiles. Deliberate new patches must be added here; accidental edits must not be.",
+
+  "upstreamRef": "upstream/master",
+
+  "patchedFiles": [
+    "core/interception.js",
+    "core/multi_device.js",
+    "core/node_handler.js",
+    "core/parsing/binary_reader.js",
+    "core/parsing/node_reader_writer.js",
+    "core/parsing/protobuf/WAProto.js",
+    "core/parsing/protobuf/WhisperTextProtocol.js",
+    "core/ui.js",
+    "core/ui_class_names.js",
+    "core/utils.js"
+  ],
+
+  "patches": [
+    {
+      "id": "P0a",
+      "file": "core/node_handler.js",
+      "status": "pre-existing",
+      "summary": "Drop the up-front JID normalisation, add receipt/received/played blocking, move JID derivation into the switch.",
+      "kind": "bugfix",
+      "upstreamCandidate": true,
+      "note": "Local fix for chats appearing read despite receipt blocking (LID change on WhatsApp's side). Not yet sent upstream."
+    },
+    {
+      "id": "P0b",
+      "file": "core/ui.js",
+      "status": "pre-existing",
+      "summary": "Delete the isOutgoingMessage = innerHTML.includes('aria-label=\"You:\"') override that broke device badges.",
+      "kind": "bugfix",
+      "upstreamCandidate": true
+    },
+    {
+      "id": "P0c",
+      "file": "core/utils.js",
+      "status": "pre-existing",
+      "summary": "Drop accountLid matching in isChatBlocked.",
+      "kind": "bugfix",
+      "upstreamCandidate": true
+    },
+    {
+      "id": "P1",
+      "file": "core/ui.js",
+      "status": "applied",
+      "summary": "Rename ui.js's top-level `initialize` to `initializeUI` (2 lines).",
+      "kind": "correctness",
+      "why": "interception.js:28 and ui.js:18 both declared and called a top-level `initialize`. Concatenating the two bundles makes the LAST declaration win for the whole script, so interception.js silently called ui.js's version, the WebSocket hook never armed, and nothing errored. Verified: ui.js's `initialize` is referenced nowhere else and never re-invoked, so the rename is safe.",
+      "risk": "very low",
+      "assertion": "A11"
+    },
+    {
+      "id": "P3",
+      "file": "core/interception.js",
+      "status": "applied",
+      "summary": "Gate both checkNodeEncoderSanity calls and the byte-compare behind WAdebugMode.",
+      "kind": "performance",
+      "why": "checkNodeEncoderSanity did a full decodeStanza + encodeStanza + isEqualArray on every inbound AND outbound frame, purely as a developer self-check, then isEqualArray ran a second time to decide whether to hit `debugger`. Dev-only work on the hot path.",
+      "risk": "low",
+      "assertion": "A9",
+      "note": "WAdebugMode still exposes the full self-check for anyone debugging."
+    },
+    {
+      "id": "P4",
+      "file": "core/interception.js, core/multi_device.js, core/utils.js, core/ui.js, core/parsing/binary_reader.js, core/parsing/node_reader_writer.js",
+      "status": "applied",
+      "summary": "Remove 15 live `debugger;` statements (13 removed + 1 inline guard rewritten + 1 removed as part of P3).",
+      "kind": "robustness",
+      "why": "A `debugger` statement is free with no debugger attached but SUSPENDS execution when DevTools is open. Electron users will open DevTools. The worst sites were interception.js:74 and :703 (every outbound frame) and hookedPromiseError (every unhandled promise rejection anywhere in WhatsApp, installed by default because WALogs = true).",
+      "risk": "very low",
+      "assertion": "A8",
+      "note": "Applied by scripts/apply-p4-debugger.mjs, which only touches lines that are exactly `debugger;` and leaves `//debugger;` comments alone. Idempotent."
+    },
+    {
+      "id": "P5",
+      "file": "core/interception.js",
+      "status": "applied",
+      "summary": "Hoist `isIncoming` to a declared local in wsHook.before/after instead of assigning it inline at 6 call sites.",
+      "kind": "correctness",
+      "why": "`isIncoming` was never declared anywhere in the file, so every `isIncoming=false` / `isIncoming=true` argument was an implicit global write — on the per-frame path. The values were correct, but the pattern is a landmine and pollutes the global namespace.",
+      "risk": "very low",
+      "assertion": "P5"
+    },
+    {
+      "id": "P6",
+      "file": "core/parsing/protobuf/WAProto.js, core/parsing/protobuf/WhisperTextProtocol.js, core/ui.js, core/ui_class_names.js, background.js",
+      "status": "applied",
+      "summary": "Re-encode the two protobuf files UTF-16 -> UTF-8 (halving them), and strip the UTF-8 BOM from core/ui.js, core/ui_class_names.js and background.js.",
+      "kind": "encoding",
+      "why": "The UTF-16 -> UTF-8 re-encode is pre-existing (commit 10809c8) and roughly halved the two protobuf files, which is why the byte figures in the plan are ~1.3 MB rather than ~2.6 MB for the main bundle. The BOM strip is new: a BOM is legal JS mid-script but is not something to rely on at a concatenation seam, and it breaks JSON.parse ahead of a JSON literal. The build also strips BOMs on read (scripts/build.mjs readSource) and assertion A10 guards both source and output.",
+      "risk": "very low",
+      "assertion": "A10",
+      "note": "background.js still differs from upstream for this reason but is not inside core/ or lib/, so it is not part of the A7 diff."
+    },
+    {
+      "id": "P7",
+      "file": "core/interception.js",
+      "status": "applied",
+      "summary": "Make hookLogs()'s WALogger installation resolve with a bounded retry and a null-safe rebuildTemplate, instead of a single unguarded call 2s after injection.",
+      "kind": "bugfix",
+      "why": "Observed at runtime on every launch: 'Uncaught TypeError: Cannot read properties of null (reading LOG)'. `require(\"WALogger\")` returns null until WhatsApp's webpack bundle registers that module, and upstream ran the install once at a fixed 2s delay with no guard, inside a setTimeout, so the throw was uncaught AND then surfaced through the window.onunhandledrejection hook installed immediately above it.",
+      "extraFix": "P7b: `originalWALoggerDev` was assigned `.LOG` instead of `.DEV`, so hookedWALoggerDev invoked the log function's original with DEV arguments.",
+      "risk": "very low",
+      "assertion": null,
+      "note": "Applied by scripts/apply-p7-walogger.mjs (idempotent, line-range based). The log hook exists to stop WhatsApp's own error reports leaking, so it still installs — it just no longer throws when the module is not ready yet, and it gives up quietly after ~20s rather than throwing on the page.",
+      "upstreamCandidate": true
+    },
+    {
+      "id": "P2",
+      "file": "core/ui.js",
+      "status": "planned",
+      "summary": "Scope the body-level MutationObserver, short-circuit non-element nodes, and gate the one-shot `getElementsByClassName('two')` probe behind a uiReady flag.",
+      "kind": "performance",
+      "why": "ui.js:40 observes document.body with {childList, subtree} and onMutationsObserved calls getElementsByClassName('two') on EVERY added node, which walks that node's whole subtree. Cost is O(mutations x subtree size) and is the dominant steady-state CPU cost — and the dominant cost while the app sits hidden in the tray, because a backgrounded WhatsApp session still churns (other chats' presence, typing indicators, preview updates).",
+      "risk": "medium",
+      "gate": "MUST pass the full feature parity matrix (docs §10) before shipping. This is the only patch that changes WHEN UI work happens, so treat a regression as a release blocker.",
+      "note": "ui.js is already in the patch set via P0b, so this adds no new merge-conflict domain."
+    }
+  ],
+
+  "encoding": {
+    "$comment": "core/parsing/protobuf/{WAProto,WhisperTextProtocol}.js were re-encoded UTF-16 -> UTF-8 by commit 10809c8, which halved them. core/ui.js and background.js still carry a UTF-8 BOM. These are not behavioural patches but they do appear in the diff, so they are declared here rather than left as a surprise."
+  }
+}
