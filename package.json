@@ -11,7 +11,6 @@
     "one:ci": "node scripts/one.mjs --no-app",
     "kill": "node scripts/kill-stale.mjs",
     "doctor": "electron --no-sandbox scripts/doctor.cjs",
-    "selftest": "node scripts/selftest.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:once": "node scripts/dev.mjs --once",
     "build": "node scripts/build.mjs",

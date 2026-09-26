@@ -282,6 +282,6 @@ function createTray(opts) {
   };
 }
 
-module.exports = { createTray, TOGGLES, ICON_CANDIDATES, LABEL };
+module.exports = { createTray };
 
 function warn(...args) { console.warn('[wai:tray]', ...args); }

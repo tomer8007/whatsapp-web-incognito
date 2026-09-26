@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // One-shot debug run: stop stale instances, build, verify, test, launch, and report.
 //
-//   pnpm one            full: kill -> build -> verify -> test -> launch -> verdict
+//   pnpm one            full: kill -> env -> build -> assertions -> tests -> real app
 //   pnpm one --no-test  skip the unit tests
-//   pnpm one --no-app   everything except launching the app (CI-friendly)
+//   pnpm one --no-app   everything except the real-window check (CI-friendly)
 //
 // Why this exists: "it's not working" is not a diagnosis, and the failure modes we have
 // actually hit all look identical from the outside —
@@ -15,7 +15,7 @@
 //
 // So this prints a verdict instead of leaving it to interpretation.
 
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,37 +117,48 @@ if (!SKIP_TEST) {
   run('prefs store + dev bridge + user agent', process.execPath, ['--test', 'app/electron/*.test.js']);
 }
 
-// ---------------------------------------------------------------- 6. WhatsApp reachability
+// ---------------------------------------------------------------- 6. the real thing
+//
+// Order matters here. Two different questions, and a bare probe cannot answer both:
+//
+//   "is WhatsApp reachable at all?"  -> doctor.cjs builds its own minimal window.
+//   "does the REAL app work?"        -> only the real app, with its real injection and
+//                                        real session policy, can answer this.
+//
+// That distinction is not academic. The user agent was rewritten correctly and our own log
+// printed a clean Chrome UA, while the real page still received the stock Electron UA —
+// because the BrowserWindow was constructed before the session UA was applied. The bare
+// probe set the UA before creating its window, so it saw the right UA and reported OK.
+// A probe that does not run the production path cannot catch an ordering bug in the
+// production path.
 if (!SKIP_APP) {
-  step(6, 'what WhatsApp actually returns');
-  const r = spawnSync(join(ROOT, 'node_modules/.bin/electron'),
-    ['--no-sandbox', 'scripts/doctor.cjs'], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
-  const out = `${r.stdout || ''}`;
-  for (const l of out.split('\n')) {
-    if (/GetVSync|gl_surface|nss_util|libva|dbus|Fontconfig|zygote|GPU process|Network service|Gtk:/.test(l)) continue;
-    if (l.trim()) console.log(`  ${l}`);
+  step(6, 'the real app, real window');
+  console.log('  launching with WAI_SELFTEST=1; the app reports what its own window received.\n');
+  const r = spawnSync(join(ROOT, 'node_modules/.bin/electron'), ['.'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    timeout: Number(process.env.WAI_SELFTEST_WAIT || 15000) + 40000,
+    env: { ...process.env, WAI_SELFTEST: '1' },
+  });
+
+  const noise = /GetVSync|gl_surface|nss_util|libva|dbus|Fontconfig|zygote|GPU process|Network service|Gtk:/;
+  for (const l of (r.stdout || '').split('\n')) {
+    if (l.trim() && !noise.test(l)) console.log(`  ${l}`);
   }
-  if (/GATED/.test(out)) { bad('WhatsApp is refusing this client'); failures++; }
-  else if (/OK —|OK -/.test(out)) ok('WhatsApp serves the app');
-  else warn('could not classify the response; read the output above');
+
+  if (r.status === 0) ok('WhatsApp served the app to the real window');
+  else if (r.status === 1) { bad('GATED — WhatsApp is refusing this client. Read the text dump above.'); failures++; }
+  else { bad(`nothing rendered (exit ${r.status}). Read the text dump above.`); failures++; }
 }
 
-// ---------------------------------------------------------------- 7. launch
-if (!SKIP_APP) {
-  step(7, 'launch');
-  console.log('  starting the app. Watch for: "WebSocket hook armed" and "status PROTECTED".');
-  console.log('  Quit it from the tray, not the X button, or the next run hits the single-instance lock.\n');
-  const app = spawn(join(ROOT, 'node_modules/.bin/electron'), ['.'], { cwd: ROOT, stdio: 'inherit' });
-  app.on('exit', (code) => {
-    console.log(`\n${BOLD}== verdict ==${OFF}`);
-    console.log(failures === 0
-      ? `  ${GREEN}all preflight checks passed${OFF}`
-      : `  ${RED}${failures} check(s) failed${OFF} — see above`);
-    console.log(`  app exited with code ${code}`);
-    process.exit(failures === 0 ? 0 : 1);
-  });
-} else {
-  console.log(`\n${BOLD}== verdict ==${OFF}`);
-  console.log(failures === 0 ? `  ${GREEN}all checks passed${OFF}` : `  ${RED}${failures} check(s) failed${OFF}`);
-  process.exit(failures === 0 ? 0 : 1);
+// ---------------------------------------------------------------- 7. verdict
+console.log(`\n${BOLD}== verdict ==${OFF}`);
+if (failures === 0) {
+  console.log(`  ${GREEN}everything passed${OFF}`);
+  console.log(`\n  Launch it with:  ${BOLD}pnpm start${OFF}`);
+  console.log(`  Quit from the tray, NOT the X button — closing the window leaves a hidden`);
+  console.log(`  process holding the single-instance lock, and the next launch will just focus it.\n`);
+  process.exit(0);
 }
+console.log(`  ${RED}${failures} check(s) failed${OFF} — see above\n`);
+process.exit(1);

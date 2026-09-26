@@ -72,7 +72,7 @@
       "why": "A `debugger` statement is free with no debugger attached but SUSPENDS execution when DevTools is open. Electron users will open DevTools. The worst sites were interception.js:74 and :703 (every outbound frame) and hookedPromiseError (every unhandled promise rejection anywhere in WhatsApp, installed by default because WALogs = true).",
       "risk": "very low",
       "assertion": "A8",
-      "note": "Applied by scripts/apply-p4-debugger.mjs, which only touches lines that are exactly `debugger;` and leaves `//debugger;` comments alone. Idempotent."
+      "note": "Applied as a one-time source transformation in commit d31818b; the script that performed it has been removed, since git history is the record. It only ever touched lines that are exactly `debugger;`, leaving `//debugger;` comments intact. A8 now guards this continuously, so there is no way for it to regress unnoticed."
     },
     {
       "id": "P5",
@@ -105,7 +105,7 @@
       "extraFix": "P7b: `originalWALoggerDev` was assigned `.LOG` instead of `.DEV`, so hookedWALoggerDev invoked the log function's original with DEV arguments.",
       "risk": "very low",
       "assertion": null,
-      "note": "Applied by scripts/apply-p7-walogger.mjs (idempotent, line-range based). The log hook exists to stop WhatsApp's own error reports leaking, so it still installs — it just no longer throws when the module is not ready yet, and it gives up quietly after ~20s rather than throwing on the page.",
+      "note": "Applied as a one-time source transformation in commit d31818b; the script that performed it has been removed, since git history is the record. The log hook exists to stop WhatsApp's own error reports leaking, so it still installs — it just no longer throws when the module is not ready yet, and it gives up quietly after ~20s rather than throwing on the page.",
       "upstreamCandidate": true
     },
     {

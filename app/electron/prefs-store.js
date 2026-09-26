@@ -157,4 +157,4 @@ function stripBOM(s) {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
 }
 
-module.exports = { PrefsStore, coerce, FILE_VERSION };
+module.exports = { PrefsStore, coerce };

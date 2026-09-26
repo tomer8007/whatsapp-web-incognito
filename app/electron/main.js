@@ -706,12 +706,9 @@ function installIpc() {
     prefs: state.prefs.get(), applied: [], rejected: ['internal-error'],
   })());
 
-  ipcMain.handle('wai:reset-prefs', () => guard('wai:reset-prefs', () => {
-    const prefs = state.prefs.reset();
-    sendPrefs(prefs);
-    if (state.tray) state.tray.update();
-    return { prefs };
-  }, { prefs: state.prefs.get() })());
+  // Note: there is deliberately no `wai:reset-prefs` handler. The tray resets prefs
+  // through a direct function reference, so an IPC route for it had zero callers — an
+  // unused privileged channel is worse than no channel.
 
   // Force the injection sequence again. The preload re-runs only the steps that have
   // not already succeeded in THIS document: re-evaluating ws_hook.js over a live page

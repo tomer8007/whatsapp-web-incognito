@@ -1,0 +1,559 @@
+# Release pipeline for WAIncognito.
+#
+#   push tag `v*`      -> release exactly that version, no further questions asked
+#   workflow_dispatch  -> full manual control (version override, targets, draft, ...)
+#
+# The two entry points converge on a single `resolve` job that produces one set of
+# job outputs, so every downstream job reads identical values. Nothing downstream
+# re-derives a version from a second source; that is how "the zip says 2.5.7 but the
+# AppImage says 2.5.6" happens.
+#
+# Gate order is deliberate: resolve (validate) -> verify (build+assert+test) ->
+# build (per-platform) -> publish. A release is only ever created from artefacts that
+# passed the same gate CI runs on a PR.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 2.5.7 (blank = use manifest.json)'
+        required: false
+        type: string
+      tag:
+        description: 'Tag for the release (blank = v<version>)'
+        required: false
+        type: string
+      targets:
+        description: 'Which artefacts to build'
+        required: false
+        default: all
+        type: choice
+        options: [all, extension, electron]
+      bump_manifest:
+        description: 'Rewrite manifest.json + package.json to <version> and commit to master'
+        required: false
+        default: false
+        type: boolean
+      create_tag:
+        description: 'Create and push the tag if it does not exist yet'
+        required: false
+        default: true
+        type: boolean
+      draft:
+        description: 'Publish as a draft release'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: 'Mark the release as a prerelease'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Build and verify everything, but do not publish a release'
+        required: false
+        default: true
+        type: boolean
+      force:
+        description: 'Skip the tag/version consistency check'
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: 'Release notes (blank = auto-generated from commits)'
+        required: false
+        type: string
+
+# One release per tag. A second run against the same tag is a mistake, not a
+# parallel job, so queue it instead of racing the first one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Single source of truth for version / tag / flags. Also the only place that
+  # writes back to the repository (the manifest bump).
+  # ---------------------------------------------------------------------------
+  resolve:
+    name: resolve
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      targets: ${{ steps.plan.outputs.targets }}
+      draft: ${{ steps.plan.outputs.draft }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
+      notes: ${{ steps.plan.outputs.notes }}
+      from_tag: ${{ steps.plan.outputs.from_tag }}
+      bump: ${{ steps.plan.outputs.bump }}
+      create_tag: ${{ steps.plan.outputs.create_tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the tag comparison below can resolve an existing tag.
+          # `ref` is left at its default on purpose: checkout already handles both
+          # cases (the tag for a push, the selected branch for a dispatch), and
+          # overriding it risks disagreeing with github.sha for annotated tags.
+          fetch-depth: 0
+
+      - name: Resolve version, tag and flags
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          IN_VERSION: ${{ inputs.version }}
+          IN_TAG: ${{ inputs.tag }}
+          IN_TARGETS: ${{ inputs.targets }}
+          IN_BUMP: ${{ inputs.bump_manifest }}
+          IN_CREATE_TAG: ${{ inputs.create_tag }}
+          IN_DRAFT: ${{ inputs.draft }}
+          IN_PRERELEASE: ${{ inputs.prerelease }}
+          IN_DRY_RUN: ${{ inputs.dry_run }}
+          IN_FORCE: ${{ inputs.force }}
+          IN_NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+
+          is_true() { case "${1,,}" in true|1|yes|on) return 0 ;; *) return 1 ;; esac; }
+          say() { echo "::notice::$*"; }
+
+          # Accept "v2.5.7", " 2.5.7 " and "2.5.7" alike. Applied to the version only:
+          # a tag is never rewritten, because on a tag push it is a git object that
+          # already exists and the release has to reference it verbatim.
+          denoise() { printf '%s' "$1" | tr -d '[:space:]'; }
+          strip_v() { local v; v="$(denoise "$1")"; printf '%s' "${v#v}"; }
+
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          FROM_TAG=false
+          if [ "$EVENT_NAME" = "push" ]; then
+            FROM_TAG=true
+            TAG="$REF_NAME"
+            VERSION="$(strip_v "$REF_NAME")"
+            if [ -n "$IN_VERSION" ]; then
+              echo "::error::the 'version' input is ignored for tag pushes - the tag already names a version. Use workflow_dispatch to override."
+              exit 1
+            fi
+            DRY_RUN=false
+            BUMP=false
+            CREATE_TAG=false
+            DRAFT=false
+            PRERELEASE=false
+            TARGETS=all
+            FORCE=false
+          else
+            # Normalise the version BEFORE deriving the tag, or "v2.5.7" yields "vv2.5.7".
+            VERSION="$(strip_v "${IN_VERSION:-$MANIFEST_VERSION}")"
+            TAG="$(denoise "$IN_TAG")"
+            [ -n "$TAG" ] || TAG="v$VERSION"
+            TARGETS="${IN_TARGETS:-all}"
+            BUMP=$(is_true "$IN_BUMP" && echo true || echo false)
+            CREATE_TAG=$(is_true "$IN_CREATE_TAG" && echo true || echo false)
+            DRAFT=$(is_true "$IN_DRAFT" && echo true || echo false)
+            PRERELEASE=$(is_true "$IN_PRERELEASE" && echo true || echo false)
+            DRY_RUN=$(is_true "$IN_DRY_RUN" && echo true || echo false)
+            FORCE=$(is_true "$IN_FORCE" && echo true || echo false)
+          fi
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a valid semver version."
+            exit 1
+          fi
+
+          if [ "$MANIFEST_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::version skew in the repo: manifest.json=$MANIFEST_VERSION package.json=$PKG_VERSION. Fix the skew before releasing."
+            exit 1
+          fi
+
+          if [ "$VERSION" != "$MANIFEST_VERSION" ] && [ "$FORCE" != true ] && [ "$BUMP" != true ]; then
+            echo "::error::requested version $VERSION != manifest.json $MANIFEST_VERSION."
+            echo "::error::Either set bump_manifest=true (updates manifest.json + package.json), or force=true to release $VERSION as-is."
+            exit 1
+          fi
+
+          say "version=$VERSION tag=$TAG targets=$TARGETS dry_run=$DRY_RUN draft=$DRAFT prerelease=$PRERELEASE"
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "targets=$TARGETS"
+            echo "dry_run=$DRY_RUN"
+            echo "draft=$DRAFT"
+            echo "prerelease=$PRERELEASE"
+            echo "from_tag=$FROM_TAG"
+            echo "bump=$BUMP"
+            echo "create_tag=$CREATE_TAG"
+            echo "notes=${IN_NOTES:-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Bump version in manifest.json and package.json
+        # Only meaningful on a manual run, and only safe from master: the commit goes
+        # back to the branch that the release is cutting from.
+        if: needs.resolve.outputs.bump == 'true' && needs.resolve.outputs.dry_run == 'false'
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ "$VERSION" = "$(node -p "require('./manifest.json').version")" ]; then
+            echo "manifest.json is already at $VERSION; nothing to bump"
+            exit 0
+          fi
+
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::bump_manifest only runs from master (this run is on $GITHUB_REF_NAME). Merge to master first, or release without bumping."
+            exit 1
+          fi
+
+          # Surgical replacement, not a re-serialisation. JSON.stringify(j, null, 2)
+          # reflows every line of these hand-formatted files, which would bury a
+          # one-line version change in a whole-file rewrite.
+          node -e '
+            const fs = require("fs");
+            const v = process.env.VERSION;
+            for (const f of ["manifest.json", "package.json"]) {
+              const raw = fs.readFileSync(f, "utf8");
+              // Anchored to the start of a line and a quoted value, so a nested
+              // "version" key elsewhere in the file cannot be matched by mistake.
+              const re = /^([ \t]*)"version"[ \t]*:[ \t]*"[^"]*"/m;
+              const m = re.exec(raw);
+              if (!m) throw new Error(`${f}: no "version" field found`);
+              // The indent comes from the match, not a "$1" backreference: the
+              // replacer is a function, where $1 would be a literal dollar-one.
+              const indent = m[1];
+              const next = raw.replace(re, () => `${indent}"version": ${JSON.stringify(v)}`);
+              // Proves the *top-level* version is the one that moved.
+              if (JSON.parse(next).version !== v) {
+                throw new Error(`${f}: version did not change to ${v}`);
+              }
+              fs.writeFileSync(f, next);
+            }
+          '
+
+          # Exactly one changed line per file, or the bump touched something it had
+          # no business touching.
+          CHANGED=$(git diff --numstat -- manifest.json package.json | awk '{a+=$1; d+=$2; n++} END {print (n || 0) ":" (a || 0) ":" (d || 0)}')
+          NFILES=$(echo "$CHANGED" | cut -d: -f1)
+          ADDED=$(echo "$CHANGED" | cut -d: -f2)
+          REMOVED=$(echo "$CHANGED" | cut -d: -f3)
+          if [ "$NFILES" -ne 2 ] || [ "$ADDED" -ne 2 ] || [ "$REMOVED" -ne 2 ]; then
+            echo "::error::expected a 1-line version swap in each of manifest.json and package.json, got files=$NFILES +$ADDED -$REMOVED"
+            git diff
+            exit 1
+          fi
+          git diff --stat
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add manifest.json package.json
+          git commit -m "chore: release v$VERSION" -m "[skip ci]"
+          git push origin "HEAD:$GITHUB_REF"
+          echo "::notice::committed the bump to $GITHUB_REF_NAME and pushed it"
+
+      - name: Ensure the tag exists
+        if: needs.resolve.outputs.create_tag == 'true' && needs.resolve.outputs.dry_run == 'false'
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          git fetch --tags --force --quiet
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            # Compare against HEAD, which after a bump is the bump commit. $GITHUB_SHA
+            # is ambiguous for annotated tags, so it is not trusted here.
+            EXISTING=$(git rev-list -n1 "$TAG")
+            HEAD_SHA=$(git rev-parse HEAD)
+            if [ "$EXISTING" != "$HEAD_SHA" ]; then
+              echo "::error::tag $TAG already points at $EXISTING, not this commit ($HEAD_SHA). Delete it first, or pick another tag."
+              exit 1
+            fi
+            echo "tag $TAG already exists at this commit; reusing it"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$TAG" -m "WAIncognito $TAG"
+          git push origin "refs/tags/$TAG"
+          echo "created and pushed $TAG"
+
+  # ---------------------------------------------------------------------------
+  # The CI gate, repeated. A tag is not a licence to skip verification.
+  # ---------------------------------------------------------------------------
+  verify:
+    name: verify
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all targets
+        run: pnpm run build
+
+      - name: Verify bundles
+        run: pnpm run verify
+
+      - name: Unit tests
+        run: pnpm test
+
+  # ---------------------------------------------------------------------------
+  # Extension zips. We zip the build output (dist/extension/<browser>), which
+  # build.mjs already derived from manifest.json, rather than the repo root. The old
+  # `mv !(release|.github)` approach shipped app/, scripts/ and docs/ to users; zipping
+  # a build target cannot leak anything, and cannot drift from what verify-bundles
+  # checked.
+  # ---------------------------------------------------------------------------
+  build-extension:
+    name: build extension (${{ matrix.browser }})
+    needs: [resolve, verify]
+    if: needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'extension'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build extension
+        run: node scripts/build.mjs --target="${{ matrix.browser }}"
+
+      - name: Package zip
+        env:
+          BROWSER: ${{ matrix.browser }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          SRC="dist/extension/$BROWSER"
+          if [ ! -f "$SRC/manifest.json" ]; then
+            echo "::error::$SRC/manifest.json is missing; the build produced no loadable extension."
+            exit 1
+          fi
+
+          OUT="artifacts/WAIncognito-$VERSION-$BROWSER.zip"
+          mkdir -p artifacts
+
+          # Reproducible bytes: zip embeds file mtimes, so normalise them to the commit
+          # date and pin the timezone. Without this, rebuilding the same commit produces
+          # a different checksum and "did the artefact change?" is unanswerable.
+          EPOCH="$(git log -1 --format=%ct)"
+          find "$SRC" -exec touch -d "@$EPOCH" {} +
+
+          # Sorted input plus a pinned mtime means the same commit always produces a
+          # byte-identical zip.
+          ( cd "$SRC" \
+            && find . -type f -print0 \
+               | LC_ALL=C sort -z \
+               | TZ=UTC xargs -0 zip -X -9 -q "$GITHUB_WORKSPACE/$OUT" )
+
+          echo "packed $(unzip -l "$OUT" | tail -1 | awk '{print $2}') files into $OUT"
+          sha256sum "$OUT"
+          ls -l "$OUT"
+
+      - name: Upload extension zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-${{ matrix.browser }}
+          path: artifacts/*.zip
+          retention-days: 14
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Desktop installers, one runner per platform/arch.
+  # ---------------------------------------------------------------------------
+  build-electron:
+    name: build electron (${{ matrix.name }})
+    needs: [resolve, verify]
+    if: needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'electron'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x64,   os: ubuntu-latest, args: --linux --x64 }
+          - { name: windows-x64, os: windows-latest, args: --win   --x64 }
+          - { name: macos-x64,   os: macos-13,      args: --mac   --x64 }
+          - { name: macos-arm64, os: macos-14,      args: --mac   --arm64 }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Restore electron-builder cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }},${{ env.ELECTRON_BUILDER_CACHE }}
+          key: eb-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: eb-${{ runner.os }}-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build electron target
+        run: pnpm run build:electron
+
+      - name: Package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        # --publish never: electron-builder must never try to reach a release
+        # provider. This job uploads artefacts; the publish job owns the release.
+        run: pnpm exec electron-builder ${{ matrix.args }} --publish never
+
+      - name: Collect installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "artifacts/${{ matrix.name }}"
+          # Dedupe into a per-platform directory so four runners can hand their
+          # artefacts to one publish job without filename collisions.
+          find release -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.zip' \
+               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.blockmap' -o -name '*.yml' \) \
+            -exec cp {} "artifacts/${{ matrix.name }}/" \;
+          ls -l "artifacts/${{ matrix.name }}"
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.name }}
+          path: artifacts/**
+          retention-days: 14
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Publish. The explicit result check is required: a skipped build job (because
+  # targets=extension) would otherwise skip the whole publish chain.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: publish
+    needs: [resolve, verify, build-extension, build-electron]
+    if: >-
+      always()
+      && needs.resolve.result == 'success'
+      && needs.verify.result == 'success'
+      && (needs.build-extension.result == 'success' || needs.build-extension.result == 'skipped')
+      && (needs.build-electron.result == 'success' || needs.build-electron.result == 'skipped')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artefacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: |
+            extension-*
+            electron-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artefacts
+        run: |
+          set -euo pipefail
+          find artifacts -type f -printf '%10s  %p\n' | sort -k2
+          COUNT=$(find artifacts -type f | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::no artefacts were produced; refusing to publish an empty release."
+            exit 1
+          fi
+
+      - name: Dry run summary
+        if: needs.resolve.outputs.dry_run == 'true'
+        run: |
+          {
+            echo "### Dry run - nothing was published"
+            echo ""
+            echo "Would release \`${{ needs.resolve.outputs.tag }}\` with:"
+            echo ""
+            find artifacts -type f -printf -- '- `%p` (%s bytes)\n' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "dry_run=true: artefacts verified and uploaded, release not created"
+
+      - name: Create release (generated notes)
+        if: needs.resolve.outputs.dry_run == 'false' && needs.resolve.outputs.notes == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: WAIncognito ${{ needs.resolve.outputs.tag }}
+          draft: ${{ needs.resolve.outputs.draft }}
+          prerelease: ${{ needs.resolve.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.msi
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.blockmap
+          fail_on_unmatched_files: false
+
+      - name: Create release (custom notes)
+        if: needs.resolve.outputs.dry_run == 'false' && needs.resolve.outputs.notes != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: WAIncognito ${{ needs.resolve.outputs.tag }}
+          body: ${{ needs.resolve.outputs.notes }}
+          draft: ${{ needs.resolve.outputs.draft }}
+          prerelease: ${{ needs.resolve.outputs.prerelease }}
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.msi
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb
+            artifacts/**/*.blockmap
+          fail_on_unmatched_files: false
+
+      - name: Release summary
+        if: always() && needs.resolve.outputs.dry_run == 'false'
+        run: |
+          {
+            echo "### Release \`${{ needs.resolve.outputs.tag }}\`"
+            echo ""
+            echo "- draft: \`${{ needs.resolve.outputs.draft }}\`"
+            echo "- prerelease: \`${{ needs.resolve.outputs.prerelease }}\`"
+            echo "- triggered by: \`${{ github.event_name }}\`"
+            echo ""
+            find artifacts -type f -printf -- '- `%p`\n' | sort
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -137,4 +137,4 @@ function normalizeChange(body) {
   return null;
 }
 
-module.exports = { DevBridge, classifyChange, normalizeChange, POLL_PATH };
+module.exports = { DevBridge, classifyChange, normalizeChange };
