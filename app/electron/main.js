@@ -46,6 +46,12 @@ const BUILD_ARTIFACTS = Object.freeze([
 
 const APP_ID = 'com.wa-incognito.app';   // keep in sync with package.json build.appId
 
+// C5: the session partition. Declared once because TWO places need it and they must not
+// drift — `session.fromPartition(PARTITION)` to configure the UA before the window exists,
+// and `webPreferences.partition` to attach the window to it. Getting these out of sync
+// means configuring a session the window does not use, which fails silently.
+const PARTITION = 'persist:wai';
+
 // ---------------------------------------------------------------- request blocking (§8.5)
 // A browser tab registers a service worker, opens a push channel and fires
 // analytics/crash beacons. A single-user desktop client needs none of them. This is a
@@ -271,6 +277,8 @@ const state = {
   watchdog: null,
   /** Dev only: the hot-reload poller from app/electron/dev-bridge.js. Null unless --dev. */
   devBridge: null,
+  /** The rewritten Chrome UA, kept so createWindow can also apply it per-webContents. */
+  userAgent: null,
   quitting: false,
   /** How many times the preload has reported a completed injection (wai:page-state). */
   injections: 0,
@@ -336,7 +344,7 @@ function createWindow(prefs) {
 
       // C5 — the whole reason users stay logged in across restarts. Asserted by smoke
       // tests, never "temporarily" removed to work around a reload bug.
-      partition: 'persist:wai',
+      partition: PARTITION,
 
       // §9.2 — WhatsApp's keepalive and reconnect backoff are timer driven. Chromium
       // throttles timers in hidden windows, so throttling churns the socket and opens
@@ -357,9 +365,15 @@ function createWindow(prefs) {
   });
 
   state.win = win;
-  // The user agent must be set BEFORE the page starts loading, so this comes first.
-  installUserAgent(win.webContents.session);
-  installSessionGuards(win.webContents.session);
+
+  // Belt and braces: the session UA is applied before the window is constructed (see
+  // app.whenReady), but a per-webContents override guarantees the renderer cannot have
+  // captured the stock UA regardless of construction order. Must be before loadURL.
+  if (state.userAgent) {
+    try { win.webContents.setUserAgent(state.userAgent); }
+    catch (e) { warn(`per-webContents user agent failed: ${(e && e.message) || e}`); }
+  }
+
   installNavigationLock(win);
   forwardFrameEvents(win);
 
@@ -383,7 +397,61 @@ function createWindow(prefs) {
     warn(`could not load ${url}: check the network, then open the window again.`);
   });
 
+  if (process.env.WAI_SELFTEST) runSelfTest(win);
+
   return win;
+}
+
+/**
+ * In-app self test. Prints what the REAL window got and exits.
+ *
+ *   WAI_SELFTEST=1 electron .        (or: pnpm selftest)
+ *
+ * This exists because a standalone probe proved insufficient. A probe creates its own
+ * window with its own webPreferences and none of the production session policy, so it can
+ * report "WhatsApp loaded fine" while the real app — which injects into the page AND
+ * applies request filtering — shows a gate. Only a check that runs the actual production
+ * path can distinguish "WhatsApp serves us" from "WhatsApp serves us, and then we broke
+ * it ourselves".
+ *
+ * Exit code: 0 healthy, 1 gated/blank, 2 nothing rendered.
+ */
+function runSelfTest(win) {
+  const wait = Number(process.env.WAI_SELFTEST_WAIT || 15000);
+  setTimeout(async () => {
+    const q = (code) => win.webContents.executeJavaScript(code)
+      .catch((e) => `<threw: ${(e && e.message) || e}>`);
+
+    const ua = await q('navigator.userAgent');
+    const title = await q('document.title');
+    const href = await q('location.href');
+    const text = String(await q('((document.body && document.body.innerText) || "").trim()'));
+    const scripts = await q('document.scripts.length');
+    const hook = await q('typeof window.wsHook === "object" && typeof window.wsHook.before === "function"');
+    const wai = await q('typeof window.__WAI__');
+    const globals = await q('[typeof pako, typeof Pbf, typeof Tether, typeof Drop, typeof swal].join(",")');
+    const banner = await q('(function(){var b=document.getElementById("wai-failure-banner");return b&&b.style.display!=="none"?b.textContent.slice(0,200):""})()');
+
+    console.log('\n===== SELF TEST (real window) =====');
+    console.log(`  url            ${href}`);
+    console.log(`  title          ${JSON.stringify(title)}`);
+    console.log(`  page sees UA   ${ua}`);
+    console.log(`  scripts        ${scripts}`);
+    console.log(`  wsHook.before  ${hook}`);
+    console.log(`  window.__WAI__ ${wai}`);
+    console.log(`  pako,Pbf,Tether,Drop,swal = ${globals}`);
+    console.log(`  text length    ${text.length}`);
+    if (banner) console.log(`  FAILURE BANNER ${banner}`);
+    console.log('  ---- visible text ----');
+    console.log(text.slice(0, 400).split('\n').map((l) => `  | ${l}`).join('\n') || '  | (empty)');
+    console.log('=====\n');
+
+    let code = 0;
+    if (/log in|phone number|verify your phone|scan to log in|qr code/i.test(text)) code = 0;
+    else if (/chrome|update your browser|not supported|supported browser|too old/i.test(text)) code = 1;
+    else if (text.length < 40) code = 2;
+    app.exit(code);
+  }, wait);
 }
 
 // ---------------------------------------------------------------- session policy
@@ -441,6 +509,7 @@ function installUserAgent(ses) {
     const override = process.env.WAI_USER_AGENT;
     if (override && override.trim()) {
       ses.setUserAgent(override.trim());
+      state.userAgent = override.trim();
       log(`user agent overridden from WAI_USER_AGENT`);
       return;
     }
@@ -463,6 +532,7 @@ function installUserAgent(ses) {
     }
 
     ses.setUserAgent(clean);
+    state.userAgent = clean;
     log(`user agent: ${clean}`);
   })();
 }
@@ -901,6 +971,22 @@ function boot() {
 
     installMenu();
     installIpc();
+
+    // C6/C5: the session must be configured BEFORE the BrowserWindow exists.
+    //
+    // Ordering bug, found by the in-app self test (WAI_SELFTEST=1): the user agent was
+    // being set after `new BrowserWindow(...)`, and the renderer had already captured the
+    // stock Electron UA. So our log cheerfully printed a clean Chrome UA while the page
+    // received
+    //   ...WAIncognito/2.5.6 Chrome/152... Electron/44.4.5 Safari/537.36
+    // and WhatsApp served its browser-gate page. A standalone probe missed this entirely
+    // because it happened to set the UA before creating its window.
+    //
+    // So: resolve the partition session first, apply the UA, and only then build the window.
+    const appSession = require('electron').session.fromPartition(PARTITION);
+    installUserAgent(appSession);
+    installSessionGuards(appSession);
+
     startTray();
 
     const win = createWindow(state.prefs.get());
