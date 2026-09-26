@@ -8,7 +8,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { buildChromeUserAgent, validate } = require('./user-agent.js');
+const { buildChromeUserAgent, validate, assessEngine, MIN_CHROMIUM_MAJOR } = require('./user-agent.js');
 
 // Electron's real stock format, per platform. Note the `Chrome/130.0.0.0` placeholder:
 // Electron deliberately reports 0.0.0.0 there rather than the true Chromium build.
@@ -105,5 +105,37 @@ test('the result is accepted by the same validator used in production', () => {
   const v = { appName: 'WAIncognito', electronVersion: '33.4.11', chromeVersion: '130.0.6723.191' };
   for (const input of [LINUX_ELECTRON_UA, MAC_ELECTRON_UA, WINDOWS_ELECTRON_UA]) {
     assert.ok(validate(buildChromeUserAgent(input, V), v), `rejected: ${buildChromeUserAgent(input, V)}`);
+  }
+});
+
+// ---------------------------------------------------------------- engine age
+
+test('the Chromium that broke WhatsApp loading is rejected', () => {
+  // Electron 33 -> Chromium 130. This is the exact engine that produced a browser-upgrade
+  // page with nothing in our logs, so it must be caught at boot.
+  const r = assessEngine('130.0.6723.191');
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.major, 130);
+  assert.match(r.reason, /Upgrade Electron/);
+  assert.match(r.reason, /do NOT raise this number/);
+});
+
+test('the current engine passes', () => {
+  const r = assessEngine('152.0.7977.130');
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.reason, null);
+  assert.strictEqual(r.major, 152);
+});
+
+test('the boundary is inclusive at the floor', () => {
+  assert.strictEqual(assessEngine(`${MIN_CHROMIUM_MAJOR}.0.0.0`, MIN_CHROMIUM_MAJOR).ok, true);
+  assert.strictEqual(assessEngine(`${MIN_CHROMIUM_MAJOR - 1}.0.0.0`, MIN_CHROMIUM_MAJOR).ok, false);
+});
+
+test('an unreadable engine version is a failure, not a pass', () => {
+  for (const bad of ['', undefined, null, 'not-a-version']) {
+    const r = assessEngine(bad);
+    assert.strictEqual(r.ok, false, `${JSON.stringify(bad)} should fail`);
+    assert.match(r.reason, /could not read/);
   }
 });

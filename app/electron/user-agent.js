@@ -97,4 +97,52 @@ function validate(ua, { appName, electronVersion, chromeVersion }) {
   return true;
 }
 
-module.exports = { buildChromeUserAgent, removeToken, validate, esc };
+/**
+ * The embedded Chromium must be recent enough for WhatsApp Web to load at all.
+ *
+ * Learned the hard way: Electron 33 embeds Chromium 130 (Oct 2024). With the UA fixed to
+ * be honest, WhatsApp stopped complaining about the Electron token and instead refused to
+ * load the app at all — the symptom was a page telling the user to update their browser,
+ * with nothing in our own logs. The cause was simply that the engine was two years stale.
+ *
+ * So this is a startup check, not a comment. It turns "WhatsApp shows a browser-upgrade
+ * page and I have no idea why" into one explicit line naming the actual problem, and it
+ * fails LOUDLY at boot rather than silently at the first message.
+ *
+ * 140 is a floor, not a target. WhatsApp's minimum moves with Chrome's release cadence, so
+ * the correct response to this warning is to upgrade Electron, not to raise the number.
+ */
+const MIN_CHROMIUM_MAJOR = 140;
+
+/**
+ * @param {string} chromeVersion  process.versions.chrome
+ * @param {number} [minMajor]
+ * @returns {{ok: boolean, major: number, minMajor: number, reason: string|null}}
+ */
+function assessEngine(chromeVersion, minMajor = MIN_CHROMIUM_MAJOR) {
+  const raw = String(chromeVersion || '');
+  const major = parseInt(raw.split('.')[0], 10);
+  if (!Number.isFinite(major)) {
+    return {
+      ok: false, major: 0, minMajor,
+      reason: `could not read the embedded Chromium version from ${JSON.stringify(raw)}`,
+    };
+  }
+  if (major < minMajor) {
+    return {
+      ok: false, major, minMajor,
+      reason: `embedded Chromium ${major} is older than the required ${minMajor}. ` +
+              `WhatsApp Web will refuse to load and show a browser-upgrade page. ` +
+              `Upgrade Electron (\`pnpm add -D electron@latest\`) — do NOT raise this ` +
+              `number or lie about the user agent, because a UA that claims a newer ` +
+              `engine than actually runs invites feature detection that then disagrees ` +
+              `with reality.`,
+    };
+  }
+  return { ok: true, major, minMajor, reason: null };
+}
+
+module.exports = {
+  buildChromeUserAgent, removeToken, validate, esc,
+  assessEngine, MIN_CHROMIUM_MAJOR,
+};

@@ -426,6 +426,17 @@ function forwardFrameEvents(win) {
  * Applied per session, so the page, workers and requests all agree.
  */
 function installUserAgent(ses) {
+  // Engine-age gate, checked BEFORE anything else. Learned the hard way: with Electron 33
+  // (Chromium 130) WhatsApp refused to load and served a browser-upgrade page, with
+  // nothing in our own logs to explain it. One explicit line here beats that silence.
+  const { assessEngine, buildChromeUserAgent } = require('./user-agent.js');
+  const engine = assessEngine(process.versions.chrome);
+  if (engine.ok) {
+    log(`engine ok — Chromium ${engine.major} (floor ${engine.minMajor}), Electron ${process.versions.electron}`);
+  } else {
+    error(`UNSUPPORTED ENGINE: ${engine.reason}`);
+  }
+
   guard('user agent', () => {
     const override = process.env.WAI_USER_AGENT;
     if (override && override.trim()) {
@@ -434,7 +445,6 @@ function installUserAgent(ses) {
       return;
     }
 
-    const { buildChromeUserAgent } = require('./user-agent.js');
     const stock = typeof ses.getUserAgent === 'function' ? ses.getUserAgent() : null;
     const clean = buildChromeUserAgent(stock, {
       appName: app.getName(),
