@@ -11,6 +11,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import vm from 'node:vm';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
@@ -296,6 +297,117 @@ check('A6b', 'every chrome.runtime.getURL call site resolves to a real asset', (
   const unknown = calls.filter((c) => !existsSync(join(ROOT, c)) && !(assets && assets[c]));
   if (unknown.length) return `unresolvable getURL targets: ${unknown.join(', ')}`;
   return true;
+});
+
+// A-umd — the silent one. A UMD bundle that takes the AMD branch publishes nothing, and
+// core/ then calls `pako.inflate(...)` / `new Drop(...)` as bare globals. Nothing throws
+// at load time; the global is simply missing until the first message, at which point
+// wsHook.before throws, the catch passes the frame through UNBLOCKED, and the watchdog
+// still reports PROTECTED because the hook did arm.
+//
+// Each UMD vendor file is evaluated STANDALONE, wrapped exactly as the build wraps it, in
+// a context carrying a global AMD `define` — which is what WhatsApp's webpack bundle
+// installs in the app's single world. Deliberately not the whole emitted bundle: that
+// pulls in libsignal, which needs WhatsApp's own dcodeIO/protobuf environment and would
+// make this assertion fail for reasons that have nothing to do with what it checks.
+check('A-umd', 'UMD vendor files publish their globals even when the page has an AMD define', () => {
+  // `Pbf` is capital-P: pbf.js publishes `window.Pbf`, and that is what core/ actually
+  // constructs (`new Pbf(...)`, 7 sites in multi_device.js). The generated protobuf files
+  // also contain ~6800 references to a lowercase `pbf`, but only inside their `_decode`
+  // helpers, which multi_device.js never reaches — it calls `Message.read(new Pbf(...))`.
+  // So the lowercase name is latent upstream code, not a load-time requirement.
+  const CASES = [
+    { bundle: 'main-rest.js', file: 'lib/pako.js', expect: ['pako'] },
+    { bundle: 'main-rest.js', file: 'lib/pbf.3.0.5.min.js', expect: ['Pbf'] },
+    { bundle: 'ui.js', file: 'lib/drop.js', expect: ['Tether', 'Drop'] },
+    { bundle: 'ui.js', file: 'lib/sweetalert.min.js', expect: ['swal'] },
+  ];
+  const GUARD_HEAD = 'var define=void 0, exports=void 0, module=void 0;';
+
+  // Slice the ACTUAL emitted chunk for one source file out of the built bundle, so this
+  // tests the artifact rather than re-applying the guard here. Re-wrapping inside the
+  // test would pass even if the build stopped wrapping, which is the regression that
+  // matters.
+  function chunkOf(bundleFile, sourceFile) {
+    const src = readSrc(join(EBUILD, bundleFile));
+    const marker = `/* ---- ${sourceFile} ---- */`;
+    const start = src.indexOf(marker);
+    if (start === -1) return null;
+    const from = start + marker.length;
+    const nextMarker = src.indexOf('/* ---- ', from);
+    // Trailing `\n;\n` is the banner's own separator, not part of the file.
+    return src.slice(from, nextMarker === -1 ? undefined : nextMarker).replace(/\s*;\s*$/, '');
+  }
+
+  const el = () => ({
+    style: {}, setAttribute() {}, appendChild() {}, addEventListener() {}, removeEventListener() {},
+    getElementsByTagName: () => [], getElementsByClassName: () => [],
+    querySelector: () => null, querySelectorAll: () => [],
+    classList: { add() {}, remove() {}, contains: () => false },
+  });
+
+  const results = [];
+  for (const { bundle, file, expect } of CASES) {
+    const chunk = chunkOf(bundle, file);
+    if (chunk === null) { results.push(`${file} not found in ${bundle}`); continue; }
+    if (!chunk.includes(GUARD_HEAD)) {
+      results.push(`${file} in ${bundle} has no UMD guard`);
+      continue;
+    }
+
+    const sandbox = {
+      console: { log() {}, warn() {}, error() {} },
+      setTimeout() {}, clearTimeout() {}, setInterval() {}, clearInterval() {},
+      requestAnimationFrame() {}, cancelAnimationFrame() {},
+      // Exactly the hazard: a global AMD define, plus CommonJS-flavoured globals.
+      define: Object.assign(function () {}, { amd: true }),
+      exports: {}, module: { exports: {} },
+      document: {
+        createElement: el, addEventListener() {}, removeEventListener() {},
+        documentElement: el(), head: el(), body: el(),
+        getElementsByTagName: () => [el()], createEvent: () => ({ initEvent() {} }),
+      },
+      navigator: { userAgent: 'test', platform: 'Linux' },
+      location: { href: 'https://web.whatsapp.com/', protocol: 'https:' },
+      screen: { width: 1920, height: 1080 },
+      getComputedStyle: () => ({ getPropertyValue: () => '' }),
+      TextDecoder, TextEncoder, Uint8Array, Int8Array, ArrayBuffer, DataView,
+      Float32Array, Float64Array, Promise, Symbol, Map, Set, WeakMap, WeakSet, Proxy, Reflect,
+      Math, JSON, Date, RegExp, Error, TypeError, RangeError, Array, Object, String, Number,
+      Boolean, Function, performance, crypto: { subtle: {}, getRandomValues: (a) => a },
+      atob: (s) => Buffer.from(s, 'base64').toString('binary'),
+      btoa: (s) => Buffer.from(s, 'binary').toString('base64'),
+      Element: function () {}, HTMLElement: function () {}, Node: function () {},
+      // `window` IS the sandbox object, so the bundles call window.addEventListener
+      // directly rather than through `document`.
+      addEventListener() {}, removeEventListener() {}, dispatchEvent() { return true; },
+    };
+    sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox;
+
+    try {
+      const ctx = vm.createContext(sandbox);
+      new vm.Script(chunk, { filename: file });        // parse-only: SyntaxError surfaces here
+      vm.runInContext(chunk, ctx, { filename: file, timeout: 5000 });
+    } catch (e) {
+      results.push(`${file} threw on load: ${String(e.message).slice(0, 90)}`);
+      continue;
+    }
+    for (const name of expect) {
+      if (sandbox[name] === undefined) {
+        results.push(`${name} not published by ${file} — the UMD took the AMD/CommonJS branch`);
+      }
+    }
+  }
+  return results.length ? results.join('; ') : true;
+});
+
+// The wrapper is load-bearing, so assert it is actually present in the emitted output
+// rather than trusting isUmdBundle() in the build to keep working.
+check('A-umd2', 'UMD files in the emitted bundles carry the global-branch guard', () => {
+  if (!haveBuild) return 'no build output';
+  const GUARD = 'var define=void 0, exports=void 0, module=void 0;';
+  const missing = ['main-rest.js', 'ui.js'].filter((f) => !readSrc(join(EBUILD, f)).includes(GUARD));
+  return missing.length ? `no UMD guard in: ${missing.join(', ')}` : true;
 });
 
 check('A-shim', 'the page shim has no unsubstituted build placeholders', () => {

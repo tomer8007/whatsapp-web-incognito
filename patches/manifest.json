@@ -118,6 +118,31 @@
       "risk": "medium",
       "gate": "MUST pass the full feature parity matrix (docs §10) before shipping. This is the only patch that changes WHEN UI work happens, so treat a regression as a release blocker.",
       "note": "ui.js is already in the patch set via P0b, so this adds no new merge-conflict domain."
+    },
+    {
+    "id": "P8",
+    "file": "scripts/build.mjs (build-time, not a source patch)",
+    "status": "applied",
+    "summary": "Wrap UMD vendor files so they take the browser-global branch instead of the AMD branch.",
+    "kind": "single-world-fix",
+    "why": "Observed at runtime: `Uncaught ReferenceError: Tether is not defined`, and the whole ui group failed to inject. lib/drop.js, lib/pako.js, lib/pbf.3.0.5.min.js and lib/sweetalert.min.js each begin with a UMD wrapper that prefers `define.amd`. In the extension those files run in the ISOLATED content-script world, where WhatsApp's globals do not exist, so the browser-global branch is taken. The app has ONE world — the page's — and WhatsApp's webpack bundle installs a global AMD `define`, so the same files publish NOTHING. This is a direct consequence of the two-worlds-to-one-worlds difference in §2.2.",
+    "severity": "critical-silent",
+    "severityNote": "core/ calls `pako.inflate(...)` as a bare global in three places (utils.js:442, multi_device.js:118, interception.js:751). With pako undefined, every compressed frame throws inside wsHook.before, the catch passes the frame through UNBLOCKED, and the watchdog still reports PROTECTED because the hook did arm. That is a silent receipt leak — the exact failure this project exists to prevent — and nothing throws at load time, because the global is simply absent until the first message arrives.",
+    "fix": "Each UMD file is wrapped as `;(function(){var define=void 0, exports=void 0, module=void 0;<file>})();`. The three identifiers are declared function-scoped so they SHADOW the page globals without mutating them — assigning window.define = undefined would be undone by a non-writable or accessor property, and would be visible to concurrent code. The IIFE is deliberately non-strict and called with no receiver, so top-level `this` inside the wrapped file is still the global object, which is what the UMD wrapper passes to the factory as `root`.",
+    "assertion": "A-umd, A-umd2",
+    "scope": "electron target only — the extension stages raw files, and there the isolated world has no `define`, so it already takes the global branch."
+  },
+  {
+    "id": "P9",
+    "file": "app/electron/user-agent.js (shell, not a core patch)",
+    "status": "applied",
+    "summary": "Rewrite the session user agent from Electron's stock form to a real Chrome UA.",
+    "kind": "browser-gate",
+    "why": "Observed at runtime: web.whatsapp.com serves a 'WhatsApp works with Google Chrome 100+' page instead of the app, because Electron's UA carries an `Electron/x.y.z` token.",
+    "fix": "Removes the Electron token and the app's own product token, and substitutes the REAL embedded Chromium version (process.versions.chrome) into the Chrome slot. Deliberately not a newer Chrome than is embedded: claiming one invites feature detection that then disagrees with the actual engine, which is harder to diagnose than a clean block.",
+    "scope": "This is a browser-gate bypass and NOTHING more. It is not anonymity and not anti-fingerprinting: it changes exactly one signal. Electron remains distinguishable via renderer strings, feature quirks and network fingerprint. Overridable with WAI_USER_AGENT for debugging.",
+    "assertion": "user-agent.test.js (11 tests)",
+    "note": "The extension targets are unaffected — they run in a real browser and already send a real UA."
     }
   ],
 

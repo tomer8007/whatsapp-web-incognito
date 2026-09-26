@@ -357,6 +357,8 @@ function createWindow(prefs) {
   });
 
   state.win = win;
+  // The user agent must be set BEFORE the page starts loading, so this comes first.
+  installUserAgent(win.webContents.session);
   installSessionGuards(win.webContents.session);
   installNavigationLock(win);
   forwardFrameEvents(win);
@@ -402,6 +404,57 @@ function forwardFrameEvents(win) {
       });
     })();
   }
+}
+
+/**
+ * Present the session as a real Chrome, because WhatsApp Web gates on the user agent.
+ *
+ * Observed directly: with Electron's stock UA the page serves "WhatsApp works with
+ * Google Chrome 100+" instead of the app, so the app is simply unusable.
+ *
+ * What this does and does not do, so it is not oversold:
+ *   - Removes the `Electron/x.y.z` token and this app's own product token, and puts the
+ *     REAL embedded Chromium version in the `Chrome/` slot. Deliberately not a newer
+ *     Chrome than we actually embed: claiming one invites feature detection that then
+ *     disagrees with the engine, which is far harder to diagnose than a clean block.
+ *   - It is NOT anonymity and NOT a full anti-fingerprinting measure. It changes exactly
+ *     one signal. Electron remains distinguishable by renderer strings, feature quirks
+ *     and network fingerprint, none of which this touches. Treat it as "get past the
+ *     browser gate", nothing more.
+ *   - Overridable via WAI_USER_AGENT, for debugging and for reproducing a gate.
+ *
+ * Applied per session, so the page, workers and requests all agree.
+ */
+function installUserAgent(ses) {
+  guard('user agent', () => {
+    const override = process.env.WAI_USER_AGENT;
+    if (override && override.trim()) {
+      ses.setUserAgent(override.trim());
+      log(`user agent overridden from WAI_USER_AGENT`);
+      return;
+    }
+
+    const { buildChromeUserAgent } = require('./user-agent.js');
+    const stock = typeof ses.getUserAgent === 'function' ? ses.getUserAgent() : null;
+    const clean = buildChromeUserAgent(stock, {
+      appName: app.getName(),
+      appVersion: app.getVersion(),
+      electronVersion: process.versions.electron,
+      chromeVersion: process.versions.chrome,
+    });
+
+    if (!clean) {
+      // Falling back keeps the app working, it just may be gated out. Say so rather than
+      // shipping a UA we could not verify.
+      warn('could not build a Chrome user agent; keeping the stock one ' +
+           '(WhatsApp may refuse to load)');
+      if (stock) log(`  stock UA: ${stock}`);
+      return;
+    }
+
+    ses.setUserAgent(clean);
+    log(`user agent: ${clean}`);
+  })();
 }
 
 function installSessionGuards(ses) {

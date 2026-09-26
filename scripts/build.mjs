@@ -196,8 +196,70 @@ function copyInto(files, destDir) {
   }
 }
 
+/**
+ * Does this file ship a UMD/CommonJS/AMD wrapper?
+ *
+ * This matters far more in the Electron app than in the extension, and the reason is a
+ * direct consequence of having only ONE JS world instead of two (§2.2).
+ *
+ * `lib/drop.js`, `lib/pako.js`, `lib/pbf.3.0.5.min.js` and `lib/sweetalert.min.js` all
+ * pick their export style at load time:
+ *
+ *     if (typeof define === 'function' && define.amd)  define(factory);        // AMD
+ *     else if (typeof exports === 'object')            module.exports = ...;    // CommonJS
+ *     else                                              root.Tether = factory();// browser global
+ *
+ * In the extension, the manifest's second content script (which includes drop.js) runs
+ * in the ISOLATED content-script world, where WhatsApp's globals do not exist — so
+ * `define` is undefined and the browser-global branch is taken, publishing `Tether` and
+ * `Drop` where core/ui.js can see them.
+ *
+ * In the app there is one world: the page's. WhatsApp's webpack bundle installs a global
+ * AMD `define`, so the very same files take the AMD branch and publish NOTHING. Observed
+ * directly: `Uncaught ReferenceError: Tether is not defined`.
+ *
+ * That is not cosmetic. core/ calls `pako.inflate(...)` as a bare global in three places
+ * (utils.js:442, multi_device.js:118, interception.js:751) and `new Drop(...)` in
+ * ui.js:156. With `pako` undefined, every compressed frame throws inside
+ * wsHook.before, the catch passes the frame straight through UNBLOCKED, and the watchdog
+ * still reports PROTECTED because the hook did arm. Silent receipt leak — the exact
+ * failure mode this project exists to prevent.
+ *
+ * `pako` is also the worst possible victim because nothing throws at load time: the
+ * global is simply absent until the first message arrives.
+ */
+function isUmdBundle(rel) {
+  const head = readSource(join(ROOT, rel)).slice(0, 600);
+  return /define\s*\.\s*amd|typeof\s+exports\s*===?\s*['"]object['"]|typeof\s+module\s*===?\s*['"]object['"]/.test(head);
+}
+
+/**
+ * Force the browser-global branch.
+ *
+ * The three identifiers are declared as function-scoped vars, which shadows the page's
+ * globals for the whole file without mutating them. That is deliberate: assigning
+ * `window.define = undefined` would be undone by any non-writable or accessor property,
+ * and would also be visible to code running concurrently. A local shadow cannot fail.
+ *
+ * The IIFE is intentionally NOT strict and is invoked with no receiver, so top-level
+ * `this` inside the wrapped file is still the global object — which is what the UMD
+ * wrapper passes to the factory as `root`.
+ */
+function wrapUmd(src) {
+  return (
+    ';(function(){' +
+    'var define=void 0, exports=void 0, module=void 0;' +
+    src +
+    '\n})();'
+  );
+}
+
 const banner = (list) =>
-  list.map((f) => `/* ---- ${f} ---- */\n${readSource(join(ROOT, f))}`).join('\n;\n');
+  list.map((f) => {
+    const src = readSource(join(ROOT, f));
+    const body = isUmdBundle(f) ? wrapUmd(src) : src;
+    return `/* ---- ${f} ---- */\n${body}`;
+  }).join('\n;\n');
 
 /**
  * Inline CSS as one <style>. C4: the page CSP refuses shell-owned schemes but allows
