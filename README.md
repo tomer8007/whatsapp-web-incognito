@@ -11,6 +11,27 @@ You can find the original extension in [Chrome Web Store](https://chrome.google.
 - Always restore deleted messages of all kinds
 - See whether every message was sent from a phone or a computer
 - Download statuses
+
+## Settings
+
+| Setting | Default | Extension | Desktop app |
+|---|---|---|---|
+| Block read receipts | on | options panel | tray + native menu |
+| Block online / last seen | off | options panel | tray + native menu |
+| Block typing indicators | off | options panel | tray + native menu |
+| Restore deleted messages | off | options panel | native menu |
+| Show message device type | on | options panel | native menu |
+| Auto-send receipts on reply | on | options panel | native menu |
+| Allow status downloading | on | options panel | native menu |
+| Warn before sending a receipt | on | via the confirmation dialog | native menu |
+| Safety delay | off | — | native menu |
+| Start automatically on login | off | — | tray + native menu |
+
+In the desktop app every setting lives in one **native** menu — no HTML injected into the
+page — reachable from the tray, from `Ctrl`/`Cmd` + `,`, or from the Settings menu on macOS.
+The desktop app is the only build where the safety delay and the login item exist; the
+extension has no such concepts.
+
 ## Installing from GitHub directly
 To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/tomer8007/whats-incognito/releases) page, or better, just clone the source code
 **to a directory** and add it to Chrome using the 'Load unpacked extension' option when developer mode is turned on.
@@ -63,13 +84,30 @@ pnpm package:ext       # release/extensions/*.zip + firefox .xpi
 pnpm package:chrome    # just the chrome zip
 pnpm package:firefox   # just the firefox zip + .xpi
 
-pnpm verify          # 25 build-time assertions
+pnpm verify          # 27 build-time assertions
 pnpm test            # unit tests
 pnpm check           # build + package + verify + test, no GUI  <- what CI runs
 pnpm one             # the above, then launch the app and print a verdict
-pnpm dev             # rebuild and relaunch on change
+pnpm dev             # the whole dev loop: build, verify, watch, and launch the app
 pnpm start           # run the desktop app
+
+pnpm doctor          # bare-window probe: is WhatsApp reachable, which engine
+pnpm kill            # stop stale instances left holding the single-instance lock
 ```
+
+Packaging the desktop app is `pnpm exec electron-builder` — the same command the release
+workflow runs. Two flags that are not scripts, because both files document them already:
+`node scripts/build.mjs --clean` and `node scripts/dev.mjs --once`.
+
+> **On Linux the app runs without the Chromium zygote sandbox.** Chromium wants
+> `chrome-sandbox` to be root-owned with mode `4755`, which an `npm`/`pnpm` install never
+> produces, and where the unprivileged-namespace fallback is also unavailable — a container,
+> a restricted VM, a seccomp/AppArmor profile blocking `unshare(CLONE_NEWUSER)` — Chromium
+> aborts before a window exists. `app/electron/main.js` therefore passes `--no-sandbox`
+> itself on Linux, unconditionally, so there is nothing to set and nothing to remember. The
+> per-renderer `sandbox: false` and the navigation lock to `web.whatsapp.com` are unchanged
+> and are what actually bound what this app loads. See
+> [ARCHITECTURE.md](docs/ARCHITECTURE.md) §2.
 
 `build` only ever wrote *unpacked* directories, so `package:ext` is what turns them into
 the zips you actually install or submit. It packages what is already in `dist/extension/`

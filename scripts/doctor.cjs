@@ -17,7 +17,7 @@ const WAIT = Number(process.env.WAI_PROBE_WAIT || 9000);
 // `--version` makes this usable as a plain "what engine is installed?" query, which is
 // what scripts/one.mjs needs. Electron has no `-e`, so the version has to come from a real
 // script run; folding it in here avoids a second throwaway file.
-if (process.argv.includes('--version')) {
+const printVersion = () => {
   console.log(JSON.stringify({
     electron: process.versions.electron,
     chromium: process.versions.chrome,
@@ -25,6 +25,10 @@ if (process.argv.includes('--version')) {
     v8: process.versions.v8,
   }));
   app.exit(0);
+};
+
+if (process.argv.includes('--version')) {
+  printVersion();
   return;
 }
 
@@ -32,15 +36,6 @@ const line = (k, v) => console.log(`  ${k.padEnd(20)} ${v}`);
 
 
 app.whenReady().then(async () => {
-  if (process.argv.includes('--version')) {
-    console.log(JSON.stringify({
-      electron: process.versions.electron,
-      chromium: process.versions.chrome,
-      node: process.versions.node,
-      v8: process.versions.v8,
-    }));
-    app.exit(0);
-  }
   const ses = session.defaultSession;
 
   // Use the app's own rewrite so this reflects reality.

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Dev loop: watch -> rebuild -> verify -> tell the running app to reload.
 //
-//   node scripts/dev.mjs            watch (default)
+//   node scripts/dev.mjs            watch, then start the app (the whole loop, one command)
+//   node scripts/dev.mjs --no-launch  watch only; start the app yourself with pnpm start
 //   node scripts/dev.mjs --once     build + verify + print, no watcher, no server
 //   node scripts/dev.mjs --no-verify skip the assertion pass on each rebuild
 //   node scripts/dev.mjs --port N    (default 7311)
@@ -199,6 +200,35 @@ function startWatching() {
   console.log(`  watching    ${HOT_DIRS.length} dirs, ${HOT_FILES.length + SHELL_FILES.length} files, patches/`);
 }
 
+// ---------------------------------------------------------------- launch
+
+/**
+ * Start the app, pointed at this dev server.
+ *
+ * This is what turns the loop into one command. It used to be two terminals — `dev` here,
+ * `start` over there — because the dev server deliberately knows nothing about the app:
+ * the arrow points one way, the app polls the server, so files can be edited with or without
+ * a window open. That property is kept (this spawns the app; the server does not track it).
+ * What changed is only that the watcher no longer makes you open a second terminal to find
+ * out whether the app is picking your saves up.
+ *
+ * stdio is inherited so the app's `[wai]` lines land in this terminal, and the handle is
+ * deliberately not awaited or killed: quitting the app from the tray must leave the watcher
+ * running, which is exactly the case `pnpm start` is still for.
+ */
+function launchApp() {
+  const bin = join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'electron.cmd' : 'electron');
+  if (!existsSync(bin)) {
+    console.log('  could not find the electron binary — run `pnpm install`');
+    return;
+  }
+  try {
+    spawn(bin, ['.', '--dev'], { cwd: ROOT, stdio: 'inherit', detached: false });
+  } catch (e) {
+    console.log(`  could not start the app: ${(e && e.message) || e}`);
+  }
+}
+
 // ---------------------------------------------------------------- cli
 
 if (flag('once')) {
@@ -214,9 +244,13 @@ if (!first) console.log('  starting the watcher anyway; it will pick up the next
 
 startServer();
 startWatching();
+if (!flag('no-launch')) launchApp();
 
-console.log('\n  Start the app in another terminal:  npm start -- --dev');
-console.log('  Edits to core/ or lib/ re-inject the live page. Edits to app/electron/*.js relaunch.\n');
+console.log('\n  Edits to core/ or lib/ re-inject the live page. Edits to app/electron/*.js relaunch.');
+if (flag('no-launch')) {
+  console.log('  Watcher only. Start the app with:  pnpm start');
+}
+console.log('  Ctrl-C stops the watcher. Quitting the app from the tray leaves it running.\n');
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => { console.log('\n  dev server stopped'); process.exit(0); });

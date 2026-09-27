@@ -640,34 +640,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "dry_run=true: artefacts verified and uploaded, release not created"
 
-      - name: Create release (generated notes)
-        if: needs.resolve.outputs.dry_run == 'false' && needs.resolve.outputs.notes == ''
+      - name: Create release
+        if: needs.resolve.outputs.dry_run == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve.outputs.tag }}
           name: WAIncognito ${{ needs.resolve.outputs.tag }}
+          body: ${{ needs.resolve.outputs.notes || '' }}
           draft: ${{ needs.resolve.outputs.draft }}
           prerelease: ${{ needs.resolve.outputs.prerelease }}
-          generate_release_notes: true
-          files: |
-            artifacts/**/*.zip
-            artifacts/**/*.exe
-            artifacts/**/*.msi
-            artifacts/**/*.dmg
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.blockmap
-          fail_on_unmatched_files: false
-
-      - name: Create release (custom notes)
-        if: needs.resolve.outputs.dry_run == 'false' && needs.resolve.outputs.notes != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.resolve.outputs.tag }}
-          name: WAIncognito ${{ needs.resolve.outputs.tag }}
-          body: ${{ needs.resolve.outputs.notes }}
-          draft: ${{ needs.resolve.outputs.draft }}
-          prerelease: ${{ needs.resolve.outputs.prerelease }}
+          generate_release_notes: ${{ needs.resolve.outputs.notes == '' }}
           files: |
             artifacts/**/*.zip
             artifacts/**/*.exe

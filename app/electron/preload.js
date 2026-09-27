@@ -470,6 +470,23 @@ ipcRenderer.on('wai:prefs', (_event, prefs) => {
 
 ipcRenderer.on('wai:rearm', () => { retryMissing('host-rearm'); });
 
+// The shell's fallback when it has no native menu to offer: ask the page to open the options
+// panel it injects into WhatsApp's menu bar. callPage, not evaluate — this asks the page to
+// do something rather than injecting anything, and a page that has not finished loading has
+// no panel to open, so a null answer is the expected case, not a failure to report.
+//
+// The answer goes back over wai:page-state rather than a new channel: main cannot ask the
+// page itself (C1 — webContents.executeJavaScript is load-gated), so without this the shell
+// would know it had asked but not whether anything appeared, and "unavailable" is exactly
+// the case worth being able to diagnose.
+ipcRenderer.on('wai:open-options', () => {
+  callPage('openOptions', 'window.__WAI__ && window.__WAI__.openOptions()')
+    .then((opened) => {
+      debug(`page options panel: ${opened === true ? 'opened' : 'unavailable'}`);
+      sendSnapshot('options-panel', { opened: opened === true });
+    });
+});
+
 // The renderer lifecycle signal, forwarded by main because a sandboxed preload has no
 // `process.on`. This is what makes a first attempt's failure recoverable: without it, a
 // step that lost a race with frame readiness would never be retried and the hook would

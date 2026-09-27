@@ -4,6 +4,7 @@
 //   pnpm one            full: kill -> env -> build -> package -> assertions -> tests -> app
 //   pnpm one --no-test  skip the unit tests
 //   pnpm one --no-app   everything except the real-window check (CI-friendly)
+//   pnpm one --no-package  skip extension zip packaging (faster for app-only debugging)
 //
 // Why this exists: "it's not working" is not a diagnosis, and the failure modes we have
 // actually hit all look identical from the outside —
@@ -24,6 +25,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const SKIP_TEST = argv.includes('--no-test');
 const SKIP_APP = argv.includes('--no-app');
+const SKIP_PACKAGE = argv.includes('--no-package') || SKIP_APP;
 
 const BOLD = '\x1b[1m', DIM = '\x1b[2m', RED = '\x1b[31m', GREEN = '\x1b[32m', YELLOW = '\x1b[33m', OFF = '\x1b[0m';
 const step = (n, msg) => console.log(`\n${BOLD}[${n}]${OFF} ${msg}`);
@@ -46,6 +48,84 @@ function run(label, cmd, args, { optional = false } = {}) {
   for (const l of lines) console.log(`       ${l}`);
   failures++;
   return false;
+}
+
+// ---------------------------------------------------------------- kill stale
+// The shell hides on window-close and stays resident (so the WhatsApp session is not
+// lost), which means a user who clicks the X leaves an INVISIBLE process running.
+// Relaunching then only focuses that hidden window via the single-instance lock, and
+// prints "another instance is already running; this one is exiting" — which reads
+// exactly like a crash. This ends that ambiguity.
+
+const isWindows = process.platform === 'win32';
+const SELF = new Set([process.pid, process.ppid].filter(Boolean));
+
+function listProcesses() {
+  if (isWindows) {
+    const r = spawnSync('wmic', ['process', 'get', 'ProcessId,CommandLine', '/format:csv'], { encoding: 'utf8' });
+    const out = [];
+    for (const line of (r.stdout || '').split('\n').slice(1)) {
+      const m = line.match(/^([^,]+),(\d+),(.*)$/);
+      if (m) out.push({ pid: Number(m[2]), cmd: m[3] });
+    }
+    return out;
+  }
+  const r = spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8', maxBuffer: 8 << 20 });
+  const out = [];
+  for (const line of (r.stdout || '').split('\n')) {
+    const m = line.match(/^\s*(\d+)\s+(.*)$/);
+    if (m) out.push({ pid: Number(m[1]), cmd: m[2] });
+  }
+  return out;
+}
+
+function killPid(pid) {
+  if (isWindows) return spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { encoding: 'utf8' }).status === 0;
+  const term = spawnSync('kill', ['-TERM', String(pid)], { encoding: 'utf8' });
+  return term.status === 0;
+}
+
+function isOurApp(cmd) {
+  if (!cmd) return false;
+  const c = cmd.toLowerCase();
+  if (!c.includes('electron')) return false;
+  return c.includes('waincognito') || c.includes('whatsapp-web-incognito') || c.includes('wai-test');
+}
+
+function killStale() {
+  const procs = listProcesses();
+  const ours = procs.filter((p) => isOurApp(p.cmd) && !SELF.has(p.pid));
+
+  if (!ours.length) { ok('none running'); return; }
+
+  console.log(`  found ${ours.length} stale process(es):`);
+  for (const p of ours) {
+    const short = p.cmd.length > 96 ? `${p.cmd.slice(0, 96)}...` : p.cmd;
+    console.log(`       ${String(p.pid).padStart(7)}  ${short}`);
+  }
+
+  let stopped = 0;
+  for (const p of ours) {
+    if (killPid(p.pid)) {
+      stopped++;
+      console.log(`  stopped ${p.pid}`);
+    } else {
+      console.log(`  could not stop ${p.pid} (already gone, or not permitted)`);
+    }
+  }
+
+  if (!isWindows) {
+    spawnSync('sleep', ['1']);
+    for (const p of ours) {
+      const alive = spawnSync('kill', ['-0', String(p.pid)], { encoding: 'utf8' }).status === 0;
+      if (alive) {
+        spawnSync('kill', ['-KILL', String(p.pid)], { encoding: 'utf8' });
+        console.log(`  force-killed ${p.pid}`);
+      }
+    }
+  }
+
+  console.log(`  stopped ${stopped} process(es)`);
 }
 
 console.log(`${BOLD}WAIncognito one-shot debug run${OFF}  ${new Date().toISOString()}`);
@@ -87,12 +167,7 @@ step(1, 'environment');
 
 // ---------------------------------------------------------------- 2. stale instances
 step(2, 'stale instances');
-{
-  const r = spawnSync(process.execPath, ['scripts/kill-stale.mjs'], { cwd: ROOT, encoding: 'utf8' });
-  const said = (r.stdout || '').trim();
-  if (/no stale/.test(said)) ok('none running');
-  else console.log(said.split('\n').map((l) => `       ${l}`).join('\n'));
-}
+killStale();
 
 // ---------------------------------------------------------------- 3. build
 step(3, 'build');
@@ -103,8 +178,11 @@ run('bundles built', process.execPath, ['scripts/build.mjs']);
 // Before the assertions, not after. A18/A19/A20 check the zip that anyone actually
 // installs, so there has to BE a zip by the time they run — otherwise they silently skip
 // and the one artefact nobody can reproduce locally goes untested on every `pnpm check`.
-step(4, 'package extension');
-run('extension zips built', process.execPath, ['scripts/package-ext.mjs']);
+// Skipped with --no-package (or --no-app, which implies it) for faster app-only debugging.
+if (!SKIP_PACKAGE) {
+  step(4, 'package extension');
+  run('extension zips built', process.execPath, ['scripts/package-ext.mjs']);
+}
 
 // ---------------------------------------------------------------- 5. assertions
 step(5, 'build assertions');

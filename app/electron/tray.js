@@ -21,6 +21,7 @@
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { Menu, Tray, nativeImage } = require('electron');
+const { quickToggles, settingsFor } = require('./settings-menu.js');
 
 // ---------------------------------------------------------------- badge renderer (ported from WhatsLNX)
 // 7×9 bold pixel font for digits 0-9 and '+'. Each glyph is a 9-row array of bit strings.
@@ -185,21 +186,10 @@ const ICON_CANDIDATES = [
 ];
 
 // The three toggles, in the order a user cares about them: the one that leaks identity
-// (read receipts) first, then the two presence features.
-const TOGGLES = [
-  { key: 'readConfirmationsHook', label: 'Block read receipts' },
-  { key: 'onlineUpdatesHook', label: 'Block online / last seen' },
-  { key: 'typingUpdatesHook', label: 'Block typing indicators' },
-];
-
-// `long` is the menu row — it has room, and it must say what receipts are doing. `short`
-// is the tooltip and the log-friendly form. Both name the state; neither softens it.
-const LABEL = {
-  PROTECTED: { short: 'Protected', long: 'Protected' },
-  RECONNECTING: { short: 'Reconnecting', long: 'Reconnecting — receipts are NOT blocked right now' },
-  NOT_PROTECTED: { short: 'NOT PROTECTED', long: 'NOT PROTECTED — receipts may be leaking' },
-  UNKNOWN: { short: 'Starting up…', long: 'Starting up…' },
-};
+// (read receipts) first, then the two presence features. Their labels live in
+// app/electron/settings-menu.js so the tray and the settings menu cannot disagree — this
+// array used to be a second, hand-maintained copy of the same three rows.
+const TOGGLES = quickToggles();
 
 function humanDuration(ms) {
   if (ms == null) return 'never';
@@ -212,6 +202,35 @@ function humanDuration(ms) {
   return `${h}h ${m % 60}m`;
 }
 
+// `long` is the menu row — it has room, and it must say what receipts are doing. `short`
+// is the tooltip and the log-friendly form. Both name the state; neither softens it.
+//
+// Module scope, not inside createTray: the settings menu (app/electron/settings-menu.js,
+// driven by main.js) shows the same two rows, and a second copy of this formatting is how
+// the tray and the settings screen would start disagreeing about whether protection is on.
+const LABEL = {
+  PROTECTED: { short: 'Protected', long: 'Protected' },
+  RECONNECTING: { short: 'Reconnecting', long: 'Reconnecting — receipts are NOT blocked right now' },
+  NOT_PROTECTED: { short: 'NOT PROTECTED', long: 'NOT PROTECTED — receipts may be leaking' },
+  UNKNOWN: { short: 'Starting up…', long: 'Starting up…' },
+};
+
+function labelOf(status) {
+  const s = status || {};
+  return LABEL[s.status] || { short: String(s.status || 'UNKNOWN'), long: String(s.status || 'UNKNOWN') };
+}
+
+/** The evidence line: how much has moved, how much was held back, how quiet it has been. */
+function counters(status) {
+  const s = status || {};
+  const bits = [`${s.framesIn || 0} in / ${s.framesOut || 0} out`];
+  if (s.blocked) bits.push(`${s.blocked} receipts blocked`);
+  if (s.heldChats) bits.push(`${s.heldChats} held for replay`);
+  bits.push(`last frame ${humanDuration(s.sinceLastFrame)} ago`);
+  if (s.recoveries) bits.push(`${s.recoveries} recoveries`);
+  return bits.join(' · ');
+}
+
 /**
  * @param {object} opts
  * @param {object} opts.app          Electron app (for the platform check)
@@ -219,6 +238,7 @@ function humanDuration(ms) {
  * @param {() => object} opts.getStatus   watchdog snapshot
  * @param {(patch: object) => object} opts.setPref  main → PrefsStore → page
  * @param {() => object} opts.getPrefs
+ * @param {() => void} [opts.openSettings]  the full native settings menu, if available
  * @param {() => void} opts.quit
  * @param {object} [opts.Menu] [opts.Tray] [opts.nativeImage] injectable, for tests
  */
@@ -318,22 +338,40 @@ function createTray(opts) {
     }
 
     items.push({ type: 'separator' });
-    // Shell-only pref (main.js SHELL_DEFAULTS, not background.js): start on login.
-    // Same round-trip as the hook toggles — tray → main → PrefsStore — except main
-    // applies it to the OS (applyAutostart) while the page ignores the unknown key.
-    items.push({
-      label: 'Start automatically on login',
-      type: 'checkbox',
-      checked: prefs.autostart === true,
-      click: () => {
-        try {
-          setPref({ autostart: prefs.autostart !== true });
-        } catch (e) {
-          warn(`could not change autostart: ${(e && e.message) || e}`);
-        }
-        update();
-      },
-    });
+    // The full settings menu. The three rows above are the ones worth one click; everything
+    // else — the four that were only ever reachable from the panel injected into WhatsApp's
+    // own menu bar, the safety delay, autostart and the reset — lives in here.
+    if (typeof opts.openSettings === 'function') {
+      items.push({
+        label: 'Settings…',
+        click: () => {
+          try { opts.openSettings(); } catch (e) { warn(`could not open settings: ${(e && e.message) || e}`); }
+        },
+      });
+    }
+
+    items.push({ type: 'separator' });
+    // Shell-only pref (main.js SHELL_DEFAULTS, not background.js): start on login. Same
+    // round-trip as the hook toggles — tray → main → PrefsStore — except main applies it to
+    // the OS (applyAutostart) while the page ignores the unknown key. Its label comes from
+    // the settings table like every other row, so the tray and the settings menu cannot end
+    // up calling the same thing by different names.
+    const autostart = settingsFor(prefs).find((s) => s.key === 'autostart');
+    if (autostart) {
+      items.push({
+        label: autostart.label,
+        type: 'checkbox',
+        checked: prefs.autostart === true,
+        click: () => {
+          try {
+            setPref({ autostart: prefs.autostart !== true });
+          } catch (e) {
+            warn(`could not change autostart: ${(e && e.message) || e}`);
+          }
+          update();
+        },
+      });
+    }
 
     items.push({ type: 'separator' });
     items.push({
@@ -353,15 +391,6 @@ function createTray(opts) {
     return MenuCtor.buildFromTemplate(items);
   }
 
-  function counters(status) {
-    const bits = [`${status.framesIn || 0} in / ${status.framesOut || 0} out`];
-    if (status.blocked) bits.push(`${status.blocked} receipts blocked`);
-    if (status.heldChats) bits.push(`${status.heldChats} held for replay`);
-    bits.push(`last frame ${humanDuration(status.sinceLastFrame)} ago`);
-    if (status.recoveries) bits.push(`${status.recoveries} recoveries`);
-    return bits.join(' · ');
-  }
-
   function toolTip(status) {
     return [
       `Whatsapp Incognito — ${labelOf(status).short}`,
@@ -370,10 +399,6 @@ function createTray(opts) {
       status.blocked ? `${status.blocked} receipts blocked` : '',
       status.status === 'PROTECTED' ? '' : 'Receipts are not being protected.',
     ].filter(Boolean).join('\n');
-  }
-
-  function labelOf(status) {
-    return LABEL[status.status] || { short: String(status.status || 'UNKNOWN'), long: String(status.status || 'UNKNOWN') };
   }
 
   function safeStatus() {
@@ -464,7 +489,7 @@ function createTray(opts) {
   };
 }
 
-module.exports = { createTray, createBadgedIcon, rgbaToPNG };
+module.exports = { createTray, createBadgedIcon, rgbaToPNG, labelOf, counters };
 
 /**
  * Wrap fn so a throw is logged and swallowed, never propagated.

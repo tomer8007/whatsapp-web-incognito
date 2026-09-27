@@ -25,8 +25,13 @@ class PrefsStore {
    * @param {string} userDataDir  Electron's app.getPath('userData')
    * @param {object} defaults      Derived from background.js by scripts/build.mjs
    * @param {string} [filePath]    Override, for tests
+   * @param {object} [ranges]      key → {min, max} for numeric settings, from
+   *                                app/electron/settings-menu.js. Optional: without it every
+   *                                number is validated against 0-30, which is correct for
+   *                                today's single numeric setting and is why the bounds live
+   *                                with the menu that offers the values.
    */
-  constructor(userDataDir, defaults, filePath) {
+  constructor(userDataDir, defaults, filePath, ranges) {
     if (!userDataDir) throw new Error('PrefsStore: userDataDir is required');
     if (!defaults || typeof defaults !== 'object') {
       throw new Error('PrefsStore: defaults object is required (derive it from background.js)');
@@ -34,6 +39,7 @@ class PrefsStore {
     this.dir = userDataDir;
     this.file = filePath || path.join(userDataDir, 'prefs.json');
     this.defaults = Object.freeze({ ...defaults });
+    this.ranges = Object.freeze({ ...(ranges && typeof ranges === 'object' ? ranges : {}) });
     this.keys = Object.keys(this.defaults);
     this.prefs = { ...this.defaults };
     this.load();
@@ -69,7 +75,7 @@ class PrefsStore {
     // default instead of coming back undefined, and validate every value by type.
     for (const k of this.keys) {
       if (Object.prototype.hasOwnProperty.call(stored, k)) {
-        this.prefs[k] = coerce(this.defaults[k], stored[k], this.defaults[k]);
+        this.prefs[k] = coerce(this.defaults[k], stored[k], this.defaults[k], this.ranges[k]);
       }
     }
     return this.prefs;
@@ -115,7 +121,7 @@ class PrefsStore {
 
     for (const [k, v] of Object.entries(patch)) {
       if (!Object.prototype.hasOwnProperty.call(this.defaults, k)) { rejected.push(k); continue; }
-      const next = coerce(this.defaults[k], v, this.prefs[k]);
+      const next = coerce(this.defaults[k], v, this.prefs[k], this.ranges[k]);
       if (next === undefined) { rejected.push(k); continue; }
       this.prefs[k] = next;
       applied.push(k);
@@ -135,21 +141,30 @@ class PrefsStore {
 
 /**
  * Validate a value against the type of its default.
+ *
+ * `range` is an optional {min, max} for numeric settings, supplied by the caller from
+ * app/electron/settings-menu.js. It exists to remove a hack: safetyDelay is the only numeric
+ * option, and this function used to recognise that by comparing its default against 0
+ * (`defaultValue === 0 && value === 0`), which reads as a coincidence and is a trap for
+ * whoever adds the next numeric setting. With a range the caller states the bound outright.
+ * Omitting it preserves the old 0-30 behaviour, so every existing call site is unaffected.
+ *
  * @returns the coerced value, or undefined when the input is unusable.
  */
-function coerce(defaultValue, value, currentValue) {
+function coerce(defaultValue, value, currentValue, range) {
   if (typeof defaultValue === 'boolean') {
     if (typeof value === 'boolean') return value;
-    if (value === 'true' || value === 'false') return value === 'true';
+    if (value === 'true' || value === 'false') return value === 'false' ? false : true;
     return undefined;
   }
   if (typeof defaultValue === 'number') {
     const n = typeof value === 'number' ? value : parseInt(value, 10);
     if (!Number.isFinite(n)) return undefined;
-    // safetyDelay is the only numeric option and ui.js:1119 only offers 0-30, with 0
-    // meaning disabled. Clamp rather than reject so a hand-edited file still loads.
-    if (defaultValue === 0 && value === 0) return 0;
-    if (n < 0 || n > 30) return currentValue ?? defaultValue;
+    // Clamp rather than reject so a hand-edited file still loads. The default range is
+    // safetyDelay's 0-30 (0 = disabled), the only range the page ever offered.
+    const min = range && Number.isFinite(range.min) ? range.min : 0;
+    const max = range && Number.isFinite(range.max) ? range.max : 30;
+    if (n < min || n > max) return currentValue ?? defaultValue;
     return n;
   }
   return value === undefined ? currentValue : value;

@@ -164,7 +164,9 @@
       if (msg.name === 'setOptions') {
         var patch = {};
         for (var k in msg) { if (k !== 'name' && Object.prototype.hasOwnProperty.call(msg, k)) patch[k] = msg[k]; }
-        applyPrefs(patch);
+        // fromPage: core/ui.js dispatches onOptionsUpdate itself right after every tick
+        // handler, so dispatching again here would run each listener twice per click.
+        applyPrefs(patch, true);
         if (host && host.setPrefs) { try { host.setPrefs(patch); } catch (e) {} }
         respond(PREFS);
         return;
@@ -173,7 +175,28 @@
     respond({});
   }
 
-  function applyPrefs(patch) {
+  /**
+   * Mutate PREFS and, unless the change came from the page itself, tell the page.
+   *
+   * Why the event matters as much as the assignment: the globals that decide whether a
+   * receipt is actually blocked — readConfirmationsHookEnabled, saveDeletedMsgsHookEnabled,
+   * showDeviceTypesEnabled, autoReceiptOnReplay (core/interception.js) and
+   * allowStatusDownload (core/status_download.js) — are read by core/node_handler.js on
+   * every decoded stanza, and the ONLY thing that ever mutates them is core/injected_ui.js's
+   * `onOptionsUpdate` listener. So a pref pushed from the tray or the native settings menu
+   * used to update PREFS and nothing else: it was written to prefs.json and ignored by the
+   * page until the next document load. A checkbox that lies about the one thing the app
+   * exists to do is the worst outcome in this project, so the push dispatches.
+   *
+   * A push that lands before the ui bundle is injected is not lost: core/ui.js reads
+   * getOptions at document_idle and dispatches the full set itself, so the listener sees
+   * the new values on the same load.
+   *
+   * @param {object} patch
+   * @param {boolean} [fromPage]  true when this round-trip originated in core/ui.js
+   */
+  function applyPrefs(patch, fromPage) {
+    var applied = {};
     for (var k in patch) {
       if (!Object.prototype.hasOwnProperty.call(PREFS, k)) continue;   // reject unknown keys
       var v = patch[k];
@@ -184,8 +207,27 @@
         v = !!v;
       }
       PREFS[k] = v;
+      applied[k] = v;
     }
     state.prefsEcho = prefsHash();
+    if (!fromPage) notifyOptionsUpdate(applied);
+  }
+
+  /**
+   * Dispatch the same event and payload shape core/ui.js produces, so the existing
+   * enforcement listeners need no change and no second convention exists.
+   *
+   * A listener that throws surfaces as an uncaught page error and is reported by the
+   * preload's diagnostics hook, which is correct rather than noisy: a listener that cannot
+   * apply a pref is a protection failure, and this project would rather say so loudly than
+   * let a broken enforcement path look healthy.
+   */
+  function notifyOptionsUpdate(options) {
+    try {
+      document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
+    } catch (e) {
+      if (host && host.reportFailure) { try { host.reportFailure('options update', String((e && e.message) || e)); } catch (e2) {} }
+    }
   }
 
   var runtime = {
@@ -227,9 +269,26 @@
     // Used by preload for the phase machine: page asks, host answers.
     isUiReady: function () { return document.readyState !== 'loading'; },
     getPrefs: function () { return Object.assign({}, PREFS); },
-    setPrefs: applyPrefs,
+    // Not a bare `applyPrefs` reference: this is the HOST path (preload's wai:prefs push,
+    // and the fallback right after the shim evaluates), so it must dispatch the update
+    // event. fromPage is deliberately left unset.
+    setPrefs: function (patch) { applyPrefs(patch); },
     reportFailure: reportFailure,
-    clearFailure: clearFailure
+    clearFailure: clearFailure,
+    /**
+     * Open the page's own options panel, for when the shell has no native menu to offer.
+     * core/ui.js answers synchronously through window.__WAI_PANEL_OPEN_RESULT__, so this
+     * returns whether the panel actually opened rather than whether the event was sent.
+     */
+    openOptions: function () {
+      try {
+        window.__WAI_PANEL_OPEN_RESULT__ = false;
+        document.dispatchEvent(new CustomEvent('onOpenIncognitoOptions'));
+        return window.__WAI_PANEL_OPEN_RESULT__ === true;
+      } catch (e) {
+        return false;
+      }
+    }
   };
 
   // Announce. The preload resolves its injection barrier on this, which is what lets it

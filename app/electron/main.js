@@ -26,17 +26,43 @@ const {
 } = require('electron');
 
 // ---------------------------------------------------------------- Wayland (must be before app loads)
-// Ported from WhatsLNX, minus its sandbox handling. WhatsLNX needs
-// ELECTRON_DISABLE_SANDBOX=1 because it runs webPreferences.sandbox: true and has to load
-// its hook bundle from disk; this app already sets sandbox: false deliberately (C2 in
-// docs/ARCHITECTURE.md — a sandboxed preload cannot read app/.build/*), so the Chromium
-// sandbox buys nothing here and only costs a security boundary. Verified launching on
-// GNOME 46 / Wayland with this removed. The three switches are kept: without
+// Ported from WhatsLNX, minus its ELECTRON_DISABLE_SANDBOX env-var handling: this app passes
+// the equivalent switch itself, unconditionally, a few lines below (see "Linux sandbox" for
+// why that is the default rather than an opt-in). The three switches here are kept: without
 // ozone-platform-hint=auto Electron picks XWayland on a Wayland session, and
 // WaylandWindowDecorations is what gives the window real client-side decorations.
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
   app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations,WebRTCPipeWireCapturer');
+}
+
+// ---------------------------------------------------------------- Linux sandbox (must be before app loads)
+//
+// Chromium needs `chrome-sandbox` to be owned by root with mode 4755. An npm/pnpm install
+// unpacks it as the invoking user, so it never is, and Chromium normally falls back to the
+// unprivileged namespace sandbox. Where that fallback is unavailable — a container, a
+// restricted VM, any seccomp/AppArmor profile that blocks unshare(CLONE_NEWUSER) — Chromium
+// aborts before a window exists:
+//
+//   [FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc] The SUID sandbox helper binary
+//   was found, but is not configured correctly. Rather than run without sandboxing I'm
+//   aborting now.
+//
+// The alternative is a sudo chown/chmod of a file inside node_modules, which is not something
+// an app can ask of its user at every launch and which a reinstall undoes anyway. So the
+// zygote sandbox is off by default on Linux and this line is the whole of it.
+//
+// WHAT THAT COSTS, stated plainly: --no-sandbox drops the zygote boundary for the entire
+// process, so utility processes are not contained. The per-renderer `sandbox: false` in
+// createWindow (C2) is a separate and much narrower decision — it covers the one renderer that
+// loads our bundles — and it is unchanged. The surface this actually matters for is the
+// WhatsApp page itself, which already runs unsandboxed, and which this app deliberately points
+// at web.whatsapp.com and nothing else (see isAllowedNavigation).
+//
+// Windows and macOS are untouched: this switch is Linux-only, and on those platforms the
+// platform sandbox is a real boundary that nothing here disables.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox');
 }
 
 // stdout/stderr are closed when the app is launched from a dock/dash/desktop file
@@ -63,7 +89,8 @@ if (process.platform === 'linux') {
 
 const { PrefsStore } = require('./prefs-store.js');
 const { createWatchdog } = require('./watchdog.js');
-const { createTray } = require('./tray.js');
+const { createTray, labelOf, counters } = require('./tray.js');
+const { buildSettingsTemplate, numericRanges } = require('./settings-menu.js');
 const desktopIntegration = require('./desktop-integration.js');
 
 // Set before `ready` so the userData path (and therefore prefs.json) is stable and does
@@ -479,6 +506,8 @@ const state = {
   injections: 0,
   /** Latest page snapshot pushed by the preload; shown by wai:get-state. */
   page: null,
+  /** Whether a native settings popup is currently on screen (key auto-repeat guard). */
+  settingsOpen: false,
   lastFailure: null,
 };
 
@@ -613,6 +642,7 @@ function createWindow(prefs) {
   }
 
   installNavigationLock(win);
+  installSettingsShortcut(win);
   forwardFrameEvents(win);
 
   win.once('ready-to-show', () => {
@@ -990,8 +1020,15 @@ function installMenu() {
     Menu.setApplicationMenu(null);
     return;
   }
+  // The app menu role is left alone: it is localized by the OS and carries the canonical
+  // macOS items, and hand-rolling it to insert one row would quietly lose that. So Settings
+  // is its own top-level menu instead — a normal macOS shape, and purely additive.
+  //
+  // The row carries no accelerator on purpose: installSettingsShortcut already handles Cmd+,
+  // on all three platforms, and one route is one route.
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
+    { label: 'Settings', submenu: [{ label: 'Settings…', click: () => openSettings() }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -1016,6 +1053,137 @@ function applyPatch(patch) {
     if (state.watchdog) state.watchdog.kick('prefs-changed');
   }
   return result;
+}
+
+/**
+ * Restore every default. One function for both callers (the tray row and the settings menu),
+ * because a reset that only some entry points perform is a reset that sometimes leaves the
+ * tray checkmarks lying.
+ *
+ * The tray refresh lives here rather than in each caller: applyPatch refreshes the tray on
+ * every ordinary change, and a reset must not be the one path where the two disagree.
+ */
+function resetAllPrefs() {
+  return guard('reset prefs', () => {
+    // Captured before the reset, because reset() mutates in place — comparing against a
+    // get() afterwards would always be equal and the check would be dead. It matters: a
+    // reset that leaves autostart on in the OS while prefs.json says false is exactly the
+    // "a saved pref that was never applied" case applyAutostart's own comment warns about.
+    const autostartBefore = state.prefs.get().autostart;
+    const prefs = state.prefs.reset();
+    sendPrefs(prefs);
+    guard('tray.update', () => state.tray && state.tray.update())();
+    if (prefs.autostart !== autostartBefore) applyAutostart(prefs.autostart);
+    if (state.watchdog) state.watchdog.kick('prefs-reset');
+    return prefs;
+  }, state.prefs.get())();
+}
+
+// ---------------------------------------------------------------- settings
+
+/**
+ * Ask the page to open the options panel it injects into WhatsApp's own menu bar.
+ *
+ * The fallback, not the primary: the native menu below is better in every way that matters
+ * (it cannot break when WhatsApp renames a class, it holds every setting including the four
+ * the panel never offered, and it needs no injected HTML at all). But a native menu is not
+ * always available — no display, a failed grab, a platform whose window manager refuses the
+ * popup — and "you cannot change your settings" is a much worse outcome than the old panel.
+ * So when native is not there, this is what the user gets instead.
+ *
+ * @returns {boolean} whether the request was delivered to a live page
+ */
+function requestPageOptions() {
+  const win = state.win;
+  if (!win || win.isDestroyed()) return false;
+  try {
+    win.webContents.send('wai:open-options');
+    return true;
+  } catch (e) {
+    warn(`could not ask the page for its options panel: ${(e && e.message) || e}`);
+    return false;
+  }
+}
+
+/**
+ * Open the settings, natively if possible and from the page otherwise.
+ *
+ * A popup Menu rather than a settings BrowserWindow: no second window, no web UI, no
+ * bundler — the same meaning of "light" docs/ARCHITECTURE.md §7 gives it. It closes on each
+ * click, exactly as the tray does, which is what a native menu does.
+ *
+ * The guard around the whole body is the fallback trigger, not just error containment: if
+ * building or showing the menu throws at all, the user still gets somewhere to change a
+ * setting. A native failure is precisely when the panel is worth having.
+ */
+function openSettings() {
+  // Holding the shortcut down auto-repeats keyDown, and popup() on an open menu stacks
+  // another one on top. One menu at a time; the popup callback is what reopens the door.
+  if (state.settingsOpen) return false;
+  try {
+    const win = state.win;
+    // A popup anchored to a hidden window has nowhere to appear (tray-only mode, after the
+    // window was closed), which misbehaves on Windows. So only parent it while it is really
+    // visible, and say so rather than trusting it to work.
+    const visible = !!(win && !win.isDestroyed() && win.isVisible());
+    if (win && !visible) debug('settings menu opened without a visible parent window');
+
+    const status = state.watchdog ? state.watchdog.snapshot() : { status: 'UNKNOWN' };
+    const items = buildSettingsTemplate({
+      prefs: state.prefs.get(),
+      header: [`Status: ${labelOf(status).long}`, counters(status)],
+      apply: (patch) => applyPatch(patch),
+      reset: resetAllPrefs,
+      // main.js is the only place that can hand Electron's Menu in; the builder itself
+      // touches no Electron API, so it is testable under bare `node --test`.
+      Menu,
+    });
+    const menu = Menu.buildFromTemplate(items);
+    state.settingsOpen = true;
+    menu.popup(visible ? { window: win, callback: closed } : { callback: closed });
+    return true;
+  } catch (e) {
+    state.settingsOpen = false;
+    warn(`native settings menu failed (${(e && e.message) || e}); falling back to the page's panel`);
+    if (!requestPageOptions()) {
+      // Neither surface. Say so on screen rather than leaving the user hunting.
+      guard('settings unavailable dialog', () => dialog.showMessageBox({
+        type: 'warning',
+        title: 'Whatsapp Incognito — settings unavailable',
+        message: 'The settings menu could not be opened.',
+        detail: 'Neither the native menu nor the in-page options panel could be shown.\n\n' +
+                'Options can still be changed by editing prefs.json in the app\'s user data folder.',
+        buttons: ['OK'],
+        noLink: true,
+      }))();
+    }
+    return false;
+  }
+}
+
+function closed() { state.settingsOpen = false; }
+
+/**
+ * Ctrl/Cmd+, on every platform.
+ *
+ * `before-input-event` rather than a menu-bar accelerator because the app deliberately has
+ * no menu bar on Windows and Linux (installMenu sets null there, so the default Electron
+ * menu cannot offer reload/devtools/quit and tear the session down by accident), and
+ * `autoHideMenuBar` means there is nothing to hang an accelerator off. This is the one
+ * keyboard route to settings that exists on all three platforms.
+ */
+function installSettingsShortcut(win) {
+  guard('settings shortcut', () => {
+    win.webContents.on('before-input-event', (_event, input) => {
+      guard('settings shortcut input', () => {
+        if (!input || input.type !== 'keyDown' || input.key !== ',') return;
+        const accel = process.platform === 'darwin' ? input.meta : input.control;
+        if (!accel || input.alt || input.shift) return;
+        input.preventDefault();      // do not also hand Ctrl+, to WhatsApp Web
+        openSettings();
+      })();
+    });
+  })();
 }
 
 // ---------------------------------------------------------------- autostart
@@ -1119,6 +1287,15 @@ function installIpc() {
     if (snapshot.event === 'hook-armed') {
       log(`WebSocket hook armed in the page world, generation ${snapshot.generation} ` +
           `(injection #${state.injections})`);
+    }
+    if (snapshot.event === 'options-panel') {
+      // The native settings menu failed and we fell back to the panel the page injects into
+      // WhatsApp's own menu bar. "Unavailable" means that anchor was not found — the panel is
+      // injected, not native, so it breaks when WhatsApp renames a class. Worth a real log
+      // line: it is the difference between "the fallback worked" and "there is no settings
+      // UI at all right now", and only this channel can tell them apart.
+      if (snapshot.opened) log('settings: using the in-page options panel (native menu unavailable)');
+      else warn('settings: the in-page options panel is unavailable too — no settings UI is showing');
     }
     if (snapshot.state) state.page = { ...snapshot.state, at: Date.now() };
     if (state.watchdog) state.watchdog.ingest(snapshot);
@@ -1361,12 +1538,8 @@ function startTray() {
     getStatus: () => (state.watchdog ? state.watchdog.snapshot() : { status: 'UNKNOWN' }),
     getPrefs: () => state.prefs.get(),
     setPref: (patch) => { applyPatch(patch); return state.prefs.get(); },
-    resetPrefs: () => guard('tray reset', () => {
-      const prefs = state.prefs.reset();
-      sendPrefs(prefs);
-      if (state.watchdog) state.watchdog.kick('prefs-reset');
-      return prefs;
-    }, state.prefs.get())(),
+    resetPrefs: resetAllPrefs,
+    openSettings,
     quit: () => { state.quitting = true; app.quit(); },
   });
   if (!state.tray) {
@@ -1451,7 +1624,14 @@ function boot() {
     state.artifacts = build.artifacts;
 
     guard('PrefsStore', () => {
-      state.prefs = new PrefsStore(app.getPath('userData'), { ...build.meta.prefs, ...SHELL_DEFAULTS });
+      // The numeric bounds come from the settings table, so the range a value is validated
+      // against and the set of values the menu offers cannot drift apart.
+      state.prefs = new PrefsStore(
+        app.getPath('userData'),
+        { ...build.meta.prefs, ...SHELL_DEFAULTS },
+        undefined,
+        numericRanges(),
+      );
       log(`prefs loaded (${Object.keys(state.prefs.get()).length} keys) from userData`);
     })();
     if (!state.prefs) {
@@ -1529,6 +1709,15 @@ function boot() {
 if (!app.requestSingleInstanceLock()) {
   // A second launch would create a second window on the same persistent session and a
   // second injection of ws_hook into the same renderer profile. Focus the first instead.
+  //
+  // The --dev case is called out because it fails in a way that looks like the dev loop is
+  // broken: the instance that holds the lock was started WITHOUT --dev, so it never loaded
+  // app/electron/dev-bridge.js and never polls the dev server. Every save would rebuild and
+  // inject into a window that is not listening, and the only symptom is nothing happening.
+  if (process.argv.includes('--dev')) {
+    warn('another instance is already running and it was NOT started with --dev, so it will '
+       + 'not pick up dev rebuilds. Quit it from the tray, then run `pnpm dev` again.');
+  }
   log('another instance is already running; this one is exiting');
   app.exit(0);
 } else {

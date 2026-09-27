@@ -91,6 +91,18 @@ test('safetyDelay is clamped to the 0-30 range ui.js offers', () => {
   assert.strictEqual(coerce(0, 'abc', 4), undefined, 'garbage is rejected');
 });
 
+test('a caller-supplied range replaces the default bound', () => {
+  // The range comes from app/electron/settings-menu.js, so the bound a value is validated
+  // against and the set of values the settings menu offers are one declaration. These cases
+  // fail if the store ignores the argument and falls back to its built-in 0-30.
+  const range = { min: 0, max: 120 };
+  assert.strictEqual(coerce(0, 60, 0, range), 60, 'a value the default bound would reject is allowed');
+  assert.strictEqual(coerce(0, 120, 0, range), 120, 'the supplied upper bound is inclusive');
+  assert.strictEqual(coerce(0, 121, 5, range), 5, 'past the supplied bound keeps the current value');
+  assert.strictEqual(coerce(0, 60, 0, { min: 0, max: 30 }), 0, 'a narrower supplied bound still wins');
+  assert.strictEqual(coerce(0, 60, 0, {}), 0, 'an empty range falls back rather than accepting everything');
+});
+
 test('boolean coercion rejects non-boolean junk', () => {
   assert.strictEqual(coerce(true, 'true', true), true);
   assert.strictEqual(coerce(false, 'false', false), false);

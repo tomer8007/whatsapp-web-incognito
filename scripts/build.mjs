@@ -23,6 +23,7 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MAIN_CRITICAL, MAIN_REST, DEFERRED, UI, CSS, IMAGE_ASSETS } from './bundle-defs.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
@@ -31,57 +32,6 @@ const EBUILD = join(ROOT, 'app', '.build');
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(`--${n}`);
 const opt = (n) => argv.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
-
-// ---------------------------------------------------------------- bundle definition
-// Load order mirrors core_injection.js exactly. If upstream changes the chain, the
-// missing-file assertion below fails loudly rather than emitting a broken bundle.
-//
-// MAIN_CRITICAL is the only file with a hard deadline: it must replace the WebSocket
-// constructor before WhatsApp opens its first socket (C1). Everything else in the main
-// group is first touched when a message arrives, which is what makes §8.1 possible.
-const MAIN_CRITICAL = ['core/ws_hook.js'];
-
-const MAIN_REST = [
-  'lib/pbf.3.0.5.min.js',
-  'lib/libsignal-protocol-ee5b8ba.min.js',
-  'lib/pako.js',
-  'core/parsing/binary_reader.js',
-  'core/parsing/binary_writer.js',
-  'core/parsing/node_reader_writer.js',
-  'core/parsing/protobuf/WhisperTextProtocol.js',
-  'core/parsing/protobuf/WAProto.js',
-  'core/utils.js',
-  'core/ui_class_names.js',
-  'core/injected_ui.js',
-  'core/multi_device.js',
-  'core/node_handler.js',
-  'core/interception.js',
-];
-
-// moduleRaid scans WhatsApp's webpack module registry, which does not exist until the
-// page bundle has run. Upstream defers it with setTimeout(10) for the same reason.
-const DEFERRED = ['lib/moduleraid.js'];
-
-// Replaces the two document_idle content scripts. ui_class_names is repeated on purpose:
-// it is idempotent (var + IIFE) and this keeps the group mirroring the manifest.
-const UI = [
-  'core/ui_class_names.js',
-  'core/ui.js',
-  'core/status_download.js',
-  'lib/drop.js',
-  'lib/sweetalert.min.js',
-];
-
-const CSS = ['styles.css', 'lib/css/drop-theme-basic.css'];
-
-// The 4 getURL images, plus incognito_gray.svg which styles.css references.
-const IMAGE_ASSETS = [
-  'images/download.svg',
-  'images/incognito_gray_24_hollow_9.svg',
-  'images/computer.svg',
-  'images/phone.svg',
-  'images/incognito_gray.svg',
-];
 
 // ---------------------------------------------------------------- prefs
 // The single source of truth for option defaults is background.js's getOptions
@@ -171,6 +121,7 @@ function collectFiles(manifest) {
   // The injection chain lives in web_accessible_resources today; assert it explicitly
   // so a manifest change upstream cannot silently drop part of the bundle.
   for (const f of [...MAIN_CRITICAL, ...MAIN_REST, ...DEFERRED, ...UI, ...CSS]) refs.add(f);
+
 
   return [...refs].filter((f) => existsSync(join(ROOT, f))).sort();
 }

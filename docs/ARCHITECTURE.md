@@ -63,13 +63,31 @@ process on the critical path of the one file with a hard deadline. Trading a rea
 for defence-in-depth on our own preload is a bad trade.
 
 This also settles the Chromium-level sandbox. A port from another Electron app brought
-`ELECTRON_DISABLE_SANDBOX=1` along with it, on the theory that the app needed it. It does
-not: the per-renderer `sandbox: false` above is the decision that matters, and the setting
-being discussed disables the *zygote* sandbox process-wide — a second, larger hole for no
-gain here. Verified by removing it and relaunching on GNOME 46 / Wayland: the engine check
-passes, the WebSocket hook arms, and the watchdog reports `PROTECTED`. `scripts/doctor.cjs`
-still passes `--no-sandbox` on its own command line, which is a deliberate, local choice
-for a diagnostic run and not app state.
+`ELECTRON_DISABLE_SANDBOX=1` along with it, and this app now does the equivalent itself:
+`app/electron/main.js` appends `--no-sandbox` on Linux, **unconditionally**. The
+justification changed. The port's reasoning was that this app runs
+`webPreferences.sandbox: true` and has to load its hook bundle from disk, which is only half
+true — the renderer `sandbox: false` above is the part that actually forced it. What decided
+it is the environment. Chromium requires `chrome-sandbox` to be root-owned with mode `4755`,
+an `npm`/`pnpm` install never produces that, and where the unprivileged-namespace fallback is
+*also* unavailable — a container, a restricted VM, a seccomp/AppArmor profile blocking
+`unshare(CLONE_NEWUSER)` — Chromium aborts with
+
+```
+[FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc] The SUID sandbox helper binary
+was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now.
+```
+
+before a window exists. There is no settings screen to reach and no diagnostic to read. The
+only real alternative is a `sudo chown`/`chmod` of a file inside `node_modules`, which an app
+cannot ask of its user at every launch and which a reinstall undoes.
+
+**What that costs:** the zygote boundary is off process-wide on Linux, so utility processes
+are not contained. The two narrower boundaries are untouched — the per-renderer
+`sandbox: false`, which covers the one renderer that loads our bundles, and the navigation
+lock, which confines the app to `web.whatsapp.com`. Windows and macOS are unaffected: the
+switch is Linux-only. `scripts/doctor.cjs` passes `--no-sandbox` on its own command line,
+which is a deliberate, local choice for a standalone diagnostic run and not app state.
 
 ### C3 — main and ui stay separate scripts
 
@@ -164,7 +182,58 @@ after an upgrade, looks like "the fix did nothing".
 
 ---
 
-## 4. Background operation
+## 4. Settings
+
+### 4.1 One list, two surfaces
+
+`app/electron/settings-menu.js` holds every setting as a descriptor: a key, a label, a group
+and — for the one integer — the values worth offering. It holds **no defaults**, because
+defaults are parsed out of `background.js` at build time (§1) and a `default:` field here
+would be a second source of truth nothing keeps in sync.
+
+The desktop app renders that table as a native `Menu` — from the tray, from `Ctrl`/`Cmd` + `,`
+(`before-input-event`, because Windows and Linux deliberately have no menu bar), and from the
+macOS Settings menu. `safetyDelay` is a radio submenu rather than a number field: the page only
+ever accepted whole seconds 1–30, and radio choices cannot be mis-entered. Its validation
+bound is derived from the same `choices` array, so the values offered and the values accepted
+cannot drift.
+
+The extension still uses the panel injected into WhatsApp's own menu bar, because a browser
+extension has no native menu to offer. That panel has no tests, so `A-panelkeys` guards the one
+thing that breaks silently there: a key `background.js` does not know is ignored, and the
+checkbox appears to work while nothing is saved.
+
+### 4.2 A pref must take effect, not just persist
+
+The globals that decide whether a receipt is blocked — `readConfirmationsHookEnabled`,
+`saveDeletedMsgsHookEnabled`, `showDeviceTypesEnabled`, `autoReceiptOnReplay`,
+`allowStatusDownload` — are read by `core/node_handler.js` on every decoded stanza, and the
+only thing that ever mutates them is `core/injected_ui.js`'s `onOptionsUpdate` listener.
+
+So `shim.js`'s `applyPrefs` **dispatches that event** when a change arrives from the host. It
+did not: a tray toggle updated the shim's own `PREFS` and stopped, which left the checkbox
+saved, the tray agreeing with itself, and the page enforcing the old value until the next
+document load. The `fromPage` flag suppresses the dispatch for the page's own round-trip, since
+`core/ui.js`'s tick handlers already dispatch right after calling `setOptions`.
+
+`A-liveprefs` evaluates the real emitted shim and watches the event, because a grep for the
+event name cannot tell a dispatch that happens from one that is merely mentioned.
+
+### 4.3 The fallback, and why there is one
+
+The native menu is better in every way that matters — it cannot break when WhatsApp renames a
+class, and it needs no injected HTML. But "you cannot change your settings" is worse than the
+old panel, so if building or showing the menu throws, `openSettings` asks the page to open the
+panel it injects (`__WAI__.openOptions` → `onOpenIncognitoOptions` → `Drop.open()`), and if
+that is unavailable too, it says so in a dialog instead of failing silently.
+
+The panel reports honestly rather than optimistically: it is anchored to an element inside
+WhatsApp's menu bar, so when the anchor is missing the answer is `false` — unavailable, not
+closed.
+
+---
+
+## 5. Background operation
 
 **Hot, never suspend:** the WebSocket, `wsHook`, and the per-frame
 decrypt → decode → intercept → re-encrypt path. That path *is* read-receipt blocking. A
@@ -187,33 +256,59 @@ document, so it is constant while healthy; testing "unchanged" would report
 
 ---
 
-## 5. Commands
+## 6. Commands
 
 | | |
 |---|---|
-| `pnpm one` | kill stale → env → build → 22 assertions → 46 tests → **real app** → verdict |
-| `pnpm one:ci` | same without the real-window check |
+| `pnpm one` | kill stale → env → build → 27 assertions → 112 tests → **real app** → verdict |
+| `pnpm check` | same without the real-window check — this is what CI runs |
 | `pnpm kill` | stop stale instances (`--dry`, `--all` also stops watchers) |
 | `pnpm doctor` | bare-window probe: is WhatsApp reachable, and which engine is installed |
-| `pnpm dev` | watcher (terminal 1); `pnpm start:dev` in terminal 2 |
-| `pnpm check` | everything except the real-window check |
+| `pnpm dev` | the whole loop: build → verify → watch → launch the app pointed at the dev server |
+| `pnpm start` | bring the app back after quitting it; the watcher keeps running |
 | `pnpm build:ext` | stage the Chrome and Firefox extensions |
+
+Everything else is either a single-target shortcut (`build:chrome`, `build:firefox`,
+`build:electron`, `package:chrome`, `package:firefox`) or a raw flag away: `dev.mjs --once`
+for a single build-and-verify pass with no watcher, and `build.mjs --clean`. Those two are
+deliberately not npm scripts — an entry nobody references is an entry nobody finds, and both
+files document the flag in their own header.
+
+Local desktop packaging is `pnpm exec electron-builder`, which is what the release workflow
+runs. It was never an npm script, because a second packaging path that nothing exercises is
+one that quietly rots.
 
 Dev reload has two genuinely different scopes, and the distinction is tested: edits under
 `core/` or `lib/` re-inject the live page (~170 ms, window/socket/login survive); edits to
 `app/electron/*.js` relaunch, because a preload cannot be swapped into a live renderer and
 pretending otherwise leaves a torn context.
 
+`pnpm dev` used to be two terminals — the watcher in one, `pnpm start` in the other. The
+split itself is deliberate and still holds: the dev server knows nothing about the app, the
+app polls it, so files can be edited with or without a window open. What changed is that
+`dev` now spawns the app itself, so the common case is one command. `--no-launch` is a flag,
+not a script, for the watch-only case.
+
 ---
 
-## 6. Known limitations
+## 7. Known limitations
 
 - **Tray requires a GNOME AppIndicator extension.** GNOME 42+ removed the legacy status
   area, so a correct `Tray` has nowhere to render without it. Measured on this machine:
   `Tray.setMenu` no longer exists in Electron 44 (use `setContextMenu`), and
   `nativeImage.createFromPath` returns an **empty** image for every SVG in `images/` while
   all four PNGs load. Without a tray, closing the window quits rather than hides, since
-  there would be no way to restore it.
+  there would be no way to restore it. The settings menu survives this: `Ctrl`/`Cmd` + `,`
+  does not go through the tray, and it falls back to the in-page panel (§4.3).
+- **On Linux the zygote sandbox is off** (`--no-sandbox`, passed by `main.js`; see §2 for why
+  and what it costs). There is no runtime toggle and no alternative path: the only other fix
+  was a `sudo chown`/`chmod` inside `node_modules`, so it was dropped rather than offered.
+  Linux is also where this app is developed, which is how the failure was found at all.
+- **The extension's settings panel is untested and breakable.** It is HTML injected into
+  WhatsApp's DOM, so a WhatsApp release that renames the menu item's class makes it vanish —
+  which is the "temporarily broken" dialog in `core/ui.js`. The desktop app no longer depends
+  on it; the extension still does, and `A-panelkeys` only guards the option keys, not the
+  anchor. A `chrome.options_page` would remove the dependency and is the obvious next step.
 - **The UA rewrite is a browser-gate bypass, not anonymity.** It changes one signal.
   Electron remains distinguishable by renderer strings, feature quirks and network
   fingerprint. Overridable with `WAI_USER_AGENT`.
@@ -228,4 +323,6 @@ pretending otherwise leaves a torn context.
   loads; it does not prove a `read` stanza is actually blocked. That needs a live
   two-account run.
 - **Install size is ~150–200 MB.** "Light" here means one window, one process tree and no
-  browser chrome — not bytes.
+  browser chrome — not bytes. Settings follow the same rule: a native `Menu`, not a second
+  window and not a bundled settings page, so the feature costs no new dependency and no new
+  window.

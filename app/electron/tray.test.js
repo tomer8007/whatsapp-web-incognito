@@ -20,6 +20,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 
 const { createTray, createBadgedIcon, rgbaToPNG } = require('./tray');
+const { SETTINGS } = require('./settings-menu.js');
 
 // ---------------------------------------------------------------- fakes
 
@@ -85,11 +86,65 @@ function baseOpts(extra = {}) {
     getWindow: () => ({ isDestroyed: () => false, isMinimized: () => false, restore() {}, show() {}, focus() {} }),
     getStatus: () => ({ status: 'PROTECTED', framesIn: 3, framesOut: 9, blocked: 2, heldChats: 0, sinceLastFrame: 1200 }),
     setPref: () => {},
-    getPrefs: () => ({ readConfirmationsHook: true }),
+    // Shaped like the real object main.js hands the tray: the interception keys plus the
+    // shell-only autostart. A partial fixture would silently stop exercising the autostart
+    // row, which is now filtered through the settings table like every other row.
+    getPrefs: () => ({ readConfirmationsHook: true, autostart: false }),
     quit: () => {},
     nativeImage: fakeNativeImage,
   }, extra);
 }
+
+test('the tray offers the full settings menu, and only when one was provided', () => {
+  // The tray is the discoverable route to the eight settings it does not show as one-click
+  // rows. Asserted at the tray's own boundary because the failure is silent in both
+  // directions: a missing row leaves the user with only a keyboard shortcut they do not know,
+  // and a row wired to nothing looks present but does nothing when clicked.
+  const withSettings = (openSettings) => {
+    const { FakeTray, calls } = makeTrayCtor();
+    createTray(baseOpts({
+      openSettings,
+      Menu: { buildFromTemplate: (t) => ({ templates: t }) },
+      Tray: FakeTray,
+    }));
+    return calls.contextMenus[0];
+  };
+
+  const menu = withSettings(() => {});
+  const labels = labelsOf(menu);
+  assert.ok(labels.includes('Settings…'), `no Settings row in: ${labels.join(' | ')}`);
+  // And it must sit below the quick toggles, which is the order the menu reads in.
+  assert.ok(labels.indexOf('Settings…') > labels.indexOf('Block read receipts'),
+    'Settings must come after the quick toggles');
+
+  // Clicking it must call through, not swallow.
+  let opened = 0;
+  const clickable = withSettings(() => { opened += 1; });
+  clickable.templates.find((t) => t.label === 'Settings…').click();
+  assert.strictEqual(opened, 1, 'the Settings row did not open the menu');
+
+  // A tray built without the capability must not show a dead row.
+  assert.ok(!labelsOf(withSettings(undefined)).includes('Settings…'),
+    'a Settings row appeared with no openSettings to call');
+});
+
+test('the tray autostart row renders, and says what the settings table calls it', () => {
+  // Autostart is shell-only, so it is in main.js's SHELL_DEFAULTS rather than the derived
+  // defaults — and its label is read from the settings table like every other row. Both
+  // facts are silent when broken: no row, or a row whose text disagrees with the menu the
+  // same setting also appears in.
+  const { FakeTray, calls } = makeTrayCtor();
+  createTray(baseOpts({ Menu: { buildFromTemplate: (t) => ({ templates: t }) }, Tray: FakeTray }));
+  const labels = labelsOf(calls.contextMenus[0]);
+  const row = calls.contextMenus[0].templates.find((t) => t.label === 'Start automatically on login');
+  assert.ok(row, `no autostart row in: ${labels.join(' | ')}`);
+  assert.strictEqual(row.type, 'checkbox');
+  assert.strictEqual(row.checked, false, 'autostart:false must render unchecked');
+
+  // Same string the settings menu uses, from the one table.
+  assert.ok(SETTINGS.some((s) => s.key === 'autostart' && s.label === row.label),
+    `the tray and the settings table disagree about the autostart label: "${row.label}"`);
+});
 
 test('update() installs a context menu on create', () => {
   const { FakeTray, calls } = makeTrayCtor();

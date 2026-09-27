@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import vm from 'node:vm';
+import { MAIN_CRITICAL, MAIN_REST, DEFERRED, UI, CSS, IMAGE_ASSETS } from './bundle-defs.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(ROOT, 'dist');
@@ -42,19 +43,8 @@ const readSrc = (p) => {
 
 // ---------------------------------------------------------------- source-level
 
-const MAIN_GROUP = [
-  'core/ws_hook.js',
-  'lib/pbf.3.0.5.min.js', 'lib/libsignal-protocol-ee5b8ba.min.js', 'lib/pako.js',
-  'core/parsing/binary_reader.js', 'core/parsing/binary_writer.js',
-  'core/parsing/node_reader_writer.js',
-  'core/parsing/protobuf/WhisperTextProtocol.js', 'core/parsing/protobuf/WAProto.js',
-  'core/utils.js', 'core/ui_class_names.js', 'core/injected_ui.js',
-  'core/multi_device.js', 'core/node_handler.js', 'core/interception.js',
-];
-const UI_GROUP = [
-  'core/ui_class_names.js', 'core/ui.js', 'core/status_download.js',
-  'lib/drop.js', 'lib/sweetalert.min.js',
-];
+const MAIN_GROUP = [...MAIN_CRITICAL, ...MAIN_REST];
+const UI_GROUP = UI;
 
 /** Top-level (column-0) declarations, which is what actually shares a scope. */
 function topLevelDecls(files) {
@@ -165,7 +155,7 @@ check('P5', 'isIncoming is never assigned in expression position', () => {
 // A10 — a BOM at a concatenation seam is not something to rely on.
 check('A10', 'no UTF-8 BOM in any bundled source file', () => {
   const bad = [];
-  for (const f of [...new Set([...MAIN_GROUP, ...UI_GROUP, 'styles.css', 'lib/css/drop-theme-basic.css'])]) {
+  for (const f of [...new Set([...MAIN_GROUP, ...UI_GROUP, ...CSS])]) {
     const fd = readFileSync(join(ROOT, f));
     if (fd[0] === 0xef && fd[1] === 0xbb && fd[2] === 0xbf) bad.push(f);
   }
@@ -174,8 +164,7 @@ check('A10', 'no UTF-8 BOM in any bundled source file', () => {
 
 // A3 — an upstream release must not be able to silently drop part of the chain.
 check('A3', 'every file in the injection chain exists', () => {
-  const all = [...new Set([...MAIN_GROUP, ...UI_GROUP, 'lib/moduleraid.js',
-    'styles.css', 'lib/css/drop-theme-basic.css', 'background.js'])];
+  const all = [...new Set([...MAIN_GROUP, ...UI_GROUP, ...DEFERRED, ...CSS, 'background.js'])];
   const missing = all.filter((f) => !existsSync(join(ROOT, f)));
   return missing.length ? `missing: ${missing.join(', ')}` : true;
 });
@@ -281,10 +270,7 @@ check('A5', 'all outputs report the same version', () => {
 check('A6', 'all getURL image assets are inlined as data: URIs', () => {
   if (!haveBuild) return 'no build output';
   const assets = readJSON(join(EBUILD, 'assets.json'));
-  const required = [
-    'images/download.svg', 'images/incognito_gray_24_hollow_9.svg',
-    'images/computer.svg', 'images/phone.svg', 'images/incognito_gray.svg',
-  ];
+  const required = IMAGE_ASSETS;
   const missing = required.filter((r) => !assets[r]);
   if (missing.length) return `missing: ${missing.join(', ')}`;
   const notData = required.filter((r) => !assets[r].startsWith('data:'));
@@ -462,6 +448,112 @@ check('A-prefs2', 'safetyDelay default is within the 0-30 range ui.js offers', (
   const d = readJSON(join(EBUILD, 'meta.json')).prefs;
   if (typeof d.safetyDelay !== 'number') return `safetyDelay is ${typeof d.safetyDelay}, expected a number`;
   return (d.safetyDelay >= 0 && d.safetyDelay <= 30) ? true : `safetyDelay=${d.safetyDelay} is outside 0-30`;
+});
+
+// A-liveprefs — a pref changed from the tray or the native settings menu must take EFFECT,
+// not merely be written to prefs.json.
+//
+// This has no other owner. The globals that decide whether a receipt is blocked
+// (readConfirmationsHookEnabled, saveDeletedMsgsHookEnabled, showDeviceTypesEnabled,
+// autoReceiptOnReplay, allowStatusDownload) are only ever mutated by core/injected_ui.js's
+// `onOptionsUpdate` listener, so the shim has to dispatch that event when a change arrives
+// from the host. It did not: the shim updated its own PREFS and stopped, which left the
+// checkbox saved, the tray agreeing with itself, and the page enforcing the old value until
+// the next document load.
+//
+// Asserted by evaluating the REAL emitted shim and watching the DOM event, not by grepping
+// for the event name — a grep cannot tell a dispatch that happens from one that is merely
+// mentioned, and this exact failure was a present-but-never-called call.
+check('A-liveprefs', 'a pref pushed from the host reaches the page as an options-update event', () => {
+  const out = join(EBUILD, 'shim.js');
+  if (!existsSync(out)) return 'shim.js not emitted (run `npm run build:electron`)';
+
+  const dispatched = [];
+  const sandbox = {
+    console: { log() {}, warn() {}, error() {} },
+    setTimeout() {}, clearTimeout() {}, setInterval() {}, clearInterval() {},
+    document: {
+      // The shim only touches the document for the failure banner and these two events.
+      createElement: () => ({
+        setAttribute() {}, appendChild() {}, remove() {}, style: {},
+        set textContent(v) {}, get textContent() { return ''; },
+      }),
+      getElementById: () => null, getElementsByTagName: () => [],
+      body: null, documentElement: null, readyState: 'complete',
+      addEventListener() {}, removeEventListener() {},
+      dispatchEvent(e) { dispatched.push(e); return true; },
+    },
+    navigator: { userAgent: 'test' },
+    location: { href: 'https://web.whatsapp.com/', protocol: 'https:' },
+    CustomEvent: function (type, init) { this.type = type; this.detail = init && init.detail; },
+    JSON, Object, Math, Date, RegExp, Error, TypeError, Array, String, Number, Boolean,
+    parseInt, isNaN,
+  };
+  sandbox.window = sandbox; sandbox.self = sandbox; sandbox.globalThis = sandbox;
+
+  let wai;
+  try {
+    vm.createContext(sandbox);
+    vm.runInContext(readSrc(out), sandbox, { filename: 'shim.js' });
+    wai = sandbox.__WAI__;
+  } catch (e) {
+    return `shim.js threw while evaluating: ${e.message}`;
+  }
+  if (!wai || typeof wai.setPrefs !== 'function') return 'window.__WAI__.setPrefs is missing';
+
+  // 1. The host path (the preload's wai:prefs push) must dispatch, and must say what changed.
+  dispatched.length = 0;
+  wai.setPrefs({ readConfirmationsHook: false });
+  const update = dispatched.find((e) => e.type === 'onOptionsUpdate');
+  if (!update) return 'setPrefs() dispatched no onOptionsUpdate event';
+  let detail;
+  try { detail = JSON.parse(update.detail); } catch (e) { return `event detail is not JSON: ${update.detail}`; }
+  if (!('readConfirmationsHook' in detail) || detail.readConfirmationsHook !== false) {
+    return `the event does not carry the new value: ${update.detail}`;
+  }
+  if (wai.getPrefs().readConfirmationsHook !== false) return 'setPrefs() did not store the value';
+
+  // 2. The page's own round-trip must NOT dispatch again: core/ui.js's tick handlers already
+  //    dispatch after calling setOptions, so core/injected_ui.js's listener would run twice.
+  dispatched.length = 0;
+  sandbox.chrome.runtime.sendMessage({ name: 'setOptions', typingUpdatesHook: true });
+  if (dispatched.some((e) => e.type === 'onOptionsUpdate')) {
+    return 'the page round-trip dispatched a duplicate onOptionsUpdate';
+  }
+
+  // 3. The fallback entry point must exist and report honestly when the panel is absent.
+  if (typeof wai.openOptions !== 'function') return 'window.__WAI__.openOptions is missing';
+  dispatched.length = 0;
+  if (wai.openOptions() !== false) return 'openOptions() claimed a panel opened when none answered';
+  if (!dispatched.some((e) => e.type === 'onOpenIncognitoOptions')) {
+    return 'openOptions() did not ask the page for its panel';
+  }
+
+  return true;
+});
+
+// A-panelkeys — the extension's settings panel is now the ONLY settings surface in the
+// Chrome/Firefox builds (the native menu is Electron-only), and those builds have no unit
+// tests at all.
+//
+// The panel talks to background.js by option key, in both directions: `setOptions` writes
+// them, `getOptions` reads them back. background.js ignores any key it does not know, so a
+// rename there is silent in both builds — the checkbox appears to work and nothing is saved.
+// This is the cheapest independent guard for that cross-file contract: it fails when the key
+// name changes and survives an identifier-only refactor.
+check('A-panelkeys', 'every option key the extension panel uses is one background.js knows', () => {
+  const bg = readSrc(join(ROOT, 'background.js'));
+  const listMatch = bg.slice(bg.indexOf('getOptions')).match(/storage\.local\.get\(\s*\[([^\]]*)\]/);
+  if (!listMatch) return 'could not read the key list from background.js';
+  const known = new Set(listMatch[1].split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean));
+
+  const panel = readSrc(join(ROOT, 'core', 'ui.js'));
+  const written = [...panel.matchAll(/name:\s*["']setOptions["']\s*,\s*([A-Za-z0-9_]+)\s*:/g)].map((m) => m[1]);
+  const read = [...panel.matchAll(/options\.([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+  if (!written.length) return 'found no setOptions keys in the panel — the pattern is stale';
+
+  const unknown = [...new Set([...written, ...read])].filter((k) => !known.has(k));
+  return unknown.length ? `the panel uses keys background.js does not know: ${unknown.join(', ')}` : true;
 });
 
 // A18/A19/A20 — the packaged extension.
