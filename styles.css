@@ -214,7 +214,7 @@
 
 .incognito-options-item:hover
 { 
-    background-color: var(--dropdown-background-hover) !important;
+    background-color: var(--WDS-surface-emphasized) !important;
 }
 
 .incognito-options-description
