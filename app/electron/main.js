@@ -22,8 +22,22 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const {
-  app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeImage,
+  app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeImage, nativeTheme, desktopCapturer, screen,
 } = require('electron');
+
+// ---------------------------------------------------------------- Wayland (must be before app loads)
+// Ported from WhatsLNX, minus its sandbox handling. WhatsLNX needs
+// ELECTRON_DISABLE_SANDBOX=1 because it runs webPreferences.sandbox: true and has to load
+// its hook bundle from disk; this app already sets sandbox: false deliberately (C2 in
+// docs/ARCHITECTURE.md — a sandboxed preload cannot read app/.build/*), so the Chromium
+// sandbox buys nothing here and only costs a security boundary. Verified launching on
+// GNOME 46 / Wayland with this removed. The three switches are kept: without
+// ozone-platform-hint=auto Electron picks XWayland on a Wayland session, and
+// WaylandWindowDecorations is what gives the window real client-side decorations.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
+  app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations,WebRTCPipeWireCapturer');
+}
 
 // stdout/stderr are closed when the app is launched from a dock/dash/desktop file
 // (no terminal) or from an AppImage with its output pipes shut. A bare
@@ -54,6 +68,13 @@ const desktopIntegration = require('./desktop-integration.js');
 
 // Set before `ready` so the userData path (and therefore prefs.json) is stable and does
 // not depend on how the app was launched (`electron .` vs an installed shortcut).
+//
+// This is the ONE place the name is deliberately kept without a space, and it is not a
+// branding choice: setName is what names the userData directory, so this string is a
+// directory key. It is what ~/.config/WAIncognito/prefs.json is called today, and
+// changing it would orphan every existing user's saved preferences — interception
+// settings, safety delay and all — with no migration to recover them. The user-visible
+// name is "Whatsapp Incognito"; this is the folder it lands in.
 app.setName('WAIncognito');
 
 const BUILD_DIR = path.join(__dirname, '..', '.build');
@@ -105,6 +126,91 @@ const SHELL_DEFAULTS = Object.freeze({
   // file fallback on Linux.
   autostart: false,
 });
+
+// ---------------------------------------------------------------- window state persistence (task 10)
+// Saved separately from PrefsStore (which owns interception prefs) to keep concerns clean.
+// Falls back to defaults on any read error so a corrupt file never blocks startup.
+const WIN_STATE_DEFAULTS = { width: 1280, height: 880, x: undefined, y: undefined, maximized: false };
+
+function loadWindowState() {
+  try {
+    const file = require('node:path').join(app.getPath('userData'), 'window-state.json');
+    const raw = require('node:fs').readFileSync(file, 'utf8');
+    const s = JSON.parse(raw);
+    return {
+      width:     (typeof s.width === 'number' && s.width >= 400) ? s.width : WIN_STATE_DEFAULTS.width,
+      height:    (typeof s.height === 'number' && s.height >= 300) ? s.height : WIN_STATE_DEFAULTS.height,
+      x:         (typeof s.x === 'number') ? s.x : undefined,
+      y:         (typeof s.y === 'number') ? s.y : undefined,
+      maximized: s.maximized === true,
+    };
+  } catch (e) { return { ...WIN_STATE_DEFAULTS }; }
+}
+
+function saveWindowState(win) {
+  try {
+    if (!win || win.isDestroyed()) return;
+    const bounds = win.getBounds();
+    const state = {
+      width:     win.isMaximized() ? WIN_STATE_DEFAULTS.width : bounds.width,
+      height:    win.isMaximized() ? WIN_STATE_DEFAULTS.height : bounds.height,
+      x:         win.isMaximized() ? undefined : bounds.x,
+      y:         win.isMaximized() ? undefined : bounds.y,
+      maximized: win.isMaximized(),
+    };
+    const file = require('node:path').join(app.getPath('userData'), 'window-state.json');
+    require('node:fs').writeFileSync(file, JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) { debug('saveWindowState failed:', e && e.message); }
+}
+
+// ---------------------------------------------------------------- window position clamping (task 8, from WhatsLNX)
+// Prevent a window from opening off-screen after a monitor is disconnected.
+function clampWindowPosition(x, y, width, height) {
+  if (x == null || y == null) return { x: undefined, y: undefined };
+  const displays = screen.getAllDisplays();
+  const MARGIN = 50;
+  const visible = displays.some((d) => {
+    const wa = d.workArea;
+    return x >= wa.x - MARGIN && x < wa.x + wa.width && y >= wa.y - MARGIN && y < wa.y + wa.height;
+  });
+  if (visible) return { x, y };
+  const primary = screen.getPrimaryDisplay().workArea;
+  return { x: primary.x + 50, y: primary.y + 50 };
+}
+
+// ---------------------------------------------------------------- deep link handler (task 7, from WhatsLNX)
+// The deep link parser lives in its own module so it can be unit tested — it is the only
+// thing between an OS-supplied URI and a loadURL call. See deep-link.js.
+const { buildDeepLinkUrl, isDeepLink } = require('./deep-link');
+
+let _pendingDeepLink = null;
+
+function handleDeepLink(url) {
+  const target = buildDeepLinkUrl(url);
+  if (!target) return;
+  const win = state.win;
+  if (!win || win.isDestroyed()) { _pendingDeepLink = target; return; }
+  win.webContents.loadURL(target).catch((e) => warn('deep link load failed:', e && e.message));
+  showWindow(win);
+}
+
+/**
+ * Take the queued deep link, if any, and navigate to it. Clears the slot BEFORE awaiting
+ * the load so a second caller cannot pick up the same URL and navigate twice.
+ *
+ * There is exactly one caller — the window's ready-to-show. An earlier revision also
+ * consumed it from did-finish-load, and the two raced: whichever lost left the URL
+ * unconsumed until the window was already on screen, at which point the late consumer
+ * fired a second loadURL and the user watched the app visibly reload after it appeared.
+ * ready-to-show is the correct and only moment — showWindow has run by then, so the
+ * navigation happens behind a window that is already up.
+ */
+function consumePendingDeepLink(win) {
+  const target = _pendingDeepLink;
+  if (!target) return;
+  _pendingDeepLink = null;
+  win.webContents.loadURL(target).catch((e) => warn('deep link load failed:', e && e.message));
+}
 
 // C5: the session partition. Declared once because TWO places need it and they must not
 // drift — `session.fromPartition(PARTITION)` to configure the UA before the window exists,
@@ -303,8 +409,8 @@ function loadBuild() {
     error(detail.replace(/\n/g, '\n  '));
     dialog.showMessageBoxSync({
       type: 'error',
-      title: 'WAIncognito — build missing',
-      message: 'WAIncognito has not been built yet.',
+      title: 'Whatsapp Incognito — build missing',
+      message: 'Whatsapp Incognito has not been built yet.',
       detail: detail,
       buttons: ['Quit'],
       defaultId: 0,
@@ -322,7 +428,7 @@ function loadBuild() {
     } catch (e) {
       dialog.showMessageBoxSync({
         type: 'error',
-        title: 'WAIncognito — build unreadable',
+        title: 'Whatsapp Incognito — build unreadable',
         message: `Could not read ${name} from app/.build.`,
         detail: `${(e && e.message) || e}\n\nRun: npm run build:electron`,
         buttons: ['Quit'],
@@ -339,7 +445,7 @@ function loadBuild() {
   } catch (e) {
     dialog.showMessageBoxSync({
       type: 'error',
-      title: 'WAIncognito — build corrupt',
+      title: 'Whatsapp Incognito — build corrupt',
       message: 'app/.build/meta.json is not valid JSON.',
       detail: `${(e && e.message) || e}\n\nRun: npm run build:electron`,
       buttons: ['Quit'],
@@ -418,7 +524,7 @@ function notifyBackgroundOnce() {
     const { Notification } = require('electron');
     if (!Notification.isSupported()) return;
     const n = new Notification({
-      title: 'WAIncognito',
+      title: 'Whatsapp Incognito',
       body: 'Running in the background. Click the dock icon or launch the app again to reopen.',
     });
     n.on('click', () => {
@@ -430,14 +536,26 @@ function notifyBackgroundOnce() {
 }
 
 function createWindow(prefs) {
+  // Task 10: restore saved size/position; task 8: clamp to visible screen
+  const winState = loadWindowState();
+  const { x: cx, y: cy } = clampWindowPosition(winState.x, winState.y, winState.width, winState.height);
+
+  // Task 11: set background color to match OS theme so there's no white flash on launch
+  const isDark = nativeTheme.shouldUseDarkColors;
+  const bgColor = isDark ? '#111b21' : '#ffffff';
+
   const win = new BrowserWindow({
-    width: 1280,
-    height: 880,
+    width: winState.width,
+    height: winState.height,
+    x: cx,
+    y: cy,
     minWidth: 940,
     minHeight: 620,
     show: false,
-    backgroundColor: '#111b21',
-    title: 'WAIncognito',
+    backgroundColor: bgColor,
+    title: 'Whatsapp Incognito',
+    // Task 9: hide the menu bar by default (user can press Alt to reveal on Win/Linux)
+    autoHideMenuBar: true,
     icon: resolveWindowIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -497,12 +615,18 @@ function createWindow(prefs) {
   installNavigationLock(win);
   forwardFrameEvents(win);
 
-  win.once('ready-to-show', () => showWindow(win));
+  win.once('ready-to-show', () => {
+    if (winState.maximized) win.maximize();
+    showWindow(win);
+    consumePendingDeepLink(win);
+  });
 
   // §9.3 — hide, never destroy. Destroying the BrowserWindow tears down the renderer,
   // the injected hook and the socket, and forces a full reload + re-injection next time.
   // The window IS the session.
   win.on('close', (event) => {
+    // Task 10: always save position/size before hiding or closing
+    saveWindowState(win);
     if (state.quitting) return;
     if (state.tray) {
       event.preventDefault();
@@ -520,6 +644,16 @@ function createWindow(prefs) {
   });
 
   win.on('closed', () => { if (state.win === win) state.win = null; });
+
+  // No did-finish-load deep-link consumer. It duplicated ready-to-show's, and the two
+  // raced into a visible second load; consumePendingDeepLink has a single caller now.
+  // A deep link that arrives while the window is already up never queues at all —
+  // handleDeepLink sees a live window and navigates directly.
+
+  // Tray badge: keep the unread count in step with the page title's "(N)" prefix.
+  // The title is not used directly — the shared helper re-reads it so both this and the
+  // notification path derive the count exactly one way.
+  win.on('page-title-updated', () => updateBadgeFromTitle());
 
   const url = state.meta.whatsapp || 'https://web.whatsapp.com/';
   win.loadURL(url).catch((e) => {
@@ -751,6 +885,57 @@ function installSessionGuards(ses) {
       debug('session.serviceWorkers.unregisterAll unavailable on this platform; skipping');
     }
   })();
+
+  // ---- Screen sharing via desktopCapturer (from WhatsLNX) ----
+  // Cache the selected source for 5 minutes so the portal doesn't reopen mid-call.
+  guard('setDisplayMediaRequestHandler', () => {
+    if (typeof ses.setDisplayMediaRequestHandler !== 'function') return;
+    let cachedScreenSource = null;
+    let cacheTimer = null;
+    ses.setDisplayMediaRequestHandler(async (_request, callback) => {
+      if (cachedScreenSource) {
+        callback({ video: cachedScreenSource });
+        return;
+      }
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen', 'window'],
+          thumbnailSize: { width: 0, height: 0 },
+          fetchWindowIcons: false,
+        });
+        if (sources.length > 0) {
+          const src = sources.find((s) => s.id.startsWith('screen')) || sources[0];
+          cachedScreenSource = src;
+          if (cacheTimer) clearTimeout(cacheTimer);
+          cacheTimer = setTimeout(() => { cachedScreenSource = null; }, 300000);
+          callback({ video: src });
+        } else {
+          callback({});
+        }
+      } catch (err) {
+        error('[display-media] getSources failed:', (err && err.message) || err);
+        callback({});
+      }
+    });
+  })();
+
+  // ---- Native save dialog for downloads (from WhatsLNX) ----
+  // Intercept every download and show a native save-as dialog instead of Chromium's
+  // default download shelf/panel. Falls back to the user's Downloads folder.
+  guard('will-download', () => {
+    ses.on('will-download', (event, item) => {
+      const defaultPath = path.join(app.getPath('downloads'), item.getFilename());
+      const savePath = dialog.showSaveDialogSync(state.win || null, {
+        defaultPath,
+        title: 'Save File',
+      });
+      if (savePath) {
+        item.setSavePath(savePath);
+      } else {
+        item.cancel();
+      }
+    });
+  })();
 }
 
 function installNavigationLock(win) {
@@ -953,6 +1138,55 @@ function installIpc() {
     else if (level === 'warn') warn(line);
     else debug(line);
   })());
+
+  // Native notifications relayed from the preload's window.Notification override.
+  ipcMain.on('wai:notification', (event, data) => guard('wai:notification', () => {
+    if (!data || typeof data !== 'object') return;
+    const { Notification } = require('electron');
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: String(data.title || 'Whatsapp Incognito'),
+      body: String(data.body || ''),
+      // Honoured rather than hardcoded false. WhatsApp sets silent:true for the
+      // conversation the user is already looking at; forcing sound there is the whole
+      // reason people mute the app and then miss the messages they muted it for.
+      silent: data.silent === true,
+    });
+    n.on('click', () => {
+      const win = state.win;
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+      }
+    });
+    n.show();
+    // Refresh the badge. A message arriving is the most likely moment for the page title
+    // to have just gained its "(N)" prefix, and Electron's own badge is per-platform
+    // (Unity on Linux) so the title is not always in step with the tray icon.
+    updateBadgeFromTitle();
+  })());
+}
+
+/**
+ * WhatsApp Web encodes its unread count as a "(N) WhatsApp" title prefix. Re-read it and
+ * push the count to the tray and the OS badge.
+ *
+ * This was duplicated: the page-title-updated handler and the notification handler each
+ * inlined the same regex and parseInt. Two copies drift, and the notification copy read
+ * the title a second time for a value the title handler had already seen.
+ */
+function updateBadgeFromTitle() {
+  try {
+    const win = state.win;
+    if (!win || win.isDestroyed()) return;
+    const title = typeof win.webContents.getTitle === 'function' ? win.webContents.getTitle() : '';
+    const match = title && title.match(/^\((\d+)\)/);
+    const count = match ? parseInt(match[1], 10) : 0;
+    if (state.tray && typeof state.tray.updateBadge === 'function') state.tray.updateBadge(count);
+  } catch (e) {
+    debug('updateBadgeFromTitle failed:', (e && e.message) || e);
+  }
 }
 
 function safeStringify(value) {
@@ -1077,10 +1311,45 @@ function startWatchdog(win) {
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     error(`load failed ${code} ${desc} ${url}`);
   });
-  win.webContents.on('render-process-gone', (_e, details) => {
-    error(`renderer gone: ${details && details.reason}`);
-  });
+  // No render-process-gone listener here on purpose. installCrashRecovery registers an
+  // app-level one that logs the same reason AND recreates the window; keeping a
+  // webContents-level logger alongside it produced two log lines for one crash and made
+  // it look like two independent failures.
   state.watchdog.start();
+}
+
+// ---------------------------------------------------------------- crash recovery (from WhatsLNX)
+
+/**
+ * Renderer crash → recreate the window so the user gets back into WhatsApp.
+ * GPU crash → relaunch the whole app (GPU process cannot be replaced in place).
+ * Both are guarded so a crash in the handler cannot cascade.
+ */
+function installCrashRecovery() {
+  app.on('render-process-gone', guard('render-process-gone', (_event, webContents, details) => {
+    error(`renderer gone: ${details && details.reason} — recreating window`);
+    const win = state.win;
+    if (win && !win.isDestroyed() && win.webContents === webContents) {
+      try { win.destroy(); } catch (e) { /* already gone */ }
+      state.win = null;
+    }
+    // Give the GPU process a moment to settle before opening a fresh window
+    setTimeout(() => {
+      guard('crash:recreate-window', () => {
+        const prefs = state.prefs ? state.prefs.get() : {};
+        const newWin = createWindow(prefs);
+        startWatchdog(newWin);
+      })();
+    }, 500);
+  }));
+
+  app.on('child-process-gone', guard('child-process-gone', (_event, details) => {
+    if (details && details.type === 'GPU') {
+      error(`GPU process gone: ${details.reason} — relaunching`);
+      app.relaunch();
+      app.exit(0);
+    }
+  }));
 }
 
 // ---------------------------------------------------------------- tray wiring
@@ -1135,11 +1404,27 @@ function startTray() {
 // ---------------------------------------------------------------- boot
 
 function boot() {
-  app.on('second-instance', () => {
+  // Task 7: register whatsapp:// protocol handler (before app.whenReady for Linux/macOS)
+  if (process.defaultApp) {
+    app.setAsDefaultProtocolClient('whatsapp', process.execPath, [require('node:path').resolve(__dirname, '../..')]);
+  } else {
+    app.setAsDefaultProtocolClient('whatsapp');
+  }
+  // Check for a deep link on cold start (argv)
+  const coldUrl = process.argv.find(isDeepLink);
+  if (coldUrl) _pendingDeepLink = buildDeepLinkUrl(coldUrl) || null;
+
+  app.on('second-instance', (_event, argv) => {
     const win = state.win;
     if (!win || win.isDestroyed()) return;
     showWindow(win);
+    // Task 7: handle deep link from second launch
+    const url = argv.find(isDeepLink);
+    if (url) handleDeepLink(url);
   });
+
+  // macOS: opened-url event for protocol links
+  app.on('open-url', (_event, url) => { handleDeepLink(url); });
 
   app.on('window-all-closed', () => {
     // Tray-resident: staying alive with no window is the point (§9.3). Only quit when
@@ -1175,7 +1460,7 @@ function boot() {
       // Say so rather than opening a window whose options cannot be persisted.
       dialog.showMessageBoxSync({
         type: 'error',
-        title: 'WAIncognito — options missing',
+        title: 'Whatsapp Incognito — options missing',
         message: 'The build carries no option defaults.',
         detail: 'app/.build/meta.json has no "prefs" object, so nothing can be saved.\n\n' +
                 'This is a build problem, not a settings problem:\n\n' +
@@ -1189,6 +1474,7 @@ function boot() {
 
     installMenu();
     installIpc();
+    installCrashRecovery();
 
     // C6/C5: the session must be configured BEFORE the BrowserWindow exists.
     //
@@ -1207,6 +1493,15 @@ function boot() {
 
     startTray();
 
+    // Task 11: sync window background color when OS theme changes (avoids white flash on theme toggle)
+    nativeTheme.on('updated', () => {
+      const win = state.win;
+      if (!win || win.isDestroyed()) return;
+      guard('theme-update', () => {
+        win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#111b21' : '#ffffff');
+      })();
+    });
+
     // Apply the saved autostart pref (portal + login items + XDG fallback).
     applyAutostart(state.prefs.get().autostart);
 
@@ -1220,8 +1515,8 @@ function boot() {
     try {
       dialog.showMessageBoxSync({
         type: 'error',
-        title: 'WAIncognito — startup failed',
-        message: 'WAIncognito could not start.',
+        title: 'Whatsapp Incognito — startup failed',
+        message: 'Whatsapp Incognito could not start.',
         detail: String((e && e.stack) || e),
         buttons: ['Quit'],
         noLink: true,

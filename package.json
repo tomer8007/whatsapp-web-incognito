@@ -1,12 +1,13 @@
 {
   "name": "waincognito",
   "productName": "WAIncognito",
+  "desktopName": "waincognito",
   "version": "2.5.62",
   "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
   "license": "GPL-3.0",
   "private": true,
   "main": "app/electron/main.js",
-  "author":"manas <immanasdoshi@gmail.com>",
+  "author": "manas <immanasdoshi@gmail.com>",
   "scripts": {
     "one": "node scripts/one.mjs",
     "one:ci": "node scripts/one.mjs --no-app",
@@ -32,11 +33,11 @@
   },
   "devDependencies": {
     "electron": "^44.4.5",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.wa-incognito.app",
-    "productName": "WhatsApp Incognito",
+    "productName": "Whatsapp Incognito",
     "asar": true,
     "directories": {
       "output": "release",
@@ -57,7 +58,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Network"
+      "category": "Network",
+      "syncDesktopName": true
     },
     "win": {
       "icon": "app/packaging/icon.ico",

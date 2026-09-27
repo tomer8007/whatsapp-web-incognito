@@ -62,6 +62,15 @@ to those bytes is a synchronous `ipcRenderer.sendSync` to main — which puts th
 process on the critical path of the one file with a hard deadline. Trading a real C1 risk
 for defence-in-depth on our own preload is a bad trade.
 
+This also settles the Chromium-level sandbox. A port from another Electron app brought
+`ELECTRON_DISABLE_SANDBOX=1` along with it, on the theory that the app needed it. It does
+not: the per-renderer `sandbox: false` above is the decision that matters, and the setting
+being discussed disables the *zygote* sandbox process-wide — a second, larger hole for no
+gain here. Verified by removing it and relaunching on GNOME 46 / Wayland: the engine check
+passes, the WebSocket hook arms, and the watchdog reports `PROTECTED`. `scripts/doctor.cjs`
+still passes `--no-sandbox` on its own command line, which is a deliberate, local choice
+for a diagnostic run and not app state.
+
 ### C3 — main and ui stay separate scripts
 
 `interception.js` and `ui.js` both declared and called a top-level `initialize`.

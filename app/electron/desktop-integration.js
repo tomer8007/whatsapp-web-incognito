@@ -160,7 +160,7 @@ function requestBackground(opts) {
       if (process.platform !== 'linux') return finish(false, 'not linux');
       const autostart = o.autostart === true;
       const reason = o.reason ||
-        'WAIncognito keeps your WhatsApp session alive in the background so read receipts stay blocked';
+        'Whatsapp Incognito keeps your WhatsApp session alive in the background so read receipts stay blocked';
       const options = `{'reason': <'${reason.replace(/'/g, "\\'")}'>, 'autostart': <${autostart ? 'true' : 'false'}>}`;
       const args = [
         'call', '--session',
@@ -232,8 +232,8 @@ function buildDesktopEntry(execCmd) {
     '[Desktop Entry]',
     'Type=Application',
     'Version=1.0',
-    'Name=WAIncognito',
-    'Comment=WhatsApp Incognito — starts on login when enabled in the tray menu',
+    'Name=Whatsapp Incognito',
+    'Comment=Whatsapp Incognito — starts on login when enabled in the tray menu',
     `Exec=${execCmd}`,
     'Icon=waincognito',
     'Terminal=false',

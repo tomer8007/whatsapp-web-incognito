@@ -207,6 +207,11 @@ function installBridge() {
       try { ipcRenderer.send('wai:failure', String(reason), String(detail || '')); } catch (e) { /* ignore */ }
     },
 
+    /** Relay a notification from the page world to the main process Notification API. */
+    sendNotification: (data) => {
+      try { ipcRenderer.send('wai:notification', data); } catch (e) { /* ignore */ }
+    },
+
     /**
      * The page's liveness snapshot. In the isolated world `window.__WAI__` is invisible,
      * so the preload has to ask the page to evaluate it. Resolves to null when the shim
@@ -470,6 +475,93 @@ ipcRenderer.on('wai:rearm', () => { retryMissing('host-rearm'); });
 // step that lost a race with frame readiness would never be retried and the hook would
 // silently not exist.
 ipcRenderer.on('wai:frame-event', (_event, name) => { retryMissing(name); });
+
+// ------------------------------------------------------------------ notification interception (from WhatsLNX)
+// Override window.Notification so WhatsApp Web's own notification calls are routed to
+// the main process Notification API, which works correctly on every OS including Linux
+// with DBus-based notification daemons. This runs in the ISOLATED world (preload scope),
+// so we inject into the page world via a tiny evaluate call once the bridge is ready.
+//
+// Two interception points:
+//   1. window.Notification constructor — the standard browser notifications API
+//   2. ServiceWorkerRegistration.prototype.showNotification — WA sometimes calls this
+//      from its service worker
+//
+// NEITHER path calls through. Relaying AND invoking the original is what the first
+// revision of this port did, which is the opposite of what its own comment claimed:
+// every message arrived twice, once from the Electron Notification in main and once from
+// Chromium's own. So this is a replacement, not a proxy — which also means a message
+// shown before the patch lands (the injection races the page's first paint) is simply
+// lost, rather than arriving twice. Losing one is the better failure.
+const NOTIFICATION_INTERCEPT_SRC = `(function () {
+  if (window.__WAI_NOTIF_PATCHED__) return;
+  window.__WAI_NOTIF_PATCHED__ = true;
+  var _OriginalNotification = window.Notification;
+
+  // WhatsApp de-dupes its own banners by the 'tag' option, reusing one to replace a
+  // message already on screen. Chromium honours that; the Electron Notification we
+  // relay to does not, because it has no notion of a tag. Without this the user gets one
+  // native popup per update to a conversation they are already looking at, so the tag is
+  // tracked here and a repeat within the window is dropped.
+  var _lastTag = null;
+  var _lastTagAt = 0;
+  var TAG_TTL = 5000;
+
+  function relay(title, options) {
+    options = options || {};
+    var tag = options.tag || '';
+    if (tag) {
+      var now = Date.now();
+      if (tag === _lastTag && (now - _lastTagAt) < TAG_TTL) return;
+      _lastTag = tag;
+      _lastTagAt = now;
+    }
+    try {
+      if (window.__WAI_IPC__ && window.__WAI_IPC__.sendNotification) {
+        window.__WAI_IPC__.sendNotification({
+          title: title || 'Whatsapp Incognito',
+          body: options.body || '',
+          iconUrl: options.icon || '',
+          silent: options.silent === true,
+          tag: tag,
+        });
+      }
+    } catch (e) {}
+  }
+
+  window.Notification = function (title, options) {
+    relay(title, options);
+    // Return a stand-in so WA Web's .close() / .onclick assignment does not throw.
+    return { close: function () {}, onclick: null, onerror: null };
+  };
+  window.Notification.requestPermission = function () { return Promise.resolve('granted'); };
+  // Only the accessor. Assigning window.Notification.permission first and then defining
+  // the same property was the second bug here: the plain assignment is silently dropped
+  // on a function object in some engines and the defineProperty wins anyway, so the
+  // first line was dead weight pretending to grant permission.
+  Object.defineProperty(window.Notification, 'permission', {
+    get: function () { return 'granted'; },
+    configurable: true,
+  });
+  if (_OriginalNotification) window.Notification.prototype = _OriginalNotification.prototype;
+
+  if ('ServiceWorkerRegistration' in window && ServiceWorkerRegistration.prototype.showNotification) {
+    ServiceWorkerRegistration.prototype.showNotification = function (title, options) {
+      // Relay only. Calling the original here as well is what produced the duplicate.
+      relay(title, options);
+      return Promise.resolve();
+    };
+  }
+})();`;
+
+// Inject the notification interceptor as soon as the main sequence finishes.
+// We piggyback on the existing 'wai:page-state' + frame-event flow: after 'booted',
+// evaluate the interceptor. This is safe to re-run (idempotent guard at top of IIFE).
+ipcRenderer.on('wai:page-state', (_event, snapshot) => {
+  if (snapshot && snapshot.event === 'booted') {
+    webFrame.executeJavaScript(NOTIFICATION_INTERCEPT_SRC).catch(() => {});
+  }
+});
 
 // ------------------------------------------------------------------ go
 

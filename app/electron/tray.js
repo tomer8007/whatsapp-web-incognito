@@ -1,6 +1,10 @@
 'use strict';
 // Tray: the honest status display, plus the three hook toggles (§9.6).
 //
+// BADGE RENDERER (ported from WhatsLNX)
+// Pure-JS PNG badge painted directly onto the tray icon's pixel buffer — no native
+// deps, no sharp, no canvas. Works on every platform including packaged AppImages.
+//
 // WHY THE TRAY IS THE POINT
 // -------------------------
 // Running in the background is only worth it if the app is doing something for you, and
@@ -15,7 +19,137 @@
 // disagree and the path is exercised every time (§10 step 6).
 
 const path = require('node:path');
+const zlib = require('node:zlib');
 const { Menu, Tray, nativeImage } = require('electron');
+
+// ---------------------------------------------------------------- badge renderer (ported from WhatsLNX)
+// 7×9 bold pixel font for digits 0-9 and '+'. Each glyph is a 9-row array of bit strings.
+const GLYPHS = {
+  '0': ['0111110','1100011','1100011','1100011','1100011','1100011','1100011','1100011','0111110'],
+  '1': ['0011100','0111100','0001100','0001100','0001100','0001100','0001100','0001100','0111110'],
+  '2': ['0111110','1100011','0000011','0000110','0001100','0011000','0110000','1100000','1111111'],
+  '3': ['0111110','1100011','0000011','0000011','0011110','0000011','0000011','1100011','0111110'],
+  '4': ['0000110','0001110','0011110','0110110','1100110','1111111','0000110','0000110','0000110'],
+  '5': ['1111111','1100000','1100000','1111110','0000011','0000011','0000011','1100011','0111110'],
+  '6': ['0011110','0110000','1100000','1100000','1111110','1100011','1100011','1100011','0111110'],
+  '7': ['1111111','0000011','0000110','0001100','0011000','0011000','0110000','0110000','0110000'],
+  '8': ['0111110','1100011','1100011','1100011','0111110','1100011','1100011','1100011','0111110'],
+  '9': ['0111110','1100011','1100011','1100011','0111111','0000011','0000011','0000110','0011100'],
+  '+': ['0000000','0001100','0001100','0001100','1111111','1111111','0001100','0001100','0000000'],
+};
+
+// CRC32 lookup table for PNG chunk checksums
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/** Encode raw RGBA pixel data as a minimal PNG buffer. */
+function rgbaToPNG(rgba, width, height) {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
+  // Prepend filter byte 0 to every row
+  const raw = Buffer.alloc(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) {
+    raw[y * (1 + width * 4)] = 0;
+    rgba.copy(raw, y * (1 + width * 4) + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  const compressed = zlib.deflateSync(raw);
+  function chunk(type, data) {
+    const lenBuf = Buffer.alloc(4); lenBuf.writeUInt32BE(data.length);
+    const typeB = Buffer.from(type, 'ascii');
+    const crcBuf = Buffer.alloc(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([typeB, data])));
+    return Buffer.concat([lenBuf, typeB, data, crcBuf]);
+  }
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
+}
+
+/**
+ * Paint an unread-count badge onto the bottom-right corner of a tray icon.
+ * Returns a new NativeImage; the original is not modified.
+ * Shows "1"–"9" for counts 1–9, "9+" for 10+.
+ * No-ops if count ≤ 0 or icon is missing.
+ *
+ * `image` is the nativeImage module to build the result with. It is a parameter rather
+ * than a module-level reference so that createTray's injectable can be threaded through:
+ * under bare `node --test` there is no electron, so a module-level nativeImage is
+ * undefined and the badge path would be untestable — which is how a hard failure in here
+ * shipped unnoticed in the first place.
+ */
+function createBadgedIcon(icon, count, image) {
+  // `count <= 0` is NOT a sufficient guard: undefined <= 0 is false, because the
+  // comparison is against NaN. A non-numeric count therefore sailed past the check and
+  // then indexed GLYPHS[String(count)] — GLYPHS['u'] for "undefined" — and threw on
+  // undefined[0]. updateBadge happens to pre-validate its input, but this function is
+  // exported and must not depend on every caller doing that for it.
+  const n = Number(count);
+  if (!icon || !Number.isFinite(n) || n <= 0) return icon;
+  const img = image || nativeImage;
+  if (!img || typeof img.createFromBuffer !== 'function') return icon;
+  const size = 24; // tray icon size on Linux; resize first
+  const resized = icon.resize({ width: size, height: size });
+  const bgra = resized.toBitmap(); // Electron returns BGRA on Linux
+  // Convert BGRA → RGBA
+  const rgba = Buffer.alloc(size * size * 4);
+  for (let i = 0; i < size * size * 4; i += 4) {
+    rgba[i]     = bgra[i + 2];   // R
+    rgba[i + 1] = bgra[i + 1];   // G
+    rgba[i + 2] = bgra[i];       // B
+    rgba[i + 3] = bgra[i + 3];   // A
+  }
+  const label = n > 9 ? '9+' : String(Math.floor(n));
+  const glyphH = 9;
+  let glyphW = 0;
+  for (let i = 0; i < label.length; i++) {
+    glyphW += GLYPHS[label[i]][0].length;
+    if (i < label.length - 1) glyphW += 1; // 1px inter-char gap
+  }
+  const startX = size - glyphW - 1;
+  const startY = size - glyphH - 1;
+  // Collect lit pixels
+  const pixels = [];
+  let offsetX = 0;
+  for (let ci = 0; ci < label.length; ci++) {
+    const glyph = GLYPHS[label[ci]];
+    const gw = glyph[0].length;
+    for (let gy = 0; gy < glyphH; gy++) {
+      for (let gx = 0; gx < gw; gx++) {
+        if (glyph[gy][gx] === '1') pixels.push({ x: startX + offsetX + gx, y: startY + gy });
+      }
+    }
+    offsetX += gw + 1;
+  }
+  function setPixel(x, y, r, g, b, a) {
+    if (x >= 0 && x < size && y >= 0 && y < size) {
+      const idx = (y * size + x) * 4;
+      rgba[idx] = r; rgba[idx+1] = g; rgba[idx+2] = b; rgba[idx+3] = a;
+    }
+  }
+  // Yellow outline (3px stroke), then black fill
+  for (const p of pixels) {
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (dx !== 0 || dy !== 0) setPixel(p.x+dx, p.y+dy, 255, 220, 0, 230);
+      }
+    }
+  }
+  for (const p of pixels) setPixel(p.x, p.y, 0, 0, 0, 255);
+  return img.createFromBuffer(rgbaToPNG(rgba, size, size));
+}
+
 
 const IMAGES_DIR = path.join(__dirname, '..', '..', 'images');
 const DEBUG_LOG = !!process.env.WAI_DEBUG;
@@ -131,6 +265,7 @@ function createTray(opts) {
   if (DEBUG_LOG) {
     try { console.log('[wai] tray icon:', iconName); } catch (e) { /* stdout may be closed */ }
   }
+  const baseIcon = img; // keep the unmodified icon for badge compositing
 
   // ---------------------------------------------------------------- menu
 
@@ -149,7 +284,7 @@ function createTray(opts) {
 
     items.push({ type: 'separator' });
     items.push({
-      label: 'Open WAIncognito',
+      label: 'Open Whatsapp Incognito',
       click: () => {
         try {
           const win = getWindow();
@@ -213,7 +348,7 @@ function createTray(opts) {
       },
     });
     items.push({ type: 'separator' });
-    items.push({ label: 'Quit WAIncognito', click: () => { try { quit(); } catch (e) { warn('quit failed', e); } } });
+    items.push({ label: 'Quit Whatsapp Incognito', click: () => { try { quit(); } catch (e) { warn('quit failed', e); } } });
 
     return MenuCtor.buildFromTemplate(items);
   }
@@ -229,7 +364,7 @@ function createTray(opts) {
 
   function toolTip(status) {
     return [
-      `WAIncognito — ${labelOf(status).short}`,
+      `Whatsapp Incognito — ${labelOf(status).short}`,
       status.reason || '',
       `${status.framesIn || 0} frames in / ${status.framesOut || 0} out`,
       status.blocked ? `${status.blocked} receipts blocked` : '',
@@ -262,6 +397,7 @@ function createTray(opts) {
   // ---------------------------------------------------------------- tray
 
   let tray = null;
+  let _unreadCount = 0; // badge unread count
   try {
     tray = new TrayCtor(img);
   } catch (e) {
@@ -283,14 +419,22 @@ function createTray(opts) {
 
   function update() {
     if (!tray || (typeof tray.isDestroyed === 'function' && tray.isDestroyed())) return;
-    try {
-      // Only the menu is rebuilt. Rebuilding the icon would drop the platform's
-      // animation and re-decode the file on every status change.
-      setMenuCompat(tray, buildMenu());
+    // Each sub-step is guarded separately. A single outer try/catch is NOT enough here:
+    // it swallows the first failure and abandons the rest, so one bad icon decode takes
+    // the context menu and tooltip down with it and the tray degrades into a dead icon
+    // that only looks alive. The menu is the part the user actually needs.
+    guard('tray icon', () => {
+      if (typeof tray.setImage === 'function' && baseIcon) {
+        const badged = _unreadCount > 0 ? createBadgedIcon(baseIcon, _unreadCount, image) : baseIcon;
+        if (badged) tray.setImage(badged);
+      }
+    })();
+    // Only the menu is rebuilt. Rebuilding the icon would drop the platform's
+    // animation and re-decode the file on every status change.
+    guard('tray menu', () => setMenuCompat(tray, buildMenu()))();
+    guard('tray tooltip', () => {
       if (typeof tray.setToolTip === 'function') tray.setToolTip(toolTip(safeStatus()));
-    } catch (e) {
-      warn(`tray update failed: ${(e && e.message) || e}`);
-    }
+    })();
   }
 
   // macOS: a left click on the tray icon should do the obvious thing.
@@ -306,6 +450,11 @@ function createTray(opts) {
   return {
     tray,
     update,
+    /** Update the unread badge count and repaint the icon. */
+    updateBadge(count) {
+      _unreadCount = (typeof count === 'number' && count > 0) ? count : 0;
+      update();
+    },
     /** Force a refresh, e.g. after prefs were written by the page's own options menu. */
     refresh: update,
     destroy() {
@@ -315,7 +464,26 @@ function createTray(opts) {
   };
 }
 
-module.exports = { createTray };
+module.exports = { createTray, createBadgedIcon, rgbaToPNG };
+
+/**
+ * Wrap fn so a throw is logged and swallowed, never propagated.
+ *
+ * This is a local copy of main.js's guard on purpose. tray.js is loaded directly by
+ * app/electron/tray.test.js, which runs under bare `node --test` with no Electron, so
+ * it cannot require main.js — and main.js cannot export it without pulling in the whole
+ * app. A previous revision of the badge code called guard() here without defining it:
+ * the ReferenceError was caught by update()'s single outer try, so the tray silently
+ * lost its context menu and its badge on every launch and only logged a warning.
+ */
+function guard(label, fn, fallback) {
+  return (...args) => {
+    try { return fn(...args); } catch (e) {
+      warn(`${label} failed: ${(e && e.message) || e}`);
+      return typeof fallback === 'function' ? fallback(...args) : fallback;
+    }
+  };
+}
 
 function warn(...args) {
   // The main process may have no stdout (dock/desktop launch); a throwing warn
