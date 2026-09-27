@@ -1,0 +1,185 @@
+# Continuous integration for WAIncognito.
+#
+#   push / pull_request  -> verify + package
+#   workflow_dispatch    -> same, with a Node version override
+#
+# Tag pushes are deliberately excluded (`tags-ignore: v*`): a tag means "release
+# me", and release.yml already runs the full verify gate before it publishes.
+# Running it twice would double the ~2 min release time for no extra signal.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      node_version:
+        description: 'Node version to test on (blank = full 22/24 matrix)'
+        required: false
+        type: string
+      package_runners:
+        description: 'Run the electron-builder packaging job'
+        required: false
+        default: true
+        type: boolean
+
+# Superseded runs on the same ref are noise; a newer push is strictly better.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # electron-builder downloads its own toolchain; keeping it in the workspace makes a
+  # single cross-platform cache key work instead of three OS-specific path sets.
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The gate. Everything that decides whether a commit is shippable lives here:
+  # version consistency, the build, the bundle assertions, the unit tests.
+  # ---------------------------------------------------------------------------
+  check:
+    name: check (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # An unset or empty input is falsy here, so a normal push/PR gets the full
+        # matrix and only a manual run can pin a single version.
+        node: ${{ fromJSON(inputs.node_version != '' && format('["{0}"]', inputs.node_version) || '["22.x", "24.x"]') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # pnpm-workspace.yaml uses the `allowBuilds` key, which is pnpm 12 syntax.
+          # Pinning a major here is what keeps `--frozen-lockfile` from tripping over
+          # electron's blocked postinstall.
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Version consistency
+        # manifest.json is the source of truth for the extension; package.json is the
+        # source of truth for the electron-builder artefact name. A skew means the
+        # AppImage says one version and the Web Store listing says another.
+        run: |
+          set -euo pipefail
+          M=$(node -p "require('./manifest.json').version")
+          P=$(node -p "require('./package.json').version")
+          if [ "$M" != "$P" ]; then
+            echo "::error::version skew: manifest.json=$M package.json=$P"
+            exit 1
+          fi
+          echo "version $M consistent across manifest.json and package.json"
+
+      - name: Build all targets
+        # firefox + chrome + electron. Any target that stops building is a release
+        # blocker even if the other two are fine.
+        run: pnpm run build
+
+      - name: Verify bundles
+        # A1-A11. Converts the silent failure modes (dead interception hook, lexical
+        # redeclaration killing a whole bundle) into a red build.
+        run: pnpm run verify
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Package smoke test (electron-builder)
+        # Proves the release pipeline's riskiest step still works on a PR, without
+        # publishing anything. The full multi-OS matrix lives in release.yml.
+        run: pnpm exec electron-builder --linux AppImage --publish never
+
+      - name: Upload packaging smoke artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-package-node${{ matrix.node }}
+          path: |
+            release/*.AppImage
+            release/*.blockmap
+            release/*.yml
+          retention-days: 3
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Packaging is the one step that cannot be verified by tests, and it only fails
+  # after a long install. Keep a dedicated job for it so a packaging regression is
+  # visible in the PR checks list rather than only at release time.
+  # ---------------------------------------------------------------------------
+  package:
+    name: package (${{ matrix.os }})
+    needs: check
+    if: >-
+      always() && needs.check.result == 'success' &&
+      (github.event_name != 'workflow_dispatch' || inputs.package_runners)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - name: Restore electron-builder cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE }},${{ env.ELECTRON_BUILDER_CACHE }}
+          key: eb-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: eb-${{ runner.os }}-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build:electron
+
+      - name: Package
+        env:
+          # No signing identity is available on a runner. Without this,
+          # electron-builder probes for one, and a failed probe looks like a build
+          # failure rather than "unsigned artefact, as intended".
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          pnpm exec electron-builder --publish never
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.msi
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/*.blockmap
+            release/*.yml
+          retention-days: 3
+          if-no-files-found: error

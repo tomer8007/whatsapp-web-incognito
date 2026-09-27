@@ -1,4 +1,4 @@
-﻿/*
+/*
 This is a content script responsible for some UI.
 */
 
@@ -15,9 +15,9 @@ if (chrome != undefined)
 	var browser = chrome;
 }
 
-initialize();
+initializeUI();
 
-function initialize()
+function initializeUI()
 {
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
@@ -756,7 +756,6 @@ function onNewMessageNodeAdded(messageNode)
     var data_id = messageNode.getAttribute("data-id");
     if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
     if (data_id == null)
-        debugger;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 

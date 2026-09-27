@@ -1,4 +1,4 @@
-﻿// This is the background page.
+// This is the background page.
 // it keeps track of prefrences/settings in localStorage
 
 if (typeof chrome !== "undefined") {
