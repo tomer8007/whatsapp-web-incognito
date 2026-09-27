@@ -37,11 +37,15 @@ const DEBUG_LOG = !!process.env.WAI_DEBUG;
 //   incognito_gray_hollow.svg empty=true  0x0
 //
 // The SVGs stay last as a fallback for platforms that do accept them.
+// Same icon as the extension and the window (manifest.json `icons` +
+// `action.default_icon` → images/icon_128_blue.png, which
+// app/packaging/icon.{png,ico,icns} is generated from). Blue first so the
+// native app matches the other ones; gray PNGs stay as fallbacks.
 const ICON_CANDIDATES = [
+  'icon_128_blue.png',
+  'icon_128_reshaped.png',
   'incognito_gray.png',
   'incognito.png',
-  'icon_128_reshaped.png',
-  'icon_128_blue.png',
   'incognito_gray_hollow.svg',
   'incognito.svg',
 ];
@@ -95,6 +99,10 @@ function createTray(opts) {
   // ---------------------------------------------------------------- icon
 
   function loadIcon() {
+    // Linux trays want ~22px, Windows/macOS ~16px. nativeImage.resize() returns a
+    // NEW image (it does not mutate in place), so the return value must be used —
+    // returning the original 128px PNG renders as a broken oversized tray icon.
+    const target = process.platform === 'linux' ? 22 : 16;
     for (const name of ICON_CANDIDATES) {
       const file = path.join(IMAGES_DIR, name);
       try {
@@ -102,7 +110,12 @@ function createTray(opts) {
         // createFromPath resolves empty rather than throwing for an unreadable file, so
         // the emptiness check is the real test, not the absence of an exception.
         if (img && typeof img.isEmpty === 'function' && !img.isEmpty()) {
-          try { img.resize({ width: 16, height: 16 }); } catch (e) { /* optional */ }
+          try {
+            const sized = img.resize({ width: target, height: target });
+            if (sized && typeof sized.isEmpty === 'function' && !sized.isEmpty()) {
+              return { img: sized, name };
+            }
+          } catch (e) { /* fall through to the unresized image */ }
           return { img, name };
         }
         warn(`tray icon ${name} did not load (empty image)`);
@@ -115,7 +128,9 @@ function createTray(opts) {
   }
 
   const { img, name: iconName } = loadIcon();
-  if (DEBUG_LOG) console.log('[wai] tray icon:', iconName);
+  if (DEBUG_LOG) {
+    try { console.log('[wai] tray icon:', iconName); } catch (e) { /* stdout may be closed */ }
+  }
 
   // ---------------------------------------------------------------- menu
 
@@ -284,4 +299,9 @@ function createTray(opts) {
 
 module.exports = { createTray };
 
-function warn(...args) { console.warn('[wai:tray]', ...args); }
+function warn(...args) {
+  // The main process may have no stdout (dock/desktop launch); a throwing warn
+  // here would take the tray down with it. main.js installs a global safe-console
+  // shim, but tray.js is also loaded by tests, so stay non-throwing on its own.
+  try { console.warn('[wai:tray]', ...args); } catch (e) { /* ignore */ }
+}

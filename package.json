@@ -6,6 +6,7 @@
   "license": "GPL-3.0",
   "private": true,
   "main": "app/electron/main.js",
+  "author":"manas <immanasdoshi@gmail.com>",
   "scripts": {
     "one": "node scripts/one.mjs",
     "one:ci": "node scripts/one.mjs --no-app",
@@ -35,7 +36,7 @@
   },
   "build": {
     "appId": "com.wa-incognito.app",
-    "productName": "WAIncognito",
+    "productName": "WhatsApp Incognito",
     "asar": true,
     "directories": {
       "output": "release",
@@ -44,9 +45,14 @@
     "files": [
       "app/electron/**/*",
       "app/.build/**/*",
+      "images/icon_128_blue.png",
+      "images/icon_128_reshaped.png",
+      "images/incognito_gray.png",
+      "images/incognito.png",
       "package.json"
     ],
     "linux": {
+      "icon": "app/packaging/icon.png",
       "target": [
         "AppImage",
         "deb"
@@ -54,11 +60,13 @@
       "category": "Network"
     },
     "win": {
+      "icon": "app/packaging/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "mac": {
+      "icon": "app/packaging/icon.icns",
       "target": [
         "dmg"
       ],

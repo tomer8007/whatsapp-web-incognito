@@ -22,8 +22,30 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const {
-  app, BrowserWindow, Menu, dialog, ipcMain, shell,
+  app, BrowserWindow, Menu, dialog, ipcMain, shell, nativeImage,
 } = require('electron');
+
+// stdout/stderr are closed when the app is launched from a dock/dash/desktop file
+// (no terminal) or from an AppImage with its output pipes shut. A bare
+// console.log/warn/error then throws EPIPE synchronously, and Electron turns that
+// into the "A JavaScript error occurred in the main process" dialog. Logging must
+// never be able to crash the shell, so every console method is made non-throwing
+// and async pipe errors are swallowed here, once, for the whole main process
+// (this also covers tray.js / prefs-store.js, which share this console object).
+(function installSafeConsole() {
+  for (const stream of [process.stdout, process.stderr]) {
+    try {
+      stream.on('error', () => { /* EPIPE on a closed pipe: ignore */ });
+    } catch (e) { /* ignore */ }
+  }
+  for (const method of ['log', 'warn', 'error', 'info', 'debug']) {
+    const orig = console[method];
+    if (typeof orig !== 'function') continue;
+    console[method] = (...args) => {
+      try { orig(...args); } catch (e) { /* logging must never throw */ }
+    };
+  }
+})();
 
 const { PrefsStore } = require('./prefs-store.js');
 const { createWatchdog } = require('./watchdog.js');
@@ -35,6 +57,30 @@ app.setName('WAIncognito');
 
 const BUILD_DIR = path.join(__dirname, '..', '.build');
 const IMAGES_DIR = path.join(__dirname, '..', '..', 'images');
+
+// Same icon as the extension (manifest.json `icons` + `action.default_icon`):
+// images/icon_128_blue.png. app/packaging/icon.{png,ico,icns} is generated from it
+// for the installers; the window/tray use the source PNG directly so dev
+// (`electron .`) and packaged builds show the same branding.
+const WINDOW_ICON_CANDIDATES = Object.freeze([
+  path.join(IMAGES_DIR, 'icon_128_blue.png'),
+  path.join(IMAGES_DIR, 'icon_128_reshaped.png'),
+  path.join(IMAGES_DIR, 'incognito_gray.png'),
+]);
+
+// A string path inside app.asar is not reliably readable by the native window
+// manager on Linux, so resolve to a decoded NativeImage (which `icon` also
+// accepts) instead of a path. Falls back to undefined rather than a broken path.
+function resolveWindowIcon() {
+  for (const file of WINDOW_ICON_CANDIDATES) {
+    try {
+      if (!fs.existsSync(file)) continue;
+      const img = nativeImage.createFromPath(file);
+      if (img && typeof img.isEmpty === 'function' && !img.isEmpty()) return img;
+    } catch (e) { /* try next */ }
+  }
+  return undefined;
+}
 
 // Read by both main and the preload. main preloads them into memory so a sandboxed
 // preload (which has no fs — see C2) can fetch a source string over ipcRenderer.sendSync
@@ -316,9 +362,7 @@ function createWindow(prefs) {
     show: false,
     backgroundColor: '#111b21',
     title: 'WAIncognito',
-    icon: fs.existsSync(path.join(IMAGES_DIR, 'incognito_gray.png'))
-      ? path.join(IMAGES_DIR, 'incognito_gray.png')
-      : undefined,
+    icon: resolveWindowIcon(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
 

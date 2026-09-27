@@ -78,9 +78,9 @@ class PrefsStore {
       fs.mkdirSync(this.dir, { recursive: true });
       const bak = `${this.file}.corrupt`;
       fs.renameSync(this.file, bak);
-      console.error(`[prefs] ${reason}; previous file kept at ${bak}`);
+      safeError(`[prefs] ${reason}; previous file kept at ${bak}`);
     } catch (e) {
-      console.error(`[prefs] ${reason}; could not quarantine: ${e.message}`);
+      safeError(`[prefs] ${reason}; could not quarantine: ${e.message}`);
     }
   }
 
@@ -155,6 +155,12 @@ function coerce(defaultValue, value, currentValue) {
 
 function stripBOM(s) {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+// stderr may be closed (dock/desktop launch without a terminal): a throwing
+// console.error here would crash startup over a prefs backup notice.
+function safeError(...args) {
+  try { console.error(...args); } catch (e) { /* ignore */ }
 }
 
 module.exports = { PrefsStore, coerce };
