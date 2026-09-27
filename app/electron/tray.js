@@ -183,6 +183,24 @@ function createTray(opts) {
     }
 
     items.push({ type: 'separator' });
+    // Shell-only pref (main.js SHELL_DEFAULTS, not background.js): start on login.
+    // Same round-trip as the hook toggles — tray → main → PrefsStore — except main
+    // applies it to the OS (applyAutostart) while the page ignores the unknown key.
+    items.push({
+      label: 'Start automatically on login',
+      type: 'checkbox',
+      checked: prefs.autostart === true,
+      click: () => {
+        try {
+          setPref({ autostart: prefs.autostart !== true });
+        } catch (e) {
+          warn(`could not change autostart: ${(e && e.message) || e}`);
+        }
+        update();
+      },
+    });
+
+    items.push({ type: 'separator' });
     items.push({
       label: 'Reset options to defaults',
       click: () => {

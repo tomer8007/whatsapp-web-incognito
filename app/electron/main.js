@@ -50,6 +50,7 @@ const {
 const { PrefsStore } = require('./prefs-store.js');
 const { createWatchdog } = require('./watchdog.js');
 const { createTray } = require('./tray.js');
+const desktopIntegration = require('./desktop-integration.js');
 
 // Set before `ready` so the userData path (and therefore prefs.json) is stable and does
 // not depend on how the app was launched (`electron .` vs an installed shortcut).
@@ -91,6 +92,19 @@ const BUILD_ARTIFACTS = Object.freeze([
 ]);
 
 const APP_ID = 'com.wa-incognito.app';   // keep in sync with package.json build.appId
+
+// Shell-only defaults, merged over the interception defaults derived from
+// background.js at build time (scripts/build.mjs). They live here — NOT in
+// background.js — so the extension never sees them: there is no autostart
+// concept in a browser tab. The page ignores unknown keys by design
+// (shim.js applyPrefs / core/ui.js use explicit keys), so letting this flow
+// through sendPrefs/LIVE_PREFS needs no page change.
+const SHELL_DEFAULTS = Object.freeze({
+  // Start automatically on login. Applied by applyAutostart(): native login
+  // items on Windows/macOS, xdg-desktop-portal Background + an XDG autostart
+  // file fallback on Linux.
+  autostart: false,
+});
 
 // C5: the session partition. Declared once because TWO places need it and they must not
 // drift — `session.fromPartition(PARTITION)` to configure the UA before the window exists,
@@ -144,13 +158,40 @@ const SERVICE_WORKER_PATHS = Object.freeze([
   '/sw.js', '/sw.min.js', '/service-worker.js', '/serviceworker.js',
 ]);
 
-// Denied page features. This app has no legitimate camera/microphone/geolocation/
-// notification use, and a permission prompt here would be a social-engineering surface
-// in a window that looks like WhatsApp.
+// WhatsApp Web legitimately needs these page features. Everything else stays denied.
+// Without these, WhatsApp's own permission popups (notifications, microphone for
+// voice notes/calls, camera for calls, screen-share, location, clipboard) never
+// appear and the feature silently stays blocked.
 const ALLOWED_PERMISSIONS = Object.freeze([
+  // Message/call notification popups. This is the "allow notifications" prompt.
+  'notifications',
+  // Voice notes, voice/video calls (older Electron uses 'media', newer splits it).
+  'media',
+  'audio-capture',
+  'video-capture',
+  // Screen-share in calls.
+  'display-capture',
+  // Audio output selection for calls.
+  'speaker-selection',
   // WhatsApp Web's copy/paste uses this. Denying it breaks selecting and copying a
   // message, which is ordinary use, not a feature request.
+  'clipboard-read',
   'clipboard-sanitized-write',
+  // Media viewer / video calls.
+  'fullscreen',
+  // Keep the login/session alive.
+  'persistent-storage',
+  'background-sync',
+  'storage-access',
+  // Location messages.
+  'geolocation',
+  // Presence / keep-alive helpers WhatsApp checks.
+  'idle-detection',
+  'screen-wake-lock',
+  // Popups, emoji/file pickers and call windows.
+  'pointerLock',
+  'window-management',
+  'local-fonts',
 ]);
 
 // ---------------------------------------------------------------- logging
@@ -313,7 +354,7 @@ function loadBuild() {
 // ---------------------------------------------------------------- app state
 
 /** @type {{meta: object, artifacts: object, prefs: PrefsStore, win: BrowserWindow|null,
- *          tray: any, watchdog: any, quitting: boolean, injections: number}} */
+ *          tray: any, watchdog: any, quitting: boolean, backgroundNotified: boolean, injections: number}} */
 const state = {
   meta: null,
   artifacts: null,
@@ -326,6 +367,8 @@ const state = {
   /** The rewritten Chrome UA, kept so createWindow can also apply it per-webContents. */
   userAgent: null,
   quitting: false,
+  /** Whether the one-time "running in the background" hint was shown. */
+  backgroundNotified: false,
   /** How many times the preload has reported a completed injection (wai:page-state). */
   injections: 0,
   /** Latest page snapshot pushed by the preload; shown by wai:get-state. */
@@ -351,6 +394,39 @@ function showWindow(win) {
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
+}
+
+/**
+ * No-tray fallback (GNOME without an AppIndicator host). Hiding would strand the
+ * app — no tray to click back from — and quitting would stop protection. So the
+ * window minimizes to the dock/taskbar instead: one click away, session alive.
+ * Relaunching the app also reopens it via the second-instance handler.
+ */
+function minimizeToTaskbar(win) {
+  guard('minimize to taskbar', () => {
+    try { win.setSkipTaskbar(false); } catch (e) { /* keep it listed */ }
+    if (!win.isMinimized()) win.minimize();
+  })();
+  notifyBackgroundOnce();
+}
+
+/** One-time hint so the minimized window is not mistaken for a quit. */
+function notifyBackgroundOnce() {
+  if (state.backgroundNotified) return;
+  state.backgroundNotified = true;
+  guard('background notification', () => {
+    const { Notification } = require('electron');
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title: 'WAIncognito',
+      body: 'Running in the background. Click the dock icon or launch the app again to reopen.',
+    });
+    n.on('click', () => {
+      const win = state.win;
+      if (win && !win.isDestroyed()) showWindow(win);
+    });
+    n.show();
+  })();
 }
 
 function createWindow(prefs) {
@@ -428,9 +504,19 @@ function createWindow(prefs) {
   // The window IS the session.
   win.on('close', (event) => {
     if (state.quitting) return;
-    if (!state.tray) return;               // no tray ⇒ no way back ⇒ let it close
-    event.preventDefault();
-    hideWindow(win);
+    if (state.tray) {
+      event.preventDefault();
+      hideWindow(win);
+      return;
+    }
+    // No tray (GNOME with no AppIndicator host): hiding strands the app and
+    // quitting stops protection, so minimize to the dock/taskbar instead.
+    if (process.platform === 'linux') {
+      event.preventDefault();
+      minimizeToTaskbar(win);
+      return;
+    }
+    // No tray and not Linux: no way back, so let the window close normally.
   });
 
   win.on('closed', () => { if (state.win === win) state.win = null; });
@@ -585,13 +671,43 @@ function installSessionGuards(ses) {
   if (!ses || ses.__waiGuards) return;     // onBeforeRequest holds ONE listener per event
   ses.__waiGuards = true;
 
-  // Deny by default. One exception (clipboard write) is listed in ALLOWED_PERMISSIONS
-  // with the reason.
+  // Allow-what-WhatsApp-needs, deny everything else. Supports both the legacy
+  // (webContents, permission, callback, details) and current
+  // (permission, requestDetails, callback) Electron signatures.
   guard('setPermissionRequestHandler', () => {
-    ses.setPermissionRequestHandler((_contents, permission, callback) => {
-      callback(ALLOWED_PERMISSIONS.includes(permission));
+    const decide = (permission) => ALLOWED_PERMISSIONS.includes(permission);
+    ses.setPermissionRequestHandler((a, b, c) => {
+      let permission;
+      let callback;
+      if (typeof b === 'function') {
+        // Legacy: (webContents, permission, callback, details)
+        permission = a;
+        callback = b;
+      } else {
+        // Current: (permission, requestDetails, callback)
+        permission = a && a.permission ? a.permission : a;
+        if (typeof permission !== 'string' && b && typeof b.permission === 'string') permission = b.permission;
+        callback = c;
+        if (typeof callback !== 'function' && typeof b === 'function') callback = b;
+      }
+      const allow = decide(permission);
+      debug(`permission request "${permission}" → ${allow ? 'granted' : 'denied'}`);
+      try { callback(allow); } catch (e) { debug('permission callback:', e && e.message); }
     });
-    ses.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.includes(permission));
+    ses.setPermissionCheckHandler((_contents, permission) => decide(permission));
+  })();
+
+  // Camera/mic/speaker device grant. Without this, allowing 'audio-capture' /
+  // 'video-capture' alone still leaves getUserMedia with no device, so the
+  // microphone/camera popup never resolves.
+  guard('setDevicePermissionHandler', () => {
+    if (typeof ses.setDevicePermissionHandler === 'function') {
+      ses.setDevicePermissionHandler((details) => {
+        const type = details && details.deviceType;
+        if (type === 'camera' || type === 'microphone' || type === 'speaker') return true;
+        return false;
+      });
+    }
   })();
 
   const blockedOnce = new Set();
@@ -711,9 +827,45 @@ function applyPatch(patch) {
     // to the page, which answers getOptions synchronously from its own copy.
     sendPrefs(result.prefs);
     guard('tray.update', () => state.tray && state.tray.update())();
+    if (result.applied.includes('autostart')) applyAutostart(result.prefs.autostart);
     if (state.watchdog) state.watchdog.kick('prefs-changed');
   }
   return result;
+}
+
+// ---------------------------------------------------------------- autostart
+
+/**
+ * Apply the `autostart` pref on every platform. Runs at startup and whenever
+ * the tray checkbox changes it — a saved pref that is never applied is worse
+ * than no pref, because the checkbox would lie.
+ */
+function applyAutostart(enabled) {
+  const on = enabled === true;
+  guard('login item', () => {
+    // Native API on Windows/macOS. No-op elsewhere (guarded, never throws).
+    if (process.platform === 'win32' || process.platform === 'darwin') {
+      app.setLoginItemSettings({ openAtLogin: on });
+    }
+  })();
+  if (process.platform !== 'linux') return;
+  // Portal first: sandbox-aware and registers the app in GNOME Settings → Apps.
+  // Plain XDG autostart file as fallback when no portal answers, and always
+  // cleaned up on disable so a stale file cannot resurrect the app.
+  desktopIntegration.requestBackground({ autostart: on, log: { log, warn, debug } })
+    .then((r) => {
+      if (!r.ok || !on) guard('autostart file', () => syncAutostartFile(on))();
+    })
+    .catch(() => guard('autostart file', () => syncAutostartFile(on))());
+}
+
+function syncAutostartFile(on) {
+  const file = desktopIntegration.autostartFilePath();
+  if (!on) return desktopIntegration.removeAutostartFile(file);
+  // Inside an AppImage the image itself is the executable; in dev (`electron .`)
+  // re-launch the app path with the current runtime.
+  const execCmd = process.env.APPIMAGE || `"${process.execPath}" "${app.getAppPath()}"`;
+  return desktopIntegration.writeAutostartFile(file, desktopIntegration.buildDesktopEntry(execCmd));
 }
 
 function windowFor(sender) {
@@ -949,9 +1101,34 @@ function startTray() {
     quit: () => { state.quitting = true; app.quit(); },
   });
   if (!state.tray) {
-    // Without a tray the close-to-hide behaviour would strand the app with no window
-    // and no way to quit. Degrade to normal close semantics instead.
-    warn('no system tray available: the window will close normally instead of hiding');
+    // Without a tray there is nothing to reopen a hidden window from. On Linux the
+    // close handler minimizes to the dock/taskbar instead (see minimizeToTaskbar),
+    // so background protection keeps working tray-less, Windows-style.
+    warn('no system tray available: the window will minimize to the dock instead of hiding');
+    return;
+  }
+  // On Linux a successfully created Tray can still render nowhere: GNOME has no
+  // legacy systray, and without the AppIndicator extension there is no
+  // StatusNotifier watcher on the session bus. Detect that explicitly — an
+  // invisible-but-non-null tray would hide the window on close with no way back.
+  // (Inside an AppImage the host /lib is still visible, so a missing *library* is
+  // rarely the cause; a missing *watcher* is. Both are logged for diagnosis.)
+  if (process.platform === 'linux') {
+    guard('tray watcher check', () => {
+      const watcher = desktopIntegration.hasStatusNotifierWatcher();
+      if (watcher.present) {
+        debug(`StatusNotifier watcher present (${watcher.method})`);
+        return;
+      }
+      const lib = desktopIntegration.hasAppIndicatorLib();
+      warn('no StatusNotifier watcher on D-Bus: the tray icon has nowhere to render. ' +
+        'Enable the GNOME "AppIndicator and KStatusNotifierItem Support" extension. ' +
+        `(indicator lib ${lib.present ? `found (${lib.found.join(', ')})` : 'NOT found'}; ` +
+        `desktop=${desktopIntegration.detectDesktop().raw || 'unknown'}). ` +
+        'Closing the window will quit instead of hiding until a watcher appears.');
+      try { state.tray.destroy(); } catch (e) { /* ignore */ }
+      state.tray = null;
+    })();
   }
 }
 
@@ -989,7 +1166,7 @@ function boot() {
     state.artifacts = build.artifacts;
 
     guard('PrefsStore', () => {
-      state.prefs = new PrefsStore(app.getPath('userData'), build.meta.prefs);
+      state.prefs = new PrefsStore(app.getPath('userData'), { ...build.meta.prefs, ...SHELL_DEFAULTS });
       log(`prefs loaded (${Object.keys(state.prefs.get()).length} keys) from userData`);
     })();
     if (!state.prefs) {
@@ -1029,6 +1206,9 @@ function boot() {
     installSessionGuards(appSession);
 
     startTray();
+
+    // Apply the saved autostart pref (portal + login items + XDG fallback).
+    applyAutostart(state.prefs.get().autostart);
 
     const win = createWindow(state.prefs.get());
     startWatchdog(win);

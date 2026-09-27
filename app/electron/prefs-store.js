@@ -2,8 +2,10 @@
 // Preference storage owned by the shell.
 //
 // This replaces background.js for the Electron target. The extension keeps using
-// chrome.storage.local via background.js; the app persists the SAME 9 keys as JSON in
-// the OS user-data dir, so behaviour is identical in both targets.
+// chrome.storage.local via background.js; the app persists the interception keys as
+// JSON in the OS user-data dir, so behaviour is identical in both targets. main.js
+// merges SHELL_DEFAULTS (e.g. `autostart`) over the build-derived defaults for
+// shell-only settings the extension must never see.
 //
 // Two rules keep the targets honest:
 //   1. The DEFAULTS are not written here. They are derived from background.js at build
