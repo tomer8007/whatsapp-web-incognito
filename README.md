@@ -59,13 +59,21 @@ pnpm build:chrome    # dist/extension/chrome   -> Chrome, "Load unpacked"
 pnpm build:firefox   # dist/extension/firefox  -> Firefox
 pnpm build:electron  # app/.build/             -> desktop app
 
-pnpm verify          # 22 build-time assertions
+pnpm package:ext       # release/extensions/*.zip + firefox .xpi
+pnpm package:chrome    # just the chrome zip
+pnpm package:firefox   # just the firefox zip + .xpi
+
+pnpm verify          # 25 build-time assertions
 pnpm test            # unit tests
-pnpm check           # build + verify + test, no GUI  <- what CI runs
+pnpm check           # build + package + verify + test, no GUI  <- what CI runs
 pnpm one             # the above, then launch the app and print a verdict
 pnpm dev             # rebuild and relaunch on change
 pnpm start           # run the desktop app
 ```
+
+`build` only ever wrote *unpacked* directories, so `package:ext` is what turns them into
+the zips you actually install or submit. It packages what is already in `dist/extension/`
+— it does not build, so run `build:chrome` / `build:firefox` first (or just `build`).
 
 If CI is red, `pnpm check` reproduces it locally.
 
@@ -115,7 +123,10 @@ other. `bump_manifest` only works from `master`.
 - AppImage + deb (Linux), NSIS installer (Windows), `.dmg` x64 and arm64 (macOS)
 
 The zips are reproducible: the same commit always produces the same bytes, so you can
-tell a real change from noise by comparing checksums.
+tell a real change from noise by comparing checksums. `scripts/package-ext.mjs` reproduces
+the workflow's exact zip — same mtime normalisation, same byte-order sort, same flags — and
+A20 in `scripts/verify-bundles.mjs` packs twice from deliberately different mtimes to prove
+the property still holds rather than assuming it.
 
 ## Signing
 

@@ -7,10 +7,12 @@
 //
 //   node scripts/verify-bundles.mjs
 
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { join, dirname, resolve, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import vm from 'node:vm';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -461,6 +463,154 @@ check('A-prefs2', 'safetyDelay default is within the 0-30 range ui.js offers', (
   if (typeof d.safetyDelay !== 'number') return `safetyDelay is ${typeof d.safetyDelay}, expected a number`;
   return (d.safetyDelay >= 0 && d.safetyDelay <= 30) ? true : `safetyDelay=${d.safetyDelay} is outside 0-30`;
 });
+
+// A18/A19/A20 — the packaged extension.
+//
+// The build only ever wrote UNPACKED directories, so the zip that anyone actually installs
+// or submits to AMO used to exist only inside .github/workflows/release.yml. That left the
+// artefact with no local coverage at all: nothing checked that the archive contained
+// exactly the built files, that it carried the right browser's manifest, or that it was
+// still byte-reproducible. All three are silent failures — a zip that is missing a file
+// still installs, it just breaks one feature; a wrong-variant manifest fails to load at
+// all, but only in the browser nobody tested.
+//
+// These are OPTIONAL-output assertions: `npm run verify` runs before anything is packaged,
+// so a missing zip skips rather than fails. `pnpm check` packages first, and CI does too,
+// which is what makes them load-bearing rather than decorative.
+
+const EXT_OUT = join(ROOT, 'release', 'extensions');
+
+/** The packaged zips, or [] when nothing has been packaged yet. */
+function packagedZips() {
+  if (!existsSync(EXT_OUT)) return [];
+  return readdirSync(EXT_OUT)
+    .filter((f) => f.endsWith('.zip'))
+    .map((f) => join(EXT_OUT, f));
+}
+
+const zips = packagedZips();
+if (!zips.length) {
+  console.log('  \x1b[33mnote\x1b[0m  no packaged extension found — A18/A19/A20 skipped.');
+  console.log('        run `npm run package:ext` to produce and check them.');
+} else {
+  const zipEntries = (zip) =>
+    execFileSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).split('\n').filter(Boolean).sort();
+  const zipRead = (zip, entry) =>
+    execFileSync('unzip', ['-p', zip, entry], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+
+  // A18 — the archive must contain exactly the built files. An earlier approach zipped the
+  // repo root with `mv !(release|.github)`, which shipped app/, scripts/ and docs/ to every
+  // user; this is the assertion that can never let that come back.
+  check('A18', 'each packaged zip contains exactly its build directory', () => {
+    const msgs = [];
+    for (const zip of zips) {
+      const browser = /-(chrome|firefox)\.zip$/.exec(zip)?.[1];
+      if (!browser) { msgs.push(`${basename(zip)}: filename does not end in -chrome.zip or -firefox.zip`); continue; }
+      const dir = join(DIST, 'extension', browser);
+      if (!existsSync(dir)) { msgs.push(`${basename(zip)}: no build dir at ${relative(ROOT, dir)}`); continue; }
+      const inZip = zipEntries(zip);
+      const onDisk = [];
+      const walk = (rel) => {
+        for (const e of readdirSync(join(dir, rel), { withFileTypes: true })) {
+          const child = rel ? `${rel}/${e.name}` : e.name;
+          if (e.isDirectory()) walk(child);
+          else if (e.isFile()) onDisk.push(child);
+        }
+      };
+      walk('');
+      onDisk.sort();
+      const missing = onDisk.filter((f) => !inZip.includes(f));
+      const extra = inZip.filter((f) => !onDisk.includes(f));
+      if (missing.length) msgs.push(`${basename(zip)}: missing ${missing.join(', ')}`);
+      if (extra.length) msgs.push(`${basename(zip)}: unexpected ${extra.join(', ')}`);
+    }
+    return msgs.length ? msgs.join('; ') : true;
+  });
+
+  // A19 — the manifest INSIDE the archive must be the right variant for that browser. A4
+  // already checks the manifests in dist/; this checks the copy that actually ships, which
+  // is a different file written by a different step.
+  check('A19', 'the manifest inside each zip is the correct browser variant', () => {
+    const root = readJSON(join(ROOT, 'manifest.json'));
+    const msgs = [];
+    for (const zip of zips) {
+      const browser = /-(chrome|firefox)\.zip$/.exec(zip)?.[1];
+      if (!browser) continue;
+      let m;
+      try { m = JSON.parse(zipRead(zip, 'manifest.json')); }
+      catch (e) { msgs.push(`${basename(zip)}: manifest.json is unreadable (${e.message.split('\n')[0]})`); continue; }
+      if (m.version !== root.version) {
+        msgs.push(`${basename(zip)}: version ${m.version} != root ${root.version}`);
+      }
+      if (browser === 'firefox') {
+        if (!m.background?.scripts) msgs.push(`${basename(zip)}: firefox zip has no background.scripts`);
+        if (!m.browser_specific_settings?.gecko?.id) msgs.push(`${basename(zip)}: firefox zip has no gecko add-on id`);
+      } else {
+        if (!m.background?.service_worker) msgs.push(`${basename(zip)}: chrome zip has no background.service_worker`);
+        if (m.background?.scripts) msgs.push(`${basename(zip)}: chrome zip still has background.scripts`);
+        if (m.browser_specific_settings) msgs.push(`${basename(zip)}: chrome zip still has browser_specific_settings`);
+      }
+    }
+    return msgs.length ? msgs.join('; ') : true;
+  });
+
+  // A20 — the README promises "the same commit always produces the same bytes, so you can
+  // tell a real change from noise by comparing checksums". That claim is only worth
+  // anything if it is tested, because every plausible regression here (a forgotten mtime
+  // normalisation, a locale-sensitive sort, a dropped -X) makes two builds of the SAME
+  // commit differ while looking perfectly healthy.
+  //
+  // The subtle part: packing the same tree twice in a row is NOT a test of this. Nothing
+  // rewrites the files in between, so the mtimes are unchanged and the archives agree even
+  // with normalisation removed entirely — an earlier version of this assertion passed
+  // against a deliberately broken packer. The property that actually matters is
+  // reproducibility ACROSS a rebuild, so each round deliberately stamps the build
+  // directory with a different mtime first. That is what a rebuild does, and it is exactly
+  // what the normalisation has to paper over.
+  check('A20', 'rebuilding and repacking the same commit produces identical bytes', () => {
+    const msgs = [];
+    const tmp = mkdtempSync(join(tmpdir(), 'wai-a20-'));
+    const pack = (browser, out) => {
+      execFileSync('node', [join(ROOT, 'scripts', 'package-ext.mjs'),
+        `--browser=${browser}`, `--out=${out}`], { cwd: ROOT, stdio: 'pipe' });
+      return createHash('sha256').update(readFileSync(out)).digest('hex');
+    };
+    // Walk the build dir the same way the build writes it.
+    const stamp = (dir, when) => {
+      const walk = (rel) => {
+        for (const e of readdirSync(join(dir, rel), { withFileTypes: true })) {
+          const child = rel ? `${rel}/${e.name}` : e.name;
+          if (e.isDirectory()) walk(child);
+          else if (e.isFile()) {
+            execFileSync('touch', ['-d', when, join(dir, child)]);
+          }
+        }
+      };
+      walk('');
+    };
+    try {
+      for (const browser of ['chrome', 'firefox']) {
+        const dir = join(DIST, 'extension', browser);
+        if (!existsSync(join(dir, 'manifest.json'))) { msgs.push(`no build output for ${browser}`); continue; }
+
+        stamp(dir, '2021-03-04T05:06:07Z');
+        const first = pack(browser, join(tmp, `${browser}-1.zip`));
+        // A different mtime for every file, well away from the first round: this is what a
+        // rebuild on another machine, or on another day, looks like.
+        stamp(dir, '2026-09-27T18:30:00Z');
+        const second = pack(browser, join(tmp, `${browser}-2.zip`));
+
+        if (first !== second) {
+          msgs.push(`${browser}: ${first.slice(0, 12)} != ${second.slice(0, 12)} ` +
+            '(mtimes are not being normalised, so the checksum tracks build time)');
+        }
+      }
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    return msgs.length ? msgs.join('; ') : true;
+  });
+}
 
 // ---------------------------------------------------------------- report
 

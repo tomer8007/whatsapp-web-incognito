@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One-shot debug run: stop stale instances, build, verify, test, launch, and report.
 //
-//   pnpm one            full: kill -> env -> build -> assertions -> tests -> real app
+//   pnpm one            full: kill -> env -> build -> package -> assertions -> tests -> app
 //   pnpm one --no-test  skip the unit tests
 //   pnpm one --no-app   everything except the real-window check (CI-friendly)
 //
@@ -98,8 +98,16 @@ step(2, 'stale instances');
 step(3, 'build');
 run('bundles built', process.execPath, ['scripts/build.mjs']);
 
-// ---------------------------------------------------------------- 4. assertions
-step(4, 'build assertions');
+// ---------------------------------------------------------------- 4. package
+//
+// Before the assertions, not after. A18/A19/A20 check the zip that anyone actually
+// installs, so there has to BE a zip by the time they run — otherwise they silently skip
+// and the one artefact nobody can reproduce locally goes untested on every `pnpm check`.
+step(4, 'package extension');
+run('extension zips built', process.execPath, ['scripts/package-ext.mjs']);
+
+// ---------------------------------------------------------------- 5. assertions
+step(5, 'build assertions');
 {
   const r = spawnSync(process.execPath, ['scripts/verify-bundles.mjs'], { cwd: ROOT, encoding: 'utf8' });
   const m = (r.stdout || '').match(/(\d+) passed, (\d+) failed/);
@@ -111,13 +119,13 @@ step(4, 'build assertions');
   }
 }
 
-// ---------------------------------------------------------------- 5. unit tests
+// ---------------------------------------------------------------- 6. unit tests
 if (!SKIP_TEST) {
-  step(5, 'unit tests');
+  step(6, 'unit tests');
   run('prefs store + dev bridge + user agent', process.execPath, ['--test', 'app/electron/*.test.js']);
 }
 
-// ---------------------------------------------------------------- 6. the real thing
+// ---------------------------------------------------------------- 7. the real thing
 //
 // Order matters here. Two different questions, and a bare probe cannot answer both:
 //
@@ -132,7 +140,7 @@ if (!SKIP_TEST) {
 // A probe that does not run the production path cannot catch an ordering bug in the
 // production path.
 if (!SKIP_APP) {
-  step(6, 'the real app, real window');
+  step(7, 'the real app, real window');
   console.log('  launching with WAI_SELFTEST=1; the app reports what its own window received.\n');
   const r = spawnSync(join(ROOT, 'node_modules/.bin/electron'), ['.'], {
     cwd: ROOT,

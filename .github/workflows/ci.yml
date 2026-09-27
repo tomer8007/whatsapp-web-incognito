@@ -92,9 +92,17 @@ jobs:
         # blocker even if the other two are fine.
         run: pnpm run build
 
+      - name: Package extensions
+        # Must run BEFORE verify. A18/A19/A20 check the zip people actually install, and
+        # they skip when no zip exists — so without this step the one artefact that is not
+        # reproducible locally would go untested on every PR. This is also the first place
+        # the local packer and the release.yml packer are compared at all.
+        run: pnpm run package:ext
+
       - name: Verify bundles
-        # A1-A11. Converts the silent failure modes (dead interception hook, lexical
-        # redeclaration killing a whole bundle) into a red build.
+        # A1-A11, A18-A20. Converts the silent failure modes (dead interception hook, lexical
+        # redeclaration killing a whole bundle, a zip missing a file or carrying the wrong
+        # browser's manifest) into a red build.
         run: pnpm run verify
 
       - name: Unit tests

@@ -6,7 +6,6 @@
   "patchedFiles": [
     "core/interception.js",
     "core/multi_device.js",
-    "core/node_handler.js",
     "core/parsing/binary_reader.js",
     "core/parsing/node_reader_writer.js",
     "core/parsing/protobuf/WAProto.js",
@@ -20,11 +19,12 @@
     {
       "id": "P0a",
       "file": "core/node_handler.js",
-      "status": "pre-existing",
+      "status": "adopted-upstream",
       "summary": "Drop the up-front JID normalisation, add receipt/received/played blocking, move JID derivation into the switch.",
       "kind": "bugfix",
-      "upstreamCandidate": true,
-      "note": "Local fix for chats appearing read despite receipt blocking (LID change on WhatsApp's side). Not yet sent upstream."
+      "upstreamCandidate": false,
+      "note": "RESOLVED UPSTREAM. Merge 4af6cec (upstream/master @ 34f52fc) made core/node_handler.js byte-identical to upstream, so it left patchedFiles — A7 fails on a recorded file that no longer differs. Upstream landed the same fix independently. Their version is stricter in one place: `played` receipts are blocked only `&& isChatBlocked(jid)` rather than unconditionally. Nothing to re-apply and nothing to carry; the entry stays only as the record of why the file is no longer patched.",
+      "resolvedBy": "4af6cec"
     },
     {
       "id": "P0b",
@@ -143,8 +143,19 @@
     "scope": "This is a browser-gate bypass and NOTHING more. It is not anonymity and not anti-fingerprinting: it changes exactly one signal. Electron remains distinguishable via renderer strings, feature quirks and network fingerprint. Overridable with WAI_USER_AGENT for debugging.",
     "assertion": "user-agent.test.js (11 tests)",
     "note": "The extension targets are unaffected — they run in a real browser and already send a real UA."
-    }
-  ],
+    },
+  {
+    "id": "P10",
+    "file": "scripts/package-ext.mjs (build-time, not a source patch)",
+    "status": "applied",
+    "summary": "Add a local packer for the extension zips, plus A18/A19/A20 to check the packaged artefact.",
+    "kind": "release-tooling",
+    "why": "scripts/build.mjs only ever wrote UNPACKED directories. The only zip in the project was produced by .github/workflows/release.yml, so there was no way to produce the artefact you would actually submit to AMO, and no way to reproduce a release locally. Everything about the shipped zip was therefore untested: nothing checked that the archive held exactly the built files, that it carried the right browser's manifest, or that the reproducibility the README advertises still held.",
+    "fix": "package-ext.mjs reproduces release.yml's zip exactly — commit-date mtime normalisation, LC_ALL=C byte-order file list, zip -X -9 — so a local checksum is comparable with a CI one. The one deliberate difference is that Node produces the file list instead of `find | sort -z | xargs`, which guarantees a single zip invocation at any file count and lets the script refuse to package a directory containing a symlink. Firefox additionally gets a .xpi, a copy rather than a re-zip so the two are provably identical.",
+    "assertion": "A18 (archive contents == build dir), A19 (manifest inside the zip is the right browser variant), A20 (reproducible across a rebuild)",
+    "a20note": "A20 deliberately stamps the build directory with a different mtime before each of its two packs. The obvious formulation — pack the same tree twice — passes even against a packer with the mtime normalisation removed, because nothing rewrites the files in between. The property that matters is reproducibility ACROSS a rebuild, so that is what is tested.",
+    "scope": "extension targets only. The electron target is packaged by electron-builder and is unaffected."
+  }],
 
   "encoding": {
     "$comment": "core/parsing/protobuf/{WAProto,WhisperTextProtocol}.js were re-encoded UTF-16 -> UTF-8 by commit 10809c8, which halved them. core/ui.js and background.js still carry a UTF-8 BOM. These are not behavioural patches but they do appear in the diff, so they are declared here rather than left as a surprise."
