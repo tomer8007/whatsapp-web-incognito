@@ -12,15 +12,43 @@ var autoReceiptOnReplay = true;
 var safetyDelay = 0;
 
 var isInitializing = true;
+
+// PATCH: interception is proven to be working as soon as ONE packet has been
+// successfully decrypted, parsed and re-packed - in either direction. The
+// original code only tested the outgoing path, so a quiet session (no outgoing
+// frame inside the window core/ui.js waits for) reported
+// "interception is not working" even though everything was fine.
+function reportInterceptionWorking()
+{
+    if (!isInitializing) return;
+
+    isInitializing = false;
+    console.log("WhatsIncognito: Interception is working.");
+    document.dispatchEvent(new CustomEvent('onInterceptionWorking', { detail: JSON.stringify({isInterceptionWorking: true}) }));
+}
 var exceptionsList = [];
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
 var deviceTypesPerMessage = {};
 
-// debugging flags
-var WAdebugMode = false;
-var WALogs = true;
+// PATCH: the WALogs block below calls require("WALogger") inside a setTimeout.
+// That call assumes the WhatsApp "Comet" module registry is reachable from this
+// script's scope. On current WhatsApp Web it is not: require() there resolves
+// against the extension's own module table, not the page's, and throws
+//
+//     TypeError: Cannot read properties of undefined (reading 'LOG')
+//         at core/interception.js:562
+//
+// With WALogs left true, initialize() -> hookLogs() throws, which aborts the
+// rest of initialize() (initializeDeletedMessagesDB never runs) AND, because the
+// throw escapes the top-level script, silently kills everything below line 42 -
+// including the wsHook.before / wsHook.after assignments. No wsHook handler
+// means no interception, which is exactly what the error dialog reports.
+//
+// Set to false to leave WhatsApp's own logging untouched. Nothing else in the
+// extension reads this flag; it only guards the log-hook installation.
+var WALogs = false;
 var xmlDebugging = true;
 var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
@@ -76,9 +104,7 @@ wsHook.before = function (originalData, url)
 
         if (isInitializing)
         {
-            isInitializing = false;
-            console.log("WhatsIncognito: Interception is working.");
-            document.dispatchEvent(new CustomEvent('onInterceptionWorking', { detail: JSON.stringify({isInterceptionWorking: true}) }));
+            reportInterceptionWorking();
         }
 
         return packedNode;
@@ -130,7 +156,11 @@ wsHook.after = function (messageEvent, url)
             var counter = decryptedFrameInfo.counter;
 
             var realNode = await nodeReaderWriter.decodeStanza(decryptedFrameOriginal, gzipInflate);
-            
+
+            // PATCH: a decrypted + parsed incoming frame proves interception works,
+            // even if this session never sends an outgoing frame in time.
+            reportInterceptionWorking();
+
             if (WAdebugMode || WAPassthroughWithDebug)
             {
                 printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
@@ -519,8 +549,23 @@ function exposeWhatsAppAPI()
 
 function initialize()
 {
+    // PATCH: hookLogs() only exists to keep extension errors out of WhatsApp's
+    // own telemetry. It must never be able to break interception, so it is
+    // isolated: if it throws - for any reason, WALogs or not - the rest of
+    // initialize() still runs and the top-level script keeps executing, which is
+    // what leaves wsHook.before / wsHook.after installed.
     if (WALogs)
-        hookLogs();
+    {
+        try
+        {
+            hookLogs();
+        }
+        catch (exception)
+        {
+            console.warn("WhatsIncognito: log hooking failed, continuing without it:");
+            console.warn(exception);
+        }
+    }
     initializeDeletedMessagesDB();
 }
 
