@@ -10,6 +10,33 @@ var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var pseudoMsgsIDs = new Set();
 
+// --- PATCH: interception diagnostics ---------------------------------------
+// Facts reported by core/diagnostics.js (page world) via the
+// onWAIncognitoDiagnostics event, plus the injection load status published by
+// core_injection.js (same isolated world, read through window to be explicit).
+var WAIncognitoDiagnostics = null;
+
+// The original code showed the failure dialog exactly 1 second after the main
+// UI became ready. That is far too early: interception is only *proven* once
+// the first packet has been decrypted, and a quiet session may not have sent
+// one yet. Re-check a few times before reporting a failure.
+var interceptionRecheckScheduled = false;
+var interceptionRecheckDelay = 1000;
+var INTERCEPTION_MAX_RECHECK_DELAY = 4000;
+var interceptionFailureReported = false;
+
+function getInjectionLoadStatus()
+{
+    try
+    {
+        return window.WAIncognitoLoadStatus || null;
+    }
+    catch (e)
+    {
+        return null;
+    }
+}
+
 if (chrome != undefined) 
 {
 	var browser = chrome;
@@ -128,7 +155,7 @@ function onMainUIReady()
 {
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
 
-    setTimeout(checkInterception, 1000);
+    setTimeout(function () { checkInterception(); }, 1000);
 
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     // TODO: a race can make the icon added twice
@@ -173,7 +200,7 @@ async function addIconIfNeeded()
             }
             drop.on("open", function ()
             {
-                if (!checkInterception()) return;
+                if (!checkInterception(true)) return;
                 var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
 
@@ -429,11 +456,24 @@ document.addEventListener('onMarkAsReadClick', function (e)
     });
 });
 
+// PATCH: collect the diagnostics reported by core/diagnostics.js and the
+// injection load status from core_injection.js, so a failure can explain itself.
+document.addEventListener('onWAIncognitoDiagnostics', function (e)
+{
+    try
+    {
+        WAIncognitoDiagnostics = JSON.parse(e.detail);
+    }
+    catch (err)
+    {
+        console.error("WhatsApp Web Incognito: could not parse diagnostics", err);
+    }
+});
+
 document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
-
     // populate pseudoMsgsIDs
     var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
     deletedDBOpenRequest.onsuccess = () => 
@@ -1123,23 +1163,103 @@ function isSafetyDelayValid(string)
     return (String(number) === string && number >= 1 && number <= 30) || string == ""
 }
 
-function checkInterception()
+// PATCH: `silent` is used by callers that only want a yes/no answer (e.g. the
+// drop-menu handler) and must not trigger the retry chain or the dialog.
+function checkInterception(silent)
 {
-    if (!isInterceptionWorking)
+    if (isInterceptionWorking)
+        return true;
+
+    if (!silent)
+        scheduleInterceptionRecheck();
+
+    return false;
+}
+
+function scheduleInterceptionRecheck()
+{
+    if (interceptionRecheckScheduled || interceptionFailureReported)
+        return;
+
+    interceptionRecheckScheduled = true;
+
+    setTimeout(function ()
     {
-        Swal.fire({
-            title: "Oops...",
-            html: "WhatsApp Web Incognito has detected that interception is not working. \
-                   Please try refreshing this page, or, if the problem presists, writing back to the developer.",
-            icon: "error",
-            width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "OK",
-        });
-        return false;
+        interceptionRecheckScheduled = false;
+
+        if (isInterceptionWorking)
+            return;
+
+        if (interceptionRecheckDelay < INTERCEPTION_MAX_RECHECK_DELAY)
+        {
+            interceptionRecheckDelay *= 2;
+            scheduleInterceptionRecheck();
+            return;
+        }
+
+        interceptionFailureReported = true;
+        showInterceptionFailureDialog();
+    }, interceptionRecheckDelay);
+}
+
+function describeInterceptionFailure()
+{
+    var lines = [];
+
+    var loadStatus = getInjectionLoadStatus();
+    if (loadStatus && loadStatus.failed && loadStatus.failed.length > 0)
+    {
+        lines.push("<b>These extension scripts could not be loaded:</b>");
+        lines.push("<code>" + loadStatus.failed.join("<br>") + "</code>");
+        lines.push("Another extension or a content blocker is most likely blocking them.");
     }
 
-    return true;
+    var diag = WAIncognitoDiagnostics;
+    if (diag)
+    {
+        lines.push("<b>Detected state:</b>");
+        lines.push("<code>" +
+            "dcodeIO: " + diag.dcodeIO + "<br>" +
+            "libsignal: " + diag.libsignal + "<br>" +
+            "pako: " + diag.pako + "<br>" +
+            "Pbf: " + diag.pbf + "<br>" +
+            "WebSocket hooked: " + diag.webSocketHooked + "<br>" +
+            "WhatsApp Web: " + (diag.whatsAppVersion || "unknown") +
+            "</code>");
+
+        if (diag.dcodeIO === "missing")
+        {
+            lines.push("This is the known libsignal load-order bug (dcodeIO was never created). " +
+                       "The patched build fixes it.");
+        }
+        else if (diag.webSocketHooked === false)
+        {
+            lines.push("The WebSocket hook was never installed. WhatsApp Web was probably " +
+                       "already open when the extension started - reload the page.");
+        }
+    }
+
+    if (lines.length === 0)
+        lines.push("No diagnostics were captured. Please try refreshing this page.");
+
+    return lines.join("<br><br>");
+}
+
+function showInterceptionFailureDialog()
+{
+    console.warn("WhatsApp Web Incognito: interception is not working.",
+        getInjectionLoadStatus(), WAIncognitoDiagnostics);
+
+    Swal.fire({
+        title: "Interception is not working",
+        html: "WhatsApp Web Incognito could not intercept WhatsApp Web's traffic.<br><br>" +
+              describeInterceptionFailure() +
+              "<br><br>Try a hard refresh (Ctrl + Shift + R). If it keeps failing, see the fix guide.",
+        icon: "error",
+        width: 700,
+        confirmButtonColor: "#DD6B55",
+        confirmButtonText: "OK",
+    });
 }
 
 function updateUIClassNamesIfNeeded()
