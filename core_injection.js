@@ -1,26 +1,44 @@
 
-injectScript('core/ws_hook.js'); // important to inject as early as possible
-injectOtherScripts();
+// Order matters. Every entry is awaited before the next one is created.
+var injectionOrder = [
+	'core/ws_hook.js',                        // patches the WebSocket constructor - must be first
+	'lib/pbf.3.0.5.min.js',
+	'lib/libsignal-protocol-ee5b8ba.min.js',
+	'lib/pako.js',
 
-async function injectOtherScripts() 
+	'core/parsing/binary_reader.js',
+	'core/parsing/binary_writer.js',
+	'core/parsing/node_reader_writer.js',
+	'core/parsing/protobuf/WhisperTextProtocol.js',
+	'core/parsing/protobuf/WAProto.js',
+
+	'core/utils.js',
+	'core/ui_class_names.js',
+	'core/injected_ui.js',
+	'core/multi_device.js',
+	'core/node_handler.js',
+	'core/interception.js'
+];
+
+injectScriptsInOrder();
+
+async function injectScriptsInOrder() 
 {
-	injectScript('lib/pbf.3.0.5.min.js');
-	injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
-	injectScript('lib/pako.js');
+	for (var i = 0; i < injectionOrder.length; i++) 
+	{
+		var scriptName = injectionOrder[i];
 
-	injectScript('core/parsing/binary_reader.js');
-	injectScript('core/parsing/binary_writer.js');
-	injectScript('core/parsing/node_reader_writer.js');
-	injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
-	injectScript('core/parsing/protobuf/WAProto.js');
-
-	injectScript('core/utils.js');
-	injectScript('core/ui_class_names.js');
-	injectScript('core/injected_ui.js');
-	
-	await injectScript('core/multi_device.js');
-	await injectScript('core/node_handler.js');
-	injectScript('core/interception.js');
+		try 
+		{
+			await injectScript(scriptName);
+		} 
+		catch (e) 
+		{
+			// A blocked or missing script must not abort the whole list,
+			// but it must not be silent either.
+			console.error("WhatsIncognito: could not inject " + scriptName, e);
+		}
+	}
 
 	setTimeout(
 		function() {
@@ -34,9 +52,20 @@ function injectScript(scriptName)
 	return new Promise(function(resolve, reject) {
 		var s = document.createElement('script');
 		s.src = chrome.runtime.getURL(scriptName);
+		// Without this the injected scripts execute in download-completion
+		// order instead of insertion order, and the 250 KB libsignal bundle
+		// can land after WhatsApp Web has already installed its own UMD
+		// loader globals (define.amd / require / module). libsignal then takes
+		// the AMD/CommonJS branch, window.dcodeIO is never created, and
+		// interception dies with "dcodeIO is not defined".
+		s.async = false;
 		s.onload = function() {
 			this.parentNode.removeChild(this);
 			resolve(true);
+		};
+		s.onerror = function() {
+			this.parentNode.removeChild(this);
+			reject(new Error("failed to inject " + scriptName));
 		};
 		(document.head||document.documentElement).appendChild(s);
 	});
