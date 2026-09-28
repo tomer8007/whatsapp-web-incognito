@@ -45,6 +45,7 @@
 // Order matters. Every entry is awaited before the next one starts.
 var INJECTION_ORDER = [
 	'core/ws_hook.js',                        // patches the WebSocket constructor - must be first
+	'core/comms_worker_fix.js',               // force comms onto the main thread so ws_hook sees frames
 	'lib/pbf.3.0.5.min.js',
 	'lib/libsignal-protocol-ee5b8ba.min.js',  // publishes window.dcodeIO and window.libsignal
 	'lib/pako.js',

@@ -1237,6 +1237,62 @@ function describeInterceptionFailure()
             lines.push("The WebSocket hook was never installed. WhatsApp Web was probably " +
                        "already open when the extension started - reload the page.");
         }
+
+        // PATCH (2.5.8.4): when every dependency is present, the failure is in
+        // the runtime path, which used to fail silently. Show the measurement.
+        var runtime = diag.runtime;
+        if (runtime && runtime.counters)
+        {
+            var c = runtime.counters;
+
+            lines.push("<b>Runtime evidence:</b>");
+            lines.push("<code>" +
+                "Noise read key: " + runtime.readKey + "<br>" +
+                "frames sent through hook: " + c.beforeCalls + "<br>" +
+                "frames received through hook: " + c.afterCalls + "<br>" +
+                "decrypt calls: " + c.decryptCalls +
+                    " (decrypted " + c.decryptOk + ", returned null " + c.decryptNull + ")<br>" +
+                "counter failures: " + c.counterThrows + "<br>" +
+                "importKey calls: " + runtime.importsSeen +
+                    " (matching the key rule: " + runtime.importsMatchingExtensionRule + ")<br>" +
+                "importKey hooked: " + runtime.importKeyHooked + "<br>" +
+                "isInitializing: " + runtime.isInitializing +
+                "</code>");
+
+            lines.push("<b>Diagnosis:</b> " + runtime.diagnosis);
+
+            // PATCH (2.5.8.5): WhatsApp may run its socket in the backend Web
+            // Worker. Show whether the extension managed to force it back onto
+            // the main thread, because that is the difference between a blind
+            // hook and a working one.
+            if (diag.commsModeFix)
+            {
+                var fix = diag.commsModeFix;
+                lines.push("<b>Comms mode:</b> " +
+                    (fix.patched
+                        ? "socket forced to the main thread (" + fix.method + ")"
+                        : "NOT forced to the main thread - WhatsApp may be using its backend Web Worker") +
+                    "<br><code>factory hook installed: " + fix.factoryHookInstalled +
+                    "<br>require() available: " + fix.requireSeen +
+                    "<br>isCommsInWorker before patch: " + fix.originalValueAtPatch +
+                    "</code>");
+            }
+
+            if (runtime.imports && runtime.imports.length > 0)
+            {
+                var first = runtime.imports[0];
+                lines.push("<b>First importKey call:</b> <code>format=" + first.format +
+                    " alg=" + first.algorithm + " bytes=" + first.keyBytes +
+                    " extractable=" + first.extractable + " usages=" + first.usages +
+                    " matched=" + first.matched + "</code>");
+            }
+
+            if (runtime.extensionLogs && runtime.extensionLogs.length > 0)
+            {
+                lines.push("<b>Last extension log lines:</b><br><code>" +
+                    runtime.extensionLogs.slice(-6).join("<br>") + "</code>");
+            }
+        }
     }
 
     if (lines.length === 0)
