@@ -211,6 +211,34 @@ const arrayBufferToBase64 = (buffer) =>
     return btoa(binary);
 }
 
+// Encrypts sensitive text (message bodies, author, location, etc.) before it is
+// persisted to IndexedDB, so deleted-message records are not stored in plaintext.
+async function encryptSensitiveText(plainText)
+{
+    if (plainText == null) return plainText;
+
+    if (!window.incognitoEncryptionKey)
+    {
+        var storedKey = localStorage.getItem("incognitoEncryptionKey");
+        if (storedKey)
+        {
+            window.incognitoEncryptionKey = await crypto.subtle.importKey("jwk", JSON.parse(storedKey), "AES-GCM", true, ["encrypt", "decrypt"]);
+        }
+        else
+        {
+            window.incognitoEncryptionKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+            var exportedKey = await crypto.subtle.exportKey("jwk", window.incognitoEncryptionKey);
+            localStorage.setItem("incognitoEncryptionKey", JSON.stringify(exportedKey));
+        }
+    }
+
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var encoded = new TextEncoder().encode(String(plainText));
+    var ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, window.incognitoEncryptionKey, encoded);
+
+    return { iv: arrayBufferToBase64(iv), data: arrayBufferToBase64(ciphertext) };
+}
+
 function showToast(message)
 {
     var appElement = document.getElementsByClassName("app-wrapper-web")[0];

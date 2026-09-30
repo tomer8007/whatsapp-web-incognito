@@ -315,17 +315,17 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     deletedMsgRecord.id = deletedMessage.id.id;
     deletedMsgRecord.originalID = deletedMessage.id.id;
     deletedMsgRecord.revokeMessageID = revokeMessageID;
-    deletedMsgRecord.body = body;
+    deletedMsgRecord.body = await encryptSensitiveText(body);
     deletedMsgRecord.timestamp = deletedMessage.t;
-    deletedMsgRecord.from = author;
+    deletedMsgRecord.from = await encryptSensitiveText(author);
     deletedMsgRecord.isMedia = isMedia;
     deletedMsgRecord.fileName = deletedMessage.filename;
     deletedMsgRecord.mimetype = deletedMessage.mimetype;
     deletedMsgRecord.type = deletedMessage.type;
-    deletedMsgRecord.mediaText = deletedMessage.text;
+    deletedMsgRecord.mediaText = await encryptSensitiveText(deletedMessage.text);
     deletedMsgRecord.Jid = deletedMessageKey.remoteJid;
-    deletedMsgRecord.lng = deletedMessage.lng;
-    deletedMsgRecord.lat = deletedMessage.lat;
+    deletedMsgRecord.lng = await encryptSensitiveText(deletedMessage.lng);
+    deletedMsgRecord.lat = await encryptSensitiveText(deletedMessage.lat);
 
     if ("id" in deletedMsgRecord)
     {
