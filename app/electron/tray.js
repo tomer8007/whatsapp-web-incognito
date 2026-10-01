@@ -1,0 +1,518 @@
+'use strict';
+// Tray: the honest status display, plus the three hook toggles (§9.6).
+//
+// BADGE RENDERER (ported from WhatsLNX)
+// Pure-JS PNG badge painted directly onto the tray icon's pixel buffer — no native
+// deps, no sharp, no canvas. Works on every platform including packaged AppImages.
+//
+// WHY THE TRAY IS THE POINT
+// -------------------------
+// Running in the background is only worth it if the app is doing something for you, and
+// the single most useful thing it can do is stop the §2.3 failure from being invisible: a
+// tray that always shows a reassuring static icon is worse than no tray, because it
+// actively misinforms. So the status line is derived from the watchdog and is allowed to
+// say NOT PROTECTED. §9.7 is the other half of the bargain — a live socket is not free,
+// and the counters below are what makes that visible instead of surprising.
+//
+// A hook toggle must also be a round-trip through the real persistence path
+// (tray → main → PrefsStore → preload → page), so the tray and the window can never
+// disagree and the path is exercised every time (§10 step 6).
+
+const path = require('node:path');
+const zlib = require('node:zlib');
+const { Menu, Tray, nativeImage } = require('electron');
+const { quickToggles, settingsFor } = require('./settings-menu.js');
+
+// ---------------------------------------------------------------- badge renderer (ported from WhatsLNX)
+// 7×9 bold pixel font for digits 0-9 and '+'. Each glyph is a 9-row array of bit strings.
+const GLYPHS = {
+  '0': ['0111110','1100011','1100011','1100011','1100011','1100011','1100011','1100011','0111110'],
+  '1': ['0011100','0111100','0001100','0001100','0001100','0001100','0001100','0001100','0111110'],
+  '2': ['0111110','1100011','0000011','0000110','0001100','0011000','0110000','1100000','1111111'],
+  '3': ['0111110','1100011','0000011','0000011','0011110','0000011','0000011','1100011','0111110'],
+  '4': ['0000110','0001110','0011110','0110110','1100110','1111111','0000110','0000110','0000110'],
+  '5': ['1111111','1100000','1100000','1111110','0000011','0000011','0000011','1100011','0111110'],
+  '6': ['0011110','0110000','1100000','1100000','1111110','1100011','1100011','1100011','0111110'],
+  '7': ['1111111','0000011','0000110','0001100','0011000','0011000','0110000','0110000','0110000'],
+  '8': ['0111110','1100011','1100011','1100011','0111110','1100011','1100011','1100011','0111110'],
+  '9': ['0111110','1100011','1100011','1100011','0111111','0000011','0000011','0000110','0011100'],
+  '+': ['0000000','0001100','0001100','0001100','1111111','1111111','0001100','0001100','0000000'],
+};
+
+// CRC32 lookup table for PNG chunk checksums
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/** Encode raw RGBA pixel data as a minimal PNG buffer. */
+function rgbaToPNG(rgba, width, height) {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
+  // Prepend filter byte 0 to every row
+  const raw = Buffer.alloc(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) {
+    raw[y * (1 + width * 4)] = 0;
+    rgba.copy(raw, y * (1 + width * 4) + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  const compressed = zlib.deflateSync(raw);
+  function chunk(type, data) {
+    const lenBuf = Buffer.alloc(4); lenBuf.writeUInt32BE(data.length);
+    const typeB = Buffer.from(type, 'ascii');
+    const crcBuf = Buffer.alloc(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([typeB, data])));
+    return Buffer.concat([lenBuf, typeB, data, crcBuf]);
+  }
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
+}
+
+/**
+ * Paint an unread-count badge onto the bottom-right corner of a tray icon.
+ * Returns a new NativeImage; the original is not modified.
+ * Shows "1"–"9" for counts 1–9, "9+" for 10+.
+ * No-ops if count ≤ 0 or icon is missing.
+ *
+ * `image` is the nativeImage module to build the result with. It is a parameter rather
+ * than a module-level reference so that createTray's injectable can be threaded through:
+ * under bare `node --test` there is no electron, so a module-level nativeImage is
+ * undefined and the badge path would be untestable — which is how a hard failure in here
+ * shipped unnoticed in the first place.
+ */
+function createBadgedIcon(icon, count, image) {
+  // `count <= 0` is NOT a sufficient guard: undefined <= 0 is false, because the
+  // comparison is against NaN. A non-numeric count therefore sailed past the check and
+  // then indexed GLYPHS[String(count)] — GLYPHS['u'] for "undefined" — and threw on
+  // undefined[0]. updateBadge happens to pre-validate its input, but this function is
+  // exported and must not depend on every caller doing that for it.
+  const n = Number(count);
+  if (!icon || !Number.isFinite(n) || n <= 0) return icon;
+  const img = image || nativeImage;
+  if (!img || typeof img.createFromBuffer !== 'function') return icon;
+  const size = 24; // tray icon size on Linux; resize first
+  const resized = icon.resize({ width: size, height: size });
+  const bgra = resized.toBitmap(); // Electron returns BGRA on Linux
+  // Convert BGRA → RGBA
+  const rgba = Buffer.alloc(size * size * 4);
+  for (let i = 0; i < size * size * 4; i += 4) {
+    rgba[i]     = bgra[i + 2];   // R
+    rgba[i + 1] = bgra[i + 1];   // G
+    rgba[i + 2] = bgra[i];       // B
+    rgba[i + 3] = bgra[i + 3];   // A
+  }
+  const label = n > 9 ? '9+' : String(Math.floor(n));
+  const glyphH = 9;
+  let glyphW = 0;
+  for (let i = 0; i < label.length; i++) {
+    glyphW += GLYPHS[label[i]][0].length;
+    if (i < label.length - 1) glyphW += 1; // 1px inter-char gap
+  }
+  const startX = size - glyphW - 1;
+  const startY = size - glyphH - 1;
+  // Collect lit pixels
+  const pixels = [];
+  let offsetX = 0;
+  for (let ci = 0; ci < label.length; ci++) {
+    const glyph = GLYPHS[label[ci]];
+    const gw = glyph[0].length;
+    for (let gy = 0; gy < glyphH; gy++) {
+      for (let gx = 0; gx < gw; gx++) {
+        if (glyph[gy][gx] === '1') pixels.push({ x: startX + offsetX + gx, y: startY + gy });
+      }
+    }
+    offsetX += gw + 1;
+  }
+  function setPixel(x, y, r, g, b, a) {
+    if (x >= 0 && x < size && y >= 0 && y < size) {
+      const idx = (y * size + x) * 4;
+      rgba[idx] = r; rgba[idx+1] = g; rgba[idx+2] = b; rgba[idx+3] = a;
+    }
+  }
+  // Yellow outline (3px stroke), then black fill
+  for (const p of pixels) {
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (dx !== 0 || dy !== 0) setPixel(p.x+dx, p.y+dy, 255, 220, 0, 230);
+      }
+    }
+  }
+  for (const p of pixels) setPixel(p.x, p.y, 0, 0, 0, 255);
+  return img.createFromBuffer(rgbaToPNG(rgba, size, size));
+}
+
+
+const IMAGES_DIR = path.join(__dirname, '..', '..', 'images');
+const DEBUG_LOG = !!process.env.WAI_DEBUG;
+
+// SVG first (it is what the extension ships and it scales to any tray density), PNG
+// second. A tray icon that fails to load is an invisible app, so the fallbacks are
+// explicit and each failure is logged rather than swallowed.
+// PNG first, and not as a preference — as a measured requirement.
+//
+// On Electron 44.4.5 / Chromium 152, nativeImage.createFromPath returns an EMPTY image
+// (isEmpty() === true, size 0x0) for every SVG in images/, while all four PNGs load at
+// 128x128. createFromPath resolves empty rather than throwing, so an SVG-first list
+// silently burns candidates and logs warnings on every launch. Measured, not assumed:
+//
+//   incognito_gray.png        empty=false 128x128
+//   incognito.png             empty=false 128x128
+//   icon_128_reshaped.png     empty=false 128x128
+//   icon_128_blue.png         empty=false 128x128
+//   incognito_gray_hollow.svg empty=true  0x0
+//
+// The SVGs stay last as a fallback for platforms that do accept them.
+// Same icon as the extension and the window (manifest.json `icons` +
+// `action.default_icon` → images/icon_128_blue.png, which
+// app/packaging/icon.{png,ico,icns} is generated from). Blue first so the
+// native app matches the other ones; gray PNGs stay as fallbacks.
+const ICON_CANDIDATES = [
+  'icon_128_blue.png',
+  'icon_128_reshaped.png',
+  'incognito_gray.png',
+  'incognito.png',
+  'incognito_gray_hollow.svg',
+  'incognito.svg',
+];
+
+// The three toggles, in the order a user cares about them: the one that leaks identity
+// (read receipts) first, then the two presence features. Their labels live in
+// app/electron/settings-menu.js so the tray and the settings menu cannot disagree — this
+// array used to be a second, hand-maintained copy of the same three rows.
+const TOGGLES = quickToggles();
+
+function humanDuration(ms) {
+  if (ms == null) return 'never';
+  if (ms < 1000) return `${ms}ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  const h = Math.floor(m / 60);
+  return `${h}h ${m % 60}m`;
+}
+
+// `long` is the menu row — it has room, and it must say what receipts are doing. `short`
+// is the tooltip and the log-friendly form. Both name the state; neither softens it.
+//
+// Module scope, not inside createTray: the settings menu (app/electron/settings-menu.js,
+// driven by main.js) shows the same two rows, and a second copy of this formatting is how
+// the tray and the settings screen would start disagreeing about whether protection is on.
+const LABEL = {
+  PROTECTED: { short: 'Protected', long: 'Protected' },
+  RECONNECTING: { short: 'Reconnecting', long: 'Reconnecting — receipts are NOT blocked right now' },
+  NOT_PROTECTED: { short: 'NOT PROTECTED', long: 'NOT PROTECTED — receipts may be leaking' },
+  UNKNOWN: { short: 'Starting up…', long: 'Starting up…' },
+};
+
+function labelOf(status) {
+  const s = status || {};
+  return LABEL[s.status] || { short: String(s.status || 'UNKNOWN'), long: String(s.status || 'UNKNOWN') };
+}
+
+/** The evidence line: how much has moved, how much was held back, how quiet it has been. */
+function counters(status) {
+  const s = status || {};
+  const bits = [`${s.framesIn || 0} in / ${s.framesOut || 0} out`];
+  if (s.blocked) bits.push(`${s.blocked} receipts blocked`);
+  if (s.heldChats) bits.push(`${s.heldChats} held for replay`);
+  bits.push(`last frame ${humanDuration(s.sinceLastFrame)} ago`);
+  if (s.recoveries) bits.push(`${s.recoveries} recoveries`);
+  return bits.join(' · ');
+}
+
+/**
+ * @param {object} opts
+ * @param {object} opts.app          Electron app (for the platform check)
+ * @param {() => object} opts.getWindow   the live BrowserWindow, or null
+ * @param {() => object} opts.getStatus   watchdog snapshot
+ * @param {(patch: object) => object} opts.setPref  main → PrefsStore → page
+ * @param {() => object} opts.getPrefs
+ * @param {() => void} [opts.openSettings]  the full native settings menu, if available
+ * @param {() => void} opts.quit
+ * @param {object} [opts.Menu] [opts.Tray] [opts.nativeImage] injectable, for tests
+ */
+function createTray(opts) {
+  const { app, getWindow, getStatus, setPref, getPrefs, quit } = opts;
+  if (typeof getWindow !== 'function') throw new Error('createTray: getWindow is required');
+
+  const MenuCtor = opts.Menu || Menu;
+  const TrayCtor = opts.Tray || Tray;
+  const image = opts.nativeImage || nativeImage;
+
+  // ---------------------------------------------------------------- icon
+
+  function loadIcon() {
+    // Linux trays want ~22px, Windows/macOS ~16px. nativeImage.resize() returns a
+    // NEW image (it does not mutate in place), so the return value must be used —
+    // returning the original 128px PNG renders as a broken oversized tray icon.
+    const target = process.platform === 'linux' ? 22 : 16;
+    for (const name of ICON_CANDIDATES) {
+      const file = path.join(IMAGES_DIR, name);
+      try {
+        const img = image.createFromPath(file);
+        // createFromPath resolves empty rather than throwing for an unreadable file, so
+        // the emptiness check is the real test, not the absence of an exception.
+        if (img && typeof img.isEmpty === 'function' && !img.isEmpty()) {
+          try {
+            const sized = img.resize({ width: target, height: target });
+            if (sized && typeof sized.isEmpty === 'function' && !sized.isEmpty()) {
+              return { img: sized, name };
+            }
+          } catch (e) { /* fall through to the unresized image */ }
+          return { img, name };
+        }
+        warn(`tray icon ${name} did not load (empty image)`);
+      } catch (e) {
+        warn(`tray icon ${name} failed: ${(e && e.message) || e}`);
+      }
+    }
+    warn('no tray icon could be loaded; the tray will be blank but still functional');
+    try { return { img: image.createEmpty(), name: '(empty)' }; } catch (e) { return { img: null, name: '(none)' }; }
+  }
+
+  const { img, name: iconName } = loadIcon();
+  if (DEBUG_LOG) {
+    try { console.log('[wai] tray icon:', iconName); } catch (e) { /* stdout may be closed */ }
+  }
+  const baseIcon = img; // keep the unmodified icon for badge compositing
+
+  // ---------------------------------------------------------------- menu
+
+  function buildMenu() {
+    const status = safeStatus();
+    const prefs = safePrefs();
+    const items = [
+      // The honest status line. Two disabled rows rather than one so the counters stay
+      // readable; they are the evidence that the app is doing something while hidden.
+      { label: `Status: ${labelOf(status).long}`, enabled: false },
+      { label: counters(status), enabled: false },
+    ];
+
+    if (status.reason) items.push({ label: `Why: ${status.reason}`, enabled: false });
+    if (status.recovering) items.push({ label: 'Recovering…', enabled: false });
+
+    items.push({ type: 'separator' });
+    items.push({
+      label: 'Open Whatsapp Incognito',
+      click: () => {
+        try {
+          const win = getWindow();
+          if (!win || win.isDestroyed()) { warn('no window to show'); return; }
+          if (win.isMinimized()) win.restore();
+          win.show();
+          win.focus();
+        } catch (e) {
+          warn(`could not open the window: ${(e && e.message) || e}`);
+        }
+      },
+    });
+
+    items.push({ type: 'separator' });
+    for (const t of TOGGLES) {
+      items.push({
+        label: t.label,
+        type: 'checkbox',
+        checked: prefs[t.key] === true,
+        click: () => {
+          try {
+            // Everything a checkbox menu does is: ask main to persist, and main pushes
+            // the new values to the page. The tray never writes prefs itself.
+            setPref({ [t.key]: prefs[t.key] !== true });
+          } catch (e) {
+            warn(`could not change ${t.key}: ${(e && e.message) || e}`);
+          }
+          update();
+        },
+      });
+    }
+
+    items.push({ type: 'separator' });
+    // The full settings menu. The three rows above are the ones worth one click; everything
+    // else — the four that were only ever reachable from the panel injected into WhatsApp's
+    // own menu bar, the safety delay, autostart and the reset — lives in here.
+    if (typeof opts.openSettings === 'function') {
+      items.push({
+        label: 'Settings…',
+        click: () => {
+          try { opts.openSettings(); } catch (e) { warn(`could not open settings: ${(e && e.message) || e}`); }
+        },
+      });
+    }
+
+    items.push({ type: 'separator' });
+    // Shell-only pref (main.js SHELL_DEFAULTS, not background.js): start on login. Same
+    // round-trip as the hook toggles — tray → main → PrefsStore — except main applies it to
+    // the OS (applyAutostart) while the page ignores the unknown key. Its label comes from
+    // the settings table like every other row, so the tray and the settings menu cannot end
+    // up calling the same thing by different names.
+    const autostart = settingsFor(prefs).find((s) => s.key === 'autostart');
+    if (autostart) {
+      items.push({
+        label: autostart.label,
+        type: 'checkbox',
+        checked: prefs.autostart === true,
+        click: () => {
+          try {
+            setPref({ autostart: prefs.autostart !== true });
+          } catch (e) {
+            warn(`could not change autostart: ${(e && e.message) || e}`);
+          }
+          update();
+        },
+      });
+    }
+
+    items.push({ type: 'separator' });
+    items.push({
+      label: 'Reset options to defaults',
+      click: () => {
+        try {
+          if (opts.resetPrefs) opts.resetPrefs();
+        } catch (e) {
+          warn(`could not reset prefs: ${(e && e.message) || e}`);
+        }
+        update();
+      },
+    });
+    items.push({ type: 'separator' });
+    items.push({ label: 'Quit Whatsapp Incognito', click: () => { try { quit(); } catch (e) { warn('quit failed', e); } } });
+
+    return MenuCtor.buildFromTemplate(items);
+  }
+
+  function toolTip(status) {
+    return [
+      `Whatsapp Incognito — ${labelOf(status).short}`,
+      status.reason || '',
+      `${status.framesIn || 0} frames in / ${status.framesOut || 0} out`,
+      status.blocked ? `${status.blocked} receipts blocked` : '',
+      status.status === 'PROTECTED' ? '' : 'Receipts are not being protected.',
+    ].filter(Boolean).join('\n');
+  }
+
+  function safeStatus() {
+    try {
+      const s = typeof getStatus === 'function' ? getStatus() : null;
+      return s && typeof s === 'object' ? s : { status: 'UNKNOWN' };
+    } catch (e) {
+      return { status: 'UNKNOWN', reason: `status unavailable: ${(e && e.message) || e}` };
+    }
+  }
+
+  function safePrefs() {
+    try {
+      const p = typeof getPrefs === 'function' ? getPrefs() : null;
+      return p && typeof p === 'object' ? p : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  // ---------------------------------------------------------------- tray
+
+  let tray = null;
+  let _unreadCount = 0; // badge unread count
+  try {
+    tray = new TrayCtor(img);
+  } catch (e) {
+    warn(`could not create the tray: ${(e && e.message) || e}`);
+    return null;                     // main degrades to normal close semantics
+  }
+
+  // Measured on Electron 44.4.5 (Chromium 152):
+  //   typeof tray.setMenu        -> 'undefined'   (throws if called)
+  //   typeof tray.setContextMenu -> 'function'
+  //   typeof tray.setToolTip     -> 'function'
+  // So setContextMenu is the API that actually exists, and setMenu is probed only as a
+  // fallback for older Electron. Hard-coding setMenu threw on every single status change.
+  const setMenuCompat = (t, menu) => {
+    if (typeof t.setContextMenu === 'function') return t.setContextMenu(menu);
+    if (typeof t.setMenu === 'function') return t.setMenu(menu);
+    return undefined;   // no menu API at all: leave the tray as-is rather than throw
+  };
+
+  function update() {
+    if (!tray || (typeof tray.isDestroyed === 'function' && tray.isDestroyed())) return;
+    // Each sub-step is guarded separately. A single outer try/catch is NOT enough here:
+    // it swallows the first failure and abandons the rest, so one bad icon decode takes
+    // the context menu and tooltip down with it and the tray degrades into a dead icon
+    // that only looks alive. The menu is the part the user actually needs.
+    guard('tray icon', () => {
+      if (typeof tray.setImage === 'function' && baseIcon) {
+        const badged = _unreadCount > 0 ? createBadgedIcon(baseIcon, _unreadCount, image) : baseIcon;
+        if (badged) tray.setImage(badged);
+      }
+    })();
+    // Only the menu is rebuilt. Rebuilding the icon would drop the platform's
+    // animation and re-decode the file on every status change.
+    guard('tray menu', () => setMenuCompat(tray, buildMenu()))();
+    guard('tray tooltip', () => {
+      if (typeof tray.setToolTip === 'function') tray.setToolTip(toolTip(safeStatus()));
+    })();
+  }
+
+  // macOS: a left click on the tray icon should do the obvious thing.
+  if (app && process.platform === 'darwin' && typeof tray.on === 'function') {
+    tray.on('click', () => {
+      const win = getWindow();
+      if (win && !win.isDestroyed()) { win.show(); win.focus(); }
+    });
+  }
+
+  update();
+
+  return {
+    tray,
+    update,
+    /** Update the unread badge count and repaint the icon. */
+    updateBadge(count) {
+      _unreadCount = (typeof count === 'number' && count > 0) ? count : 0;
+      update();
+    },
+    /** Force a refresh, e.g. after prefs were written by the page's own options menu. */
+    refresh: update,
+    destroy() {
+      try { if (tray && !(tray.isDestroyed && tray.isDestroyed())) tray.destroy(); } catch (e) { /* ignore */ }
+      tray = null;
+    },
+  };
+}
+
+module.exports = { createTray, createBadgedIcon, rgbaToPNG, labelOf, counters };
+
+/**
+ * Wrap fn so a throw is logged and swallowed, never propagated.
+ *
+ * This is a local copy of main.js's guard on purpose. tray.js is loaded directly by
+ * app/electron/tray.test.js, which runs under bare `node --test` with no Electron, so
+ * it cannot require main.js — and main.js cannot export it without pulling in the whole
+ * app. A previous revision of the badge code called guard() here without defining it:
+ * the ReferenceError was caught by update()'s single outer try, so the tray silently
+ * lost its context menu and its badge on every launch and only logged a warning.
+ */
+function guard(label, fn, fallback) {
+  return (...args) => {
+    try { return fn(...args); } catch (e) {
+      warn(`${label} failed: ${(e && e.message) || e}`);
+      return typeof fallback === 'function' ? fallback(...args) : fallback;
+    }
+  };
+}
+
+function warn(...args) {
+  // The main process may have no stdout (dock/desktop launch); a throwing warn
+  // here would take the tray down with it. main.js installs a global safe-console
+  // shim, but tray.js is also loaded by tests, so stay non-throwing on its own.
+  try { console.warn('[wai:tray]', ...args); } catch (e) { /* ignore */ }
+}

@@ -1,4 +1,4 @@
-﻿// This is the background page.
+// This is the background page.
 // it keeps track of prefrences/settings in localStorage
 
 if (typeof chrome !== "undefined") {
@@ -55,7 +55,12 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var readConfirmationsHook = true;
         var showReadWarning = true;
 		var safetyDelay = 0;
-        var saveDeletedMsgs = false;
+        // On by default: without it core/node_handler.js returns before it ever sees a
+        // REVOKE, so deleted messages are never captured and "restore deleted messages"
+        // silently does nothing. Both the browser extension and the Electron build derive
+        // their default from this literal (scripts/build.mjs deriveDefaults), so this is
+        // the single switch for the feature.
+        var saveDeletedMsgs = true;
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
         var allowStatusDownload = true;

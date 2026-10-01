@@ -1,0 +1,76 @@
+{
+  "name": "waincognito",
+  "productName": "WAIncognito",
+  "desktopName": "waincognito",
+  "version": "2.5.95",
+  "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
+  "license": "GPL-3.0",
+  "private": true,
+  "main": "app/electron/main.js",
+  "author": "manas <immanasdoshi@gmail.com>",
+  "scripts": {
+    "one": "node scripts/one.mjs",
+    "doctor": "electron --no-sandbox scripts/doctor.cjs",
+    "build": "node scripts/build.mjs",
+    "build:chrome": "node scripts/build.mjs --target=chrome",
+    "build:firefox": "node scripts/build.mjs --target=firefox",
+    "build:electron": "node scripts/build.mjs --target=electron",
+    "package": "node scripts/package-ext.mjs",
+    "package:chrome": "node scripts/package-ext.mjs --browser=chrome",
+    "package:firefox": "node scripts/package-ext.mjs --browser=firefox",
+    "dist": "electron-builder --linux --x64 --win --x64 --mac --x64 --mac --arm64 --publish never",
+    "dist:linux": "electron-builder --linux --x64 --publish never",
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-builder --mac --x64 --mac --arm64 --publish never",
+    "verify": "node scripts/verify-bundles.mjs",
+    "test": "node --test \"app/electron/*.test.js\"",
+    "check": "node scripts/one.mjs --no-app",
+    "start": "electron . --no-sandbox",
+    "dev": "node scripts/dev.mjs",
+    "watch": "node scripts/dev.mjs --no-launch"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.wa-incognito.app",
+    "productName": "Whatsapp Incognito",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "app/packaging"
+    },
+    "files": [
+      "app/electron/**/*",
+      "app/.build/**/*",
+      "images/icon_128_blue.png",
+      "images/icon_128_reshaped.png",
+      "images/incognito_gray.png",
+      "images/incognito.png",
+      "package.json"
+    ],
+    "linux": {
+      "icon": "app/packaging/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "syncDesktopName": true
+    },
+    "win": {
+      "icon": "app/packaging/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "icon": "app/packaging/icon.icns",
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    }
+  }
+}

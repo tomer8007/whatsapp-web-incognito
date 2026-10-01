@@ -1,4 +1,4 @@
-﻿/*
+/*
 This is a content script responsible for some UI.
 */
 
@@ -9,15 +9,19 @@ var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var pseudoMsgsIDs = new Set();
+// The options panel's Drop instance, kept so it can be opened from outside a click on its
+// own icon. The Electron shell asks for this when it has no native menu to offer (see
+// app/electron/settings-menu.js); the extension only ever opens it by clicking the icon.
+var incognitoOptionsDrop = null;
 
 if (chrome != undefined) 
 {
 	var browser = chrome;
 }
 
-initialize();
+initializeUI();
 
-function initialize()
+function initializeUI()
 {
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
@@ -166,6 +170,7 @@ async function addIconIfNeeded()
                 },
             });
             var originalCloseFunction = drop.close;
+            incognitoOptionsDrop = drop;
             drop.close = function ()
             {
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
@@ -387,6 +392,37 @@ function generateDropContent(options)
     return dropContent;
 }
 
+//
+//    Programmatic access to the options panel
+//
+
+/**
+ * Open the options panel without a click on its icon.
+ *
+ * The panel is anchored to an element injected into WhatsApp's own menu bar, so it exists
+ * only once that anchor was found AND the getOptions round-trip returned. Both can fail —
+ * that is precisely the "temporarily broken" case, where a WhatsApp release renames the menu
+ * item's class. So the honest answer is false, not a silent no-op: the shell uses it to say
+ * "no native menu and no panel either" rather than leaving the user with no way to change a
+ * setting. In the extension nothing calls this; the icon click is the only entry point.
+ *
+ * @returns {boolean} whether the panel is open afterwards
+ */
+function openIncognitoOptions()
+{
+    if (incognitoOptionsDrop == null || typeof incognitoOptionsDrop.open != "function") return false;
+    incognitoOptionsDrop.open();
+    return typeof incognitoOptionsDrop.isOpened == "function" ? incognitoOptionsDrop.isOpened() : true;
+}
+
+// The shim asks for the panel by dispatching this and reading the result straight after.
+// dispatchEvent runs listeners synchronously, so the answer is already there on return —
+// no callback, no polling, and no IPC round-trip to wait on.
+document.addEventListener('onOpenIncognitoOptions', function ()
+{
+    window.__WAI_PANEL_OPEN_RESULT__ = openIncognitoOptions();
+});
+
 document.addEventListener('onMarkAsReadClick', function (e)
 {
     var data = JSON.parse(e.detail);
@@ -435,22 +471,38 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
 
     // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
+    //
+    // Opened with the version OMITTED, not with a literal 1. IndexedDB treats the version
+    // as a minimum: opening an existing version-2 database as version 1 raises
+    // VersionError, onsuccess never fires, and the "this message was deleted" path
+    // silently finds nothing. Since core/interception.js owns the schema and opens it at
+    // version 2, hardcoding a number here guaranteed a mismatch as soon as the database
+    // was actually in use. Passing undefined opens the current version when it exists, and
+    // creates it at version 1 when it does not — which then gets upgraded by interception.
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs");
+    deletedDBOpenRequest.onsuccess = () =>
     {
         var deletedMsgsDB = deletedDBOpenRequest.result;
         var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => 
+            keys.result.forEach((value) =>
             {
                 pseudoMsgsIDs.add(value.originalID);
             });
-            document.addEventListener("pseudoMsgs", (e) => 
+            document.addEventListener("pseudoMsgs", (e) =>
             {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
         deletedMsgsDB.close();
+    };
+    // Was absent entirely, so a VersionError or a missing store looked exactly like
+    // "no deleted messages". On a fresh profile the database does not exist yet, so this
+    // is the expected path until interception.js creates it.
+    deletedDBOpenRequest.onerror = () =>
+    {
+        console.log("WhatsIncognito: could not read the deleted messages database; " +
+                    "restoring will be unavailable until it is created");
     };
 });
 
@@ -756,7 +808,6 @@ function onNewMessageNodeAdded(messageNode)
     var data_id = messageNode.getAttribute("data-id");
     if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
     if (data_id == null)
-        debugger;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 

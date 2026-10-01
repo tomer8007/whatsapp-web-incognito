@@ -151,7 +151,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
-    if (jid == undefined) debugger;
+    if (jid == undefined) console.warn("WhatsIncognito: unexpected condition: jid == undefined");
     jid = normalizeJID(jid);
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
@@ -370,7 +370,6 @@ function FindReact(dom, traverseUp = 0)
 
     if (reactElement == null)
     {
-        debugger;
     }
 
     return reactElement;

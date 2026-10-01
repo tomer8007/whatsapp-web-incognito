@@ -32,6 +32,11 @@ initialize();
 //
 wsHook.before = function (originalData, url)
 {
+    // P5: upstream passed `isIncoming=false` inline at every call site. `isIncoming`
+    // is never declared in this file, so each of those was an implicit global write on
+    // the per-frame path. Hoisted to a real local; the value is unchanged.
+    var isIncoming = false;
+
     var promise = async function(originalData) {
 
     if (WAPassthrough) return originalData;
@@ -41,7 +46,7 @@ wsHook.before = function (originalData, url)
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return originalData;
 
         // encrytped binary payload
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=false);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming);
         if (decryptedFrames == null) return originalData;
 
         for (var i = 0; i < decryptedFrames.length; i++)
@@ -58,20 +63,30 @@ wsHook.before = function (originalData, url)
 
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(manipulatedNode, isIncoming=false, decryptedFrame.byteLength);
+                printNode(manipulatedNode, isIncoming, decryptedFrame.byteLength);
                 if (WAPassthroughWithDebug) return originalData;
             }
 
-            // sanity check that our node parsing is complete
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
+            // P3: this decodes the frame, re-encodes it, and byte-compares the result
+            // purely as a developer self-check. On every frame that is a full extra
+            // decode+encode for no runtime benefit, so it is now debug-only.
+            if (WAdebugMode)
+            {
+                // sanity check that our node parsing is complete
+                await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming);
+            }
         }
 
-        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming);
 
-        var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
-        if (!looksEqual && isAllowed)
+        // P3/P4: the byte comparison only existed to decide whether to hit `debugger`.
+        if (WAdebugMode)
         {
-            debugger;
+            var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
+            if (!looksEqual && isAllowed)
+            {
+                console.warn("WhatsIncognito: re-encoded frame differs from the original");
+            }
         }
 
         if (isInitializing)
@@ -108,6 +123,9 @@ wsHook.before = function (originalData, url)
 //
 wsHook.after = function (messageEvent, url)
 {
+    // P5: see the note in wsHook.before — hoisted out of the call sites.
+    var isIncoming = true;
+
     var promise = async function(messageEvent) {
     
     if (WAPassthrough) return messageEvent;
@@ -118,7 +136,7 @@ wsHook.after = function (messageEvent, url)
 
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return messageEvent;
 
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=true);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming);
         if (decryptedFrames == null) return messageEvent;
 
         var didBlockNode = false;
@@ -133,13 +151,17 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
+                printNode(realNode, isIncoming, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            // sanity check that our node parsing is deterministic
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
+            // P3: debug-only, for the same reason as the outgoing path above.
+            if (WAdebugMode)
+            {
+                // sanity check that our node parsing is deterministic
+                await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming);
+            }
 
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
@@ -466,7 +488,6 @@ async function decryptE2EMessagesFromNode(node)
     {
         console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
         console.error(exception);
-        debugger;
     }
 }
 
@@ -542,15 +563,53 @@ function hookLogs()
         get: function() {return hookedLog;}
     });
 
-    setTimeout(() => {
-        var originalWALoggerLog = require("WALogger").LOG;
-        var originalWALoggerDev = require("WALogger").LOG;
-        var originalWALoggerERROR = require("WALogger").ERROR;
+    // P7: upstream ran this once, 2s after injection, with no guard at all. Two bugs:
+    //
+    //  a) `require("WALogger")` returns null until WhatsApp's webpack bundle has
+    //     registered that module, so 2s after document_start this threw
+    //     "Cannot read properties of null (reading 'LOG')" on every single launch — an
+    //     uncaught error inside a setTimeout, which then also surfaced through the
+    //     window.onunhandledrejection hook installed just above.
+    //  b) `originalWALoggerDev` was assigned `.LOG` instead of `.DEV`, so
+    //     hookedWALoggerDev called the *log* function's original with DEV arguments.
+    //
+    // The hook exists so WhatsApp's own error reports do not leak (see the comment at
+    // the top of hookLogs), so it is worth getting right — but it is not worth throwing
+    // over. Resolve the modules with a bounded retry; if they never appear, give up
+    // quietly rather than throwing on the page.
+    function installWALoggerHooks(attempt)
+    {
+        var WALogger = null, WAUtils = null;
+        try { WALogger = require("WALogger"); } catch (e) { WALogger = null; }
+        try { WAUtils = require("WALoggerUtils"); } catch (e) { WAUtils = null; }
 
-        require("WALogger").LOG = hookedWALoggerLog;
-        require("WALogger").DEV = hookedWALoggerDev;
-        require("WALogger").ERROR = hookedWALoggerError;
-        require("WALogger").WARN = hookedWALoggerWarn;
+        if (!WALogger)
+        {
+            if (attempt < 40) setTimeout(function () { installWALoggerHooks(attempt + 1); }, 500);
+            return;
+        }
+
+        // P7b: DEV, not LOG.
+        var originalWALoggerLog = WALogger.LOG;
+        var originalWALoggerDev = WALogger.DEV;
+        var originalWALoggerERROR = WALogger.ERROR;
+
+        WALogger.LOG = hookedWALoggerLog;
+        WALogger.DEV = hookedWALoggerDev;
+        WALogger.ERROR = hookedWALoggerError;
+        WALogger.WARN = hookedWALoggerWarn;
+
+        // rebuildTemplate is unavailable until WALoggerUtils registers, and can itself
+        // throw on an unexpected template. Fall back to the raw arguments so a log line
+        // is never lost to a null dereference.
+        function rebuild(n, r)
+        {
+            if (WAUtils && typeof WAUtils.rebuildTemplate === 'function')
+            {
+                try { return WAUtils.rebuildTemplate(n, r); } catch (e) { /* fall through */ }
+            }
+            return String(n) + (r && r.length ? ' ' + r.join(' ') : '');
+        }
 
         function hookedWALoggerDev(n)
         {
@@ -558,10 +617,10 @@ function hookLogs()
             {
                 for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
                     r[a - 1] = arguments[a];
-                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                var logLine = rebuild(n, r)
                 console.log("[WhatsApp DEV] " + logLine);
             }
-            return originalWALoggerDev.apply(null, arguments);
+            if (typeof originalWALoggerDev === 'function') return originalWALoggerDev.apply(null, arguments);
         }
         function hookedWALoggerLog(n)
         {
@@ -569,35 +628,35 @@ function hookLogs()
             {
                 for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
                     r[a - 1] = arguments[a];
-                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                var logLine = rebuild(n, r)
                 console.log("[WhatsApp LOG] " + logLine);
             }
-            return originalWALoggerLog.apply(null, arguments);
+            if (typeof originalWALoggerLog === 'function') return originalWALoggerLog.apply(null, arguments);
         }
         function hookedWALoggerError(n)
         {
             for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
-                    r[a - 1] = arguments[a];
-            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                r[a - 1] = arguments[a];
+            var logLine = rebuild(n, r)
             console.error("[WhatsApp ERROR] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            if (typeof originalWALoggerERROR === 'function') return originalWALoggerERROR.apply(null, arguments);
         }
         function hookedWALoggerWarn(n)
         {
             for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
-                    r[a - 1] = arguments[a];
-            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                r[a - 1] = arguments[a];
+            var logLine = rebuild(n, r)
             console.warn("[WhatsApp WARN] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            if (typeof originalWALoggerERROR === 'function') return originalWALoggerERROR.apply(null, arguments);
         }
-        
-    }, 2000);
+    }
+
+    setTimeout(function () { installWALoggerHooks(0); }, 2000);
 
     
 
     function hookedPromiseError(event)
     {
-        debugger;
         console.error("Unhandled promise rejection:");
         console.error(errorObject);
         return originalOnUnhandledRejection.call(event);
@@ -642,7 +701,6 @@ function initializeDeletedMessagesDB()
     {
         // triggers if the client had no database
         // ...perform initialization...
-        debugger;
 
         // Get a reference to the request related to this event
         // @type IDBOpenRequest (a specialized type of IDBRequest)
@@ -700,7 +758,6 @@ async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
     var looksGood = isEqualArray(new Uint8Array(decryptedFrameOpened), encodedNodeData.slice(1));
     if (!looksGood && !isIncoming)
     {
-        debugger;
     }
     if (!looksGood && isIncoming)
     {

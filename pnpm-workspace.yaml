@@ -1,0 +1,8 @@
+allowBuilds:
+  electron: true
+  # Pulled in by electron-builder 26 via electron-builder-squirrel-windows. This project
+  # only ever builds win/nsis, so nothing here needs Squirrel's installer downloader and
+  # its postinstall is denied rather than trusted. If a squirrel target is ever added,
+  # flip this to true deliberately and re-read the script first — note that electron-builder
+  # 27 inlines Squirrel and drops this package entirely, which is the better fix.
+  electron-winstaller: false
