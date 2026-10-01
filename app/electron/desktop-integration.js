@@ -213,6 +213,9 @@ module.exports = {
   buildDesktopEntry,
   writeAutostartFile,
   removeAutostartFile,
+  applicationsDir,
+  buildNotificationEntry,
+  ensureNotificationEntry,
   WATCHER_NAMES,
 };
 
@@ -262,4 +265,70 @@ function removeAutostartFile(file) {
   } catch (e) {
     return false;
   }
+}
+
+// ------------------------------------------------------------------ notification entry
+
+/**
+ * Where a per-user desktop entry lives: `~/.local/share/applications`, per the XDG base
+ * directory spec. `XDG_DATA_HOME` wins when set. Exported (with an env override for
+ * tests) for the same reason as the autostart path.
+ */
+function applicationsDir(env) {
+  const e = env || process.env;
+  const dataHome = (e && e.XDG_DATA_HOME) || path.join(os.homedir(), '.local', 'share');
+  return path.join(dataHome, 'applications');
+}
+
+/**
+ * The desktop entry that makes notifications work at all on Linux.
+ *
+ * The notification daemon (gnome-shell on GNOME, and the same freedesktop.org convention
+ * everywhere else) matches an incoming notification against an installed application's
+ * desktop id. `app.setAppUserModelId` supplies the id on our side, but the other half is
+ * a `.desktop` file existing on disk for that id. electron-builder only emits one for
+ * installed/AppImage builds, so every other way of running the app — `pnpm start`, a
+ * dev run, an extracted AppImage — had no entry, and gnome-shell dropped the popup with
+ * nothing on screen and nothing in the log.
+ *
+ * The file name MUST equal the app id: that is the join key. `StartupWMClass` is what
+ * ties it to the running window, so the daemon can also match a window to an app.
+ */
+function buildNotificationEntry({ appId, exec, iconName, name, comment }) {
+  return [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Version=1.0',
+    `Name=${name}`,
+    `Comment=${comment}`,
+    `Exec=${exec}`,
+    `Icon=${iconName}`,
+    'Terminal=false',
+    // Declaring a category is what lets the notification carry actions, and it keeps the
+    // entry out of the "unrecognized application" bucket in the GNOME overview.
+    'Categories=Network;InstantMessaging;',
+    // Set by Electron at runtime; matching on it is how the daemon resolves the id.
+    `StartupWMClass=${appId}`,
+    // The entry exists to carry the notification identity, not to offer a second way to
+    // launch the app, so keep it out of the menus.
+    'NoDisplay=true',
+    '',
+  ].join('\n');
+}
+
+/**
+ * Write the notification entry if it is missing or stale. Returns true when the entry on
+ * disk matches what we want afterwards.
+ *
+ * Best effort by design: a read-only or full home directory must not stop the app from
+ * starting, and the caller only logs. Rewritten whenever the content differs so an
+ * upgraded build picks up a changed app id or icon without needing an uninstall.
+ */
+function ensureNotificationEntry({ env, appId, exec, iconName, name, comment }) {
+  const file = path.join(applicationsDir(env), `${appId}.desktop`);
+  const content = buildNotificationEntry({ appId, exec, iconName, name, comment });
+  try {
+    if (fs.readFileSync(file, 'utf8') === content) return true;
+  } catch (e) { /* absent or unreadable: fall through and write it */ }
+  return writeAutostartFile(file, content);
 }

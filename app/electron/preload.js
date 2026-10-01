@@ -320,6 +320,19 @@ function runSequence(reason) {
     once('nativeWs', () => evaluate('nativeWs', NATIVE_WS_SRC)),
     once('critical', () => evaluate('critical', readArtifact('critical.js'))),
 
+    // 1c. Take over window.Notification as early as the bridge allows. This used to wait
+    // for the shim's 'booted' event, which is emitted at the END of the shim's IIFE —
+    // after the 1.3 MB main group, i.e. well after WhatsApp's first paint. Two failures
+    // came of that: a message that arrived in the gap was dropped, and if 'booted' never
+    // arrived at all (injection lost, document replaced, sequence failed before the shim)
+    // the interceptor was never installed and NO notification worked for the whole session.
+    //
+    // The only dependency is the contextBridge handle, which installBridge() has just
+    // published, so it goes here rather than further down. It is idempotent by
+    // construction (the IIFE guards on __WAI_NOTIF_PATCHED__), so the retry path re-running
+    // it is safe and costs one no-op evaluate.
+    once('notifications', () => callPage('notifications', NOTIFICATION_INTERCEPT_SRC)),
+
     // 2. window.chrome/browser + window.__WAI__ + the failure banner. Required before
     //    the ui group (ui.js:12 aliases `browser` from `chrome`), not before ws_hook.
     once('shim', () => {
@@ -571,14 +584,10 @@ const NOTIFICATION_INTERCEPT_SRC = `(function () {
   }
 })();`;
 
-// Inject the notification interceptor as soon as the main sequence finishes.
-// We piggyback on the existing 'wai:page-state' + frame-event flow: after 'booted',
-// evaluate the interceptor. This is safe to re-run (idempotent guard at top of IIFE).
-ipcRenderer.on('wai:page-state', (_event, snapshot) => {
-  if (snapshot && snapshot.event === 'booted') {
-    webFrame.executeJavaScript(NOTIFICATION_INTERCEPT_SRC).catch(() => {});
-  }
-});
+// Installed by runSequence as the `notifications` step, right after the bridge exists —
+// deliberately NOT here. See the step's comment for why waiting for 'booted' lost
+// notifications. The IIFE's __WAI_NOTIF_PATCHED__ guard makes a re-run a no-op, so the
+// sequence's retry path can repeat it safely.
 
 // ------------------------------------------------------------------ go
 

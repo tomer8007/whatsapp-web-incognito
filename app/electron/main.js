@@ -286,7 +286,13 @@ const PUSH_HOSTS = Object.freeze([
 
 // §8.5 explicitly asks for a flag here: a blocked service worker can stop desktop
 // notifications working, and that must be a one-line revert, not a debugging session.
-const BLOCK_SERVICE_WORKER = true;
+//
+// Reverted to false on evidence. Blocking web.whatsapp.com/sw.js also broke WhatsApp's
+// bootloader pipeline, and the PDF viewer stalled on a permanent spinner as a result:
+// its lazily-loaded modules (WAWebTPPdfViewerContextMenu and friends) came back
+// ERR_ABORTED and never recovered. Images were unaffected, which is why this looked
+// like a document-viewer problem rather than an asset-pipeline one.
+const BLOCK_SERVICE_WORKER = false;
 const SERVICE_WORKER_PATHS = Object.freeze([
   '/sw.js', '/sw.min.js', '/service-worker.js', '/serviceworker.js',
 ]);
@@ -347,27 +353,14 @@ function guard(label, fn, fallback) {
 }
 
 // ---------------------------------------------------------------- url helpers
+//
+// The navigation lock and the window.open policy live in url-policy.js so they can be
+// tested directly — main.js calls app.commandLine.appendSwitch at module scope and cannot
+// be required from `node --test`. Re-exported below, since they were part of this file's
+// public surface before.
 
-const ALLOWED_NAV_HOST = 'web.whatsapp.com';
-
-/** True for http(s) only. Deliberately excludes javascript:, data:, file:, intent:. */
-function isOpenableExternal(url) {
-  return /^https?:\/\//i.test(String(url || ''));
-}
-
-/**
- * The navigation lock. Any top-level navigation off web.whatsapp.com is refused: a
- * compromised or mistyped link must not turn the app window into a general browser with
- * our preload attached.
- */
-function isAllowedNavigation(url) {
-  try {
-    const u = new URL(String(url));
-    return u.protocol === 'https:' && u.hostname === ALLOWED_NAV_HOST;
-  } catch (e) {
-    return false;
-  }
-}
+const { ALLOWED_NAV_HOST, isAllowedNavigation, isOpenableExternal, isInAppViewer } =
+  require('./url-policy');
 
 function hostOf(url) {
   try { return new URL(String(url)).hostname.toLowerCase(); } catch (e) { return ''; }
@@ -838,27 +831,30 @@ function installSessionGuards(ses) {
   // Allow-what-WhatsApp-needs, deny everything else. Supports both the legacy
   // (webContents, permission, callback, details) and current
   // (permission, requestDetails, callback) Electron signatures.
+  //
+  // The permission name is read out of whichever argument is an object carrying a
+  // string `permission` field, rather than trusting the positional guess. Guessing by
+  // type left a real request arriving as "[object Object]" — which matches no entry in
+  // ALLOWED_PERMISSIONS and so was silently denied, taking WhatsApp's own prompt with it.
+  const permissionNameOf = (candidates) => {
+    for (const c of candidates) {
+      if (typeof c === 'string') return c;
+      if (c && typeof c === 'object' && typeof c.permission === 'string') return c.permission;
+    }
+    return '';
+  };
   guard('setPermissionRequestHandler', () => {
     const decide = (permission) => ALLOWED_PERMISSIONS.includes(permission);
     ses.setPermissionRequestHandler((a, b, c) => {
-      let permission;
-      let callback;
-      if (typeof b === 'function') {
-        // Legacy: (webContents, permission, callback, details)
-        permission = a;
-        callback = b;
-      } else {
-        // Current: (permission, requestDetails, callback)
-        permission = a && a.permission ? a.permission : a;
-        if (typeof permission !== 'string' && b && typeof b.permission === 'string') permission = b.permission;
-        callback = c;
-        if (typeof callback !== 'function' && typeof b === 'function') callback = b;
-      }
+      const permission = permissionNameOf([a, b, c]);
+      const callback = [a, b, c].find((x) => typeof x === 'function');
       const allow = decide(permission);
       debug(`permission request "${permission}" → ${allow ? 'granted' : 'denied'}`);
-      try { callback(allow); } catch (e) { debug('permission callback:', e && e.message); }
+      try { if (callback) callback(allow); } catch (e) { debug('permission callback:', e && e.message); }
     });
-    ses.setPermissionCheckHandler((_contents, permission) => decide(permission));
+    // Same shape: (webContents, permission, requestingOrigin, details). The permission is
+    // whichever argument names one — never the webContents object itself.
+    ses.setPermissionCheckHandler((...args) => decide(permissionNameOf(args)));
   })();
 
   // Camera/mic/speaker device grant. Without this, allowing 'audio-capture' /
@@ -986,12 +982,45 @@ function installNavigationLock(win) {
     });
   })();
 
-  // window.open / target=_blank. Deny inside the app; hand genuine http(s) links to the
-  // OS browser. Anything else (javascript:, data:, intent:, file:) is dropped silently —
-  // opening a non-web scheme in the user's browser or a file handler is a real risk in
-  // a window that renders untrusted remote content.
+  // window.open / target=_blank.
+  //
+  // Three cases, in order:
+  //   1. WhatsApp's own viewer (blob:/data:) opens as a window. It must, or document
+  //      previews do nothing at all — see isInAppViewer. The window is deliberately
+  //      stripped of our preload in overrideBrowserWindowOptions: a spawned window
+  //      inherits webPreferences from its opener, and with `sandbox: false` (see
+  //      createWindow) an inherited preload would run with Node in a window rendering
+  //      untrusted remote content. That is the exact risk the navigation lock below
+  //      exists to prevent, so the viewer window gets none of our machinery.
+  //   2. Genuine http(s) links (web.whatsapp.com, article links) go to the OS browser.
+  //   3. Everything else — javascript:, intent:, file: — is dropped silently. Handing a
+  //      non-web scheme to the OS opens a file handler on attacker-chosen input.
   guard('setWindowOpenHandler', () => {
     wc.setWindowOpenHandler(({ url }) => {
+      if (isInAppViewer(url)) {
+        debug('allowing WhatsApp viewer window for', String(url).slice(0, 60));
+        return {
+          action: 'allow',
+          // This window exists only to render what WhatsApp just handed us, so it gets
+          // none of our machinery. Clearing `preload` is the load-bearing part and it IS
+          // honoured: a window.open child otherwise inherits the opener's preload, which
+          // with `sandbox: false` (see createWindow) would run with Node attached to a
+          // window rendering untrusted remote content — the exact risk the navigation
+          // lock below exists to prevent.
+          //
+          // `sandbox: true` is honoured here too (verified on 44.4.5: the spawned window
+          // reports sandbox:true, no preload, and window.__WAI_IPC__ undefined).
+          overrideBrowserWindowOptions: {
+            webPreferences: {
+              preload: undefined,
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+              webviewTag: false,
+            },
+          },
+        };
+      }
       if (isOpenableExternal(url)) {
         shell.openExternal(url).catch((e) => warn('openExternal failed:', (e && e.message) || e));
       } else {
@@ -1219,6 +1248,38 @@ function syncAutostartFile(on) {
   // re-launch the app path with the current runtime.
   const execCmd = process.env.APPIMAGE || `"${process.execPath}" "${app.getAppPath()}"`;
   return desktopIntegration.writeAutostartFile(file, desktopIntegration.buildDesktopEntry(execCmd));
+}
+
+/**
+ * Give the notification daemon something to match a popup against.
+ *
+ * `app.setAppUserModelId` above only supplies our half of the identity. On Linux the other
+ * half is a `.desktop` file named after that same id, and without it gnome-shell drops
+ * the notification — silently, with no error anywhere, which is exactly what was
+ * happening. electron-builder ships one for installed/AppImage builds but nothing else
+ * does, so a dev run, an extracted AppImage, or any unpackaged run had none.
+ *
+ * Deliberately NOT gated on the autostart pref and not user-visible: this is a
+ * notification-plumbing file, not a launcher. Runs on every Linux start, rewrites only
+ * on change, and a failure is a debug line — notifications being broken is bad, but not
+ * being able to write to $XDG_DATA_HOME is not a reason to refuse to start.
+ */
+function syncNotificationEntry() {
+  if (process.platform !== 'linux') return true;
+  const execCmd = process.env.APPIMAGE || `"${process.execPath}" "${app.getAppPath()}"`;
+  const ok = desktopIntegration.ensureNotificationEntry({
+    appId: APP_ID,
+    exec: execCmd,
+    iconName: 'waincognito',
+    name: 'Whatsapp Incognito',
+    comment: 'Be invisible on WhatsApp Web',
+  });
+  if (!ok) {
+    debug('notification entry not written — notifications may be dropped by the desktop daemon');
+  } else {
+    debug(`notification entry ensured at ${desktopIntegration.applicationsDir()}/${APP_ID}.desktop`);
+  }
+  return ok;
 }
 
 function windowFor(sender) {
@@ -1617,7 +1678,12 @@ function boot() {
   });
 
   app.whenReady().then(() => {
-    if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+    // The notification daemon matches notifications to an installed application by its
+    // desktop id. Windows needs this for the taskbar grouping; Linux needs it for
+    // gnome-shell to attribute the popup to us at all — without it the notification is
+    // silently dropped, which is why nothing appeared. Harmless on macOS, where the id is
+    // read from the bundle instead.
+    if (process.platform !== 'darwin') app.setAppUserModelId(APP_ID);
     const build = loadBuild();
     if (!build) return;                          // loadBuild already showed a dialog
     state.meta = build.meta;
@@ -1685,6 +1751,10 @@ function boot() {
     // Apply the saved autostart pref (portal + login items + XDG fallback).
     applyAutostart(state.prefs.get().autostart);
 
+    // Notifications on Linux need a desktop entry to be attributable at all. Unconditional
+    // (not tied to autostart) and best effort.
+    guard('notification entry', () => syncNotificationEntry())();
+
     const win = createWindow(state.prefs.get());
     startWatchdog(win);
     startDevBridge(win, build.artifacts);
@@ -1727,6 +1797,7 @@ if (!app.requestSingleInstanceLock()) {
 module.exports = {
   // exported for the smoke test and for anyone extending the blocklist
   classifyRequest,
+  isInAppViewer,
   isAllowedNavigation,
   isOpenableExternal,
   TELEMETRY_HOSTS,

@@ -471,22 +471,38 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
 
     // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
+    //
+    // Opened with the version OMITTED, not with a literal 1. IndexedDB treats the version
+    // as a minimum: opening an existing version-2 database as version 1 raises
+    // VersionError, onsuccess never fires, and the "this message was deleted" path
+    // silently finds nothing. Since core/interception.js owns the schema and opens it at
+    // version 2, hardcoding a number here guaranteed a mismatch as soon as the database
+    // was actually in use. Passing undefined opens the current version when it exists, and
+    // creates it at version 1 when it does not — which then gets upgraded by interception.
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs");
+    deletedDBOpenRequest.onsuccess = () =>
     {
         var deletedMsgsDB = deletedDBOpenRequest.result;
         var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => 
+            keys.result.forEach((value) =>
             {
                 pseudoMsgsIDs.add(value.originalID);
             });
-            document.addEventListener("pseudoMsgs", (e) => 
+            document.addEventListener("pseudoMsgs", (e) =>
             {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
         deletedMsgsDB.close();
+    };
+    // Was absent entirely, so a VersionError or a missing store looked exactly like
+    // "no deleted messages". On a fresh profile the database does not exist yet, so this
+    // is the expected path until interception.js creates it.
+    deletedDBOpenRequest.onerror = () =>
+    {
+        console.log("WhatsIncognito: could not read the deleted messages database; " +
+                    "restoring will be unavailable until it is created");
     };
 });
 

@@ -80,3 +80,78 @@ test('autostart file round-trips through write and remove', () => {
   assert.strictEqual(di.removeAutostartFile(file), true); // absent is success
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// ---------------------------------------------------------------- notification entry
+// The file name is the join key the notification daemon matches on, so it is derived
+// from the app id and nothing else. Getting this wrong reproduces the original symptom:
+// no popup, no error, no trace.
+
+test('applications dir honours XDG_DATA_HOME', () => {
+  const p = di.applicationsDir({ XDG_DATA_HOME: '/tmp/wai-test-data' });
+  assert.strictEqual(p, '/tmp/wai-test-data/applications');
+  const home = di.applicationsDir({});
+  assert.ok(home.endsWith('/.local/share/applications'), `got: ${home}`);
+});
+
+test('notification entry names the app id and declares InstantMessaging', () => {
+  const entry = di.buildNotificationEntry({
+    appId: 'com.wa-incognito.app',
+    exec: '/opt/WAIncognito.AppImage',
+    iconName: 'waincognito',
+    name: 'Whatsapp Incognito',
+    comment: 'Be invisible on WhatsApp Web',
+  });
+  assert.ok(entry.startsWith('[Desktop Entry]\n'), 'header first');
+  assert.ok(entry.includes('Type=Application'), 'type');
+  assert.ok(entry.includes('Exec=/opt/WAIncognito.AppImage'), 'exec line');
+  assert.ok(entry.includes('Icon=waincognito'), 'icon line');
+  // Without a StartupWMClass the daemon cannot tie the entry to the running window.
+  assert.ok(entry.includes('StartupWMClass=com.wa-incognito.app'), 'startup wm class');
+  assert.ok(entry.includes('Categories=Network;InstantMessaging;'), 'categories');
+  // It exists for notification identity, not to add a second launcher to the menus.
+  assert.ok(entry.includes('NoDisplay=true'), 'hidden from menus');
+});
+
+test('ensureNotificationEntry writes the entry under the app id, and is idempotent', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wai-notif-'));
+  const env = { XDG_DATA_HOME: dir };
+  const args = {
+    env, appId: 'com.wa-incognito.app', exec: '/x', iconName: 'waincognito',
+    name: 'Whatsapp Incognito', comment: 'c',
+  };
+  assert.strictEqual(di.ensureNotificationEntry(args), true);
+  const file = path.join(dir, 'applications', 'com.wa-incognito.app.desktop');
+  assert.strictEqual(fs.existsSync(file), true, 'written as <appId>.desktop');
+
+  // Re-running is the normal case (every launch) and must be a no-op, not an error.
+  const first = fs.statSync(file).mtimeMs;
+  assert.strictEqual(di.ensureNotificationEntry(args), true);
+  assert.strictEqual(fs.statSync(file).mtimeMs, first, 'unchanged entry is not rewritten');
+
+  // A changed app id / exec is picked up on the next launch without an uninstall.
+  assert.strictEqual(di.ensureNotificationEntry({ ...args, exec: '/y' }), true);
+  assert.ok(fs.readFileSync(file, 'utf8').includes('Exec=/y'), 'stale entry is refreshed');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('an unwritable location reports failure instead of throwing', () => {
+  // A read-only home must not stop the app from starting; the caller only logs.
+  // A file where a directory is expected fails fast with ENOTDIR. Deliberately NOT
+  // /proc/self: mkdir under procfs hangs indefinitely here, which wedges the suite.
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wai-ro-'));
+  const blocker = path.join(dir, 'blocker');
+  fs.writeFileSync(blocker, 'not a directory', 'utf8');
+  const bad = di.ensureNotificationEntry({
+    env: { XDG_DATA_HOME: blocker },
+    appId: 'com.wa-incognito.app', exec: '/x', iconName: 'waincognito',
+    name: 'n', comment: 'c',
+  });
+  assert.strictEqual(bad, false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

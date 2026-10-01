@@ -97,24 +97,67 @@
   }
   state.prefsEcho = prefsHash();
 
-  // Socket liveness: ws_hook replaces the WebSocket constructor, so we can watch the
-  // native constructor to learn the real readyState. We do not wrap send/receive.
+  // Socket liveness. This has to CAPTURE the instance, not wait to be asked about it.
+  //
+  // The previous version patched a `readyState` getter onto the native prototype, which
+  // only ever recorded anything if some code happened to READ `readyState` off a live
+  // socket. Nothing in the shell does — ws_hook builds the instance inside its wrapper and
+  // never hands a reference out — so the getter never fired, `socketState` sat at its
+  // initial -1, and after 90s the watchdog reported 'no socket observed' forever. That
+  // surfaced as a permanent "receipts are NOT blocked right now" in the tray while the
+  // hook was in fact blocking them (852 frames / 49 receipts in the same menu), and it
+  // simultaneously blinded the genuine `socketState === 3` disconnect check, since that
+  // compares against the same value that was pinned at -1.
+  //
+  // So wrap the constructor ws_hook is currently exposing and record what it hands back.
+  // arm() runs as the last step of the document-start sequence, before WhatsApp opens its
+  // first socket, so this is in place in time. `.prototype` is copied across and the
+  // returned object is the real native socket, so `instanceof`, `send`, and everything
+  // WhatsApp does with the result behave exactly as before.
+  var socket = null;               // last instance ws_hook handed out
   function bindSocket() {
     try {
       var Native = window.__WAI_NATIVE_WS__;
-      if (!Native || !Native.prototype) return;
-      var desc = Object.getOwnPropertyDescriptor(Native.prototype, 'readyState');
-      if (!desc || !desc.get) return;
-      Object.defineProperty(Native.prototype, 'readyState', {
-        configurable: true,
-        enumerable: desc.enumerable,
-        get: function () {
-          var v = desc.get.call(this);
-          if (v !== state.socketState) { state.socketState = v; state.socketSince = Date.now(); }
-          return v;
-        }
-      });
+      if (!Native) return;
+      var Current = window.WebSocket;
+      if (typeof Current !== 'function') return;
+
+      var Tracked = function (url, protocols) {
+        // Delegate to the constructor that is installed RIGHT NOW, not to the native one.
+        // That is the whole fix: ws_hook installs interception by replacing the global
+        // with a wrapper that builds the socket and then attaches the send/message hooks
+        // (ws_hook.js). Constructing `new Native(...)` here skipped that wrapper, so no
+        // frame was ever hooked, `isInitializing` never flipped, and the UI raised its
+        // "interception is not working" dialog — with the hooks installed but never
+        // reached. Calling through to `Current` keeps interception on the path and still
+        // hands us the instance to watch.
+        //
+        // Reflect.construct rather than `new Current(...)`: it invokes the constructor
+        // properly while letting us forward a genuine one-element argument list, so the
+        // one-arg form WhatsApp and ws_hook both use is not widened to two args with an
+        // explicit undefined.
+        var args = (protocols === undefined) ? [url] : [url, protocols];
+        var s = Reflect.construct(Current, args);
+        socket = s;
+        readSocket();
+        return s;
+      };
+      Tracked.prototype = Native.prototype;
+      if (Current !== Tracked) window.WebSocket = Tracked;
     } catch (e) { /* non-fatal: we just lose socket reporting */ }
+  }
+
+  // Read readyState off the captured instance. Cheap, and only ever called when a socket
+  // is actually built or when the frames flowing through the hook say liveness moved.
+  function readSocket() {
+    try {
+      if (!socket) return;
+      var v = socket.readyState;
+      if (typeof v === 'number' && v !== state.socketState) {
+        state.socketState = v;
+        state.socketSince = Date.now();
+      }
+    } catch (e) { /* ignore */ }
   }
 
   // Called by the preload once the main bundle has been evaluated.
@@ -125,10 +168,10 @@
       if (typeof window.wsHook === 'object' && window.wsHook) {
         var before = window.wsHook.before, after = window.wsHook.after;
         if (typeof before === 'function') {
-          window.wsHook.before = function () { framesOut++; state.framesOut = framesOut; state.lastFrameAt = Date.now(); return before.apply(this, arguments); };
+          window.wsHook.before = function () { framesOut++; state.framesOut = framesOut; state.lastFrameAt = Date.now(); readSocket(); return before.apply(this, arguments); };
         }
         if (typeof after === 'function') {
-          window.wsHook.after = function () { framesIn++; state.framesIn = framesIn; state.lastFrameAt = Date.now(); return after.apply(this, arguments); };
+          window.wsHook.after = function () { framesIn++; state.framesIn = framesIn; state.lastFrameAt = Date.now(); readSocket(); return after.apply(this, arguments); };
         }
         state.hookAlive = typeof window.wsHook.before === 'function' && typeof window.wsHook.after === 'function';
         if (state.hookAlive) { clearFailure(); if (host && host.hookArmed) { try { host.hookArmed(gen); } catch (e) {} } }
