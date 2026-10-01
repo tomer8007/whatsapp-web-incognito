@@ -10,7 +10,7 @@ NodeHandler.interceptOutgoingNode = async function (node)
     if (!isAllowed)
     {
         var manipulatedNode = deepClone(node);
-        manipulatedNode.tag = "blocked_node";
+        manipulatedNode.tag = "iq";
         return [isAllowed, manipulatedNode];
     }
 

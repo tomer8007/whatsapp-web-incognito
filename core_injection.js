@@ -4,23 +4,23 @@ injectOtherScripts();
 
 async function injectOtherScripts() 
 {
-	injectScript('lib/pbf.3.0.5.min.js');
-	injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
-	injectScript('lib/pako.js');
+	await injectScript('lib/pbf.3.0.5.min.js');
+	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
+	await injectScript('lib/pako.js');
 
-	injectScript('core/parsing/binary_reader.js');
-	injectScript('core/parsing/binary_writer.js');
-	injectScript('core/parsing/node_reader_writer.js');
-	injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
-	injectScript('core/parsing/protobuf/WAProto.js');
+	await injectScript('core/parsing/binary_reader.js');
+	await injectScript('core/parsing/binary_writer.js');
+	await injectScript('core/parsing/node_reader_writer.js');
+	await injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
+	await injectScript('core/parsing/protobuf/WAProto.js');
 
-	injectScript('core/utils.js');
-	injectScript('core/ui_class_names.js');
-	injectScript('core/injected_ui.js');
+	await injectScript('core/utils.js');
+	await injectScript('core/ui_class_names.js');
+	await injectScript('core/injected_ui.js');
 	
 	await injectScript('core/multi_device.js');
 	await injectScript('core/node_handler.js');
-	injectScript('core/interception.js');
+	await injectScript('core/interception.js');
 
 	setTimeout(
 		function() {
@@ -34,8 +34,10 @@ function injectScript(scriptName)
 	return new Promise(function(resolve, reject) {
 		var s = document.createElement('script');
 		s.src = chrome.runtime.getURL(scriptName);
+		s.async = false; // execute in insertion order, not in download order
 		s.onload = function() {
-			this.parentNode.removeChild(this);
+			if (this.parentNode)
+				this.parentNode.removeChild(this);
 			resolve(true);
 		};
 		(document.head||document.documentElement).appendChild(s);
