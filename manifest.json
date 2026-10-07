@@ -4,9 +4,21 @@
   "short_name": "WAIncognito",
   "description": "Be invisible on WhatsApp™ Web by controlling read receipts and presence updates",
   "version": "2.5.95",
-  "permissions": ["storage"],
-   "icons":  { "128": "images/icon_128_blue.png" },
-   "action": {
+  "permissions": [
+    "storage",
+    "declarativeNetRequest"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_ua",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "icons":  { "128": "images/icon_128_blue.png" },
+  "action": {
     "default_icon": "images/icon_128_reshaped.png"
   },
   "browser_specific_settings": {
@@ -17,6 +29,9 @@
           "required": [
              "none"
           ]  }
+    },
+    "gecko_android": {
+      "strict_min_version": "109.0"
     }
   },
   "background":

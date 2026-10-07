@@ -118,10 +118,13 @@ function collectFiles(manifest) {
   const bg = manifest.background ?? {};
   for (const f of [...(bg.scripts ?? []), bg.service_worker].filter(Boolean)) refs.add(f);
 
+  for (const r of manifest.declarative_net_request?.rule_resources ?? []) {
+    if (r.path) refs.add(r.path);
+  }
+
   // The injection chain lives in web_accessible_resources today; assert it explicitly
   // so a manifest change upstream cannot silently drop part of the bundle.
   for (const f of [...MAIN_CRITICAL, ...MAIN_REST, ...DEFERRED, ...UI, ...CSS]) refs.add(f);
-
 
   return [...refs].filter((f) => existsSync(join(ROOT, f))).sort();
 }
@@ -280,6 +283,15 @@ function buildChrome(manifest, files) {
   console.log(`  chrome     ${relative(ROOT, out)}  (${human(dirSize(out))}, ${files.length} files)`);
 }
 
+/** GeckoView / Android: Firefox manifest layout staged in app assets */
+function buildGeckoView(manifest, files) {
+  const out = join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito');
+  rmSync(out, { recursive: true, force: true });
+  copyInto(files, out);
+  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  console.log(`  geckoview  ${relative(ROOT, out)}  (${human(dirSize(out))}, ${files.length} files)`);
+}
+
 // ---------------------------------------------------------------- electron target
 
 function buildElectron(manifest, files) {
@@ -401,7 +413,9 @@ if (flag('clean')) {
 }
 
 const target = opt('target');
-const targets = target === 'extension' ? ['firefox', 'chrome'] : [target ?? 'firefox', target ? null : 'chrome', target ? null : 'electron'].filter(Boolean);
+const targets = target === 'extension' ? ['firefox', 'chrome'] :
+  (target === 'geckoview' || target === 'android') ? ['geckoview'] :
+  [target ?? 'firefox', target ? null : 'chrome', target ? null : 'electron'].filter(Boolean);
 
 console.log(`WAIncognito build  version ${manifest.version}  ${files.length} manifest files\n`);
 if (flag('lazy')) console.log('  (§8.1 lazy injection ENABLED: only ws_hook.js loads at document_start)\n');
@@ -410,7 +424,8 @@ for (const t of targets) {
   if (t === 'firefox') buildFirefox(manifest, files);
   else if (t === 'chrome') buildChrome(manifest, files);
   else if (t === 'electron') buildElectron(manifest, files);
-  else throw new Error(`Unknown target "${t}". Use firefox, chrome, electron, or extension.`);
+  else if (t === 'geckoview') buildGeckoView(manifest, files);
+  else throw new Error(`Unknown target "${t}". Use firefox, chrome, electron, geckoview, android, or extension.`);
 }
 
 console.log('\nLoad unpacked:  Chrome -> dist/extension/chrome    Firefox -> dist/extension/firefox');

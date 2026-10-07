@@ -466,3 +466,15 @@ function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
 }
+
+// Mobile and Waydroid viewport compatibility
+(function ensureMobileCompatibility() {
+    try {
+        if (typeof document !== 'undefined' && !document.querySelector('meta[name="viewport"]')) {
+            var meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes';
+            (document.head || document.documentElement).appendChild(meta);
+        }
+    } catch (e) {}
+})();

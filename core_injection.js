@@ -1,3 +1,12 @@
+// Ensure client-side checks see a desktop platform on mobile/Waydroid
+try {
+	var DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+	if (navigator.userAgent && (navigator.userAgent.includes("Android") || navigator.userAgent.includes("Mobile"))) {
+		Object.defineProperty(navigator, 'userAgent', { get: function() { return DESKTOP_UA; }, configurable: true });
+		Object.defineProperty(navigator, 'appVersion', { get: function() { return DESKTOP_UA.replace(/^Mozilla\//, ''); }, configurable: true });
+		Object.defineProperty(navigator, 'platform', { get: function() { return "Linux x86_64"; }, configurable: true });
+	}
+} catch (e) {}
 
 injectScript('core/ws_hook.js'); // important to inject as early as possible
 injectOtherScripts();
