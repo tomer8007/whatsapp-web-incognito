@@ -3,7 +3,7 @@
   "name": "WAIncognito - Incognito for WhatsApp™",
   "short_name": "WAIncognito",
   "description": "Be invisible on WhatsApp™ Web by controlling read receipts and presence updates",
-  "version": "2.5.95",
+  "version": "2.5.97",
   "permissions": [
     "storage",
     "declarativeNetRequest"
@@ -17,7 +17,9 @@
       }
     ]
   },
-  "icons":  { "128": "images/icon_128_blue.png" },
+  "icons": {
+    "128": "images/icon_128_blue.png"
+  },
   "action": {
     "default_icon": "images/icon_128_reshaped.png"
   },
@@ -26,31 +28,60 @@
       "id": "waincognito@wa-incognito.com",
       "strict_min_version": "109.0",
       "data_collection_permissions": {
-          "required": [
-             "none"
-          ]  }
+        "required": [
+          "none"
+        ]
+      }
     },
     "gecko_android": {
       "strict_min_version": "109.0"
     }
   },
-  "background":
-  {
-    "scripts": ["background.js"]
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
   },
-   "host_permissions": ["https://web.whatsapp.com/*"],
-   "content_scripts":
-   [
-  	{
-      "matches": ["https://web.whatsapp.com/*"],
-  	  "js": ["core_injection.js"],
-  	  "run_at": "document_start"
-  	},
-  	{
-      "matches": ["https://web.whatsapp.com/*"],
-  	  "js": ["core/ui_class_names.js", "core/ui.js", "lib/drop.js", "lib/sweetalert.min.js","core/status_download.js"],
-  	  "css": ["styles.css", "lib/css/drop-theme-basic.css"]
-  	}
-   ],
-	"web_accessible_resources": [{"resources": ["lib/*", "core/*", "images/*"], "matches": ["https://web.whatsapp.com/*"]} ]
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "core_injection.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "core/ui_class_names.js",
+        "core/ui.js",
+        "lib/drop.js",
+        "lib/sweetalert.min.js",
+        "core/status_download.js"
+      ],
+      "css": [
+        "styles.css",
+        "lib/css/drop-theme-basic.css"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/*",
+        "core/*",
+        "images/*"
+      ],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ]
+    }
+  ]
 }

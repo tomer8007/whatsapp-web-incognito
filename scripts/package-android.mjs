@@ -12,7 +12,7 @@
 // 4. Stashes the final APK into release/android/ with standard naming and sha256 checksums
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -57,29 +57,83 @@ function sha256(filePath) {
 
 // ---------------------------------------------------------------- toolchain detection
 
+function getJdkMajorVersion(dir) {
+  if (!dir || !existsSync(join(dir, 'bin', 'javac'))) return null;
+  const relFile = join(dir, 'release');
+  if (existsSync(relFile)) {
+    try {
+      const content = readFileSync(relFile, 'utf8');
+      const match = content.match(/JAVA_VERSION="?(\d+)/);
+      if (match) return parseInt(match[1], 10);
+    } catch {}
+  }
+  try {
+    const res = spawnSync(join(dir, 'bin', 'java'), ['-version'], { encoding: 'utf8' });
+    const text = (res.stderr || '') + (res.stdout || '');
+    const match = text.match(/(?:version|Runtime Environment)\s+"?(\d+)/i) || text.match(/openjdk (\d+)/i);
+    if (match) return parseInt(match[1], 10);
+  } catch {}
+  return null;
+}
+
 function detectJdk() {
-  // Check existing JAVA_HOME
+  const isCompatible = (v) => v !== null && v >= 17 && v <= 21;
+
+  // 1. Check existing JAVA_HOME if compatible (reject Java >= 24 which causes IllegalArgumentException)
   const envJavaHome = process.env.JAVA_HOME;
   if (envJavaHome && existsSync(join(envJavaHome, 'bin', 'javac'))) {
-    return { path: envJavaHome, source: 'JAVA_HOME' };
-  }
-
-  // Check SDKMAN candidates for Java 17 or 21
-  const sdkmanJava = join(process.env.HOME || '', '.sdkman', 'candidates', 'java');
-  if (existsSync(sdkmanJava)) {
-    const candidates = readdirSync(sdkmanJava).filter((d) => d.startsWith('17.') || d.startsWith('21.'));
-    if (candidates.length) {
-      return { path: join(sdkmanJava, candidates[0]), source: 'sdkman' };
+    const ver = getJdkMajorVersion(envJavaHome);
+    if (isCompatible(ver)) {
+      return { path: envJavaHome, version: ver, source: 'JAVA_HOME' };
+    }
+    if (ver && ver >= 24) {
+      console.warn(`\n[!] Notice: Current JAVA_HOME points to Java ${ver} (${envJavaHome}).`);
+      console.warn('    Gradle 8.11 / AGP 8.7 require JDK 17 or 21 (Java 25 throws java.lang.IllegalArgumentException).');
+      console.warn('    Searching for an installed compatible JDK (17/21)...\n');
     }
   }
 
-  // Check /usr/lib/jvm
-  const jvmDir = '/usr/lib/jvm';
-  if (existsSync(jvmDir)) {
-    const candidates = readdirSync(jvmDir).filter((d) => d.includes('17') || d.includes('21'));
-    if (candidates.length) {
-      return { path: join(jvmDir, candidates[0]), source: '/usr/lib/jvm' };
+  // 2. Candidate locations
+  const candidateDirs = [
+    join(process.env.HOME || '', '.gradle', 'jdks'),
+    join(process.env.HOME || '', '.sdkman', 'candidates', 'java'),
+    '/usr/lib/jvm',
+    join(process.env.HOME || '', '.asdf', 'installs', 'java'),
+    join(process.env.HOME || '', '.jenv', 'versions'),
+  ];
+
+  for (const parent of candidateDirs) {
+    if (!existsSync(parent)) continue;
+    try {
+      const entries = readdirSync(parent);
+      for (const entry of entries) {
+        if (entry === 'current') continue;
+        const candidatePath = join(parent, entry);
+        const ver = getJdkMajorVersion(candidatePath);
+        if (isCompatible(ver)) {
+          return { path: candidatePath, version: ver, source: parent };
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Android Studio / JetBrains bundled JBR
+  const specificPaths = [
+    join(process.env.HOME || '', 'android-studio', 'jbr'),
+    '/opt/android-studio/jbr',
+    '/snap/android-studio/current/android-studio/jbr',
+  ];
+  for (const p of specificPaths) {
+    const ver = getJdkMajorVersion(p);
+    if (isCompatible(ver)) {
+      return { path: p, version: ver, source: p };
     }
+  }
+
+  // 4. System default
+  const sysVer = getJdkMajorVersion('/usr/lib/jvm/default-java');
+  if (isCompatible(sysVer)) {
+    return { path: '/usr/lib/jvm/default-java', version: sysVer, source: 'system default' };
   }
 
   return null;
@@ -124,7 +178,7 @@ try {
   process.exit(1);
 }
 
-// 2. Validate Gradle Wrapper
+// 2. Validate Gradle Wrapper & properties
 const gradlewPath = join(ANDROID_DIR, 'gradlew');
 if (!existsSync(gradlewPath)) {
   console.error('\nError: Gradle Wrapper (app/android/gradlew) is missing.');
@@ -132,15 +186,23 @@ if (!existsSync(gradlewPath)) {
   process.exit(1);
 }
 
+const gradlePropsPath = join(ANDROID_DIR, 'gradle.properties');
+if (!existsSync(gradlePropsPath)) {
+  writeFileSync(gradlePropsPath, 'android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n', 'utf8');
+}
+
 // 3. Check JDK
 const jdk = detectJdk();
 const env = { ...process.env };
 if (jdk) {
-  console.log(`\n2. JDK: using ${jdk.path} (${jdk.source})`);
+  console.log(`\n2. JDK: using Java ${jdk.version} at ${jdk.path} (${jdk.source})`);
   env.JAVA_HOME = jdk.path;
   env.PATH = `${join(jdk.path, 'bin')}:${env.PATH}`;
 } else {
-  console.log('\n2. JDK: using system default Java');
+  console.error('\nError: No compatible JDK 17 or 21 found.');
+  console.error('Gradle 8.11 / AGP 8.7 require Java 17 or 21. Java 24+ is unsupported (throws java.lang.IllegalArgumentException: 25.0.1).');
+  console.error('Install JDK 21 (e.g. `sdk install java 21.0.6-tem` or `sudo apt install openjdk-21-jdk`).');
+  process.exit(1);
 }
 
 // 4. Check Android SDK

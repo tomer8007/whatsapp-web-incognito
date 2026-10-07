@@ -25,8 +25,6 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         geckoView = findViewById(R.id.geckoview)
-        geckoSession = GeckoSession()
-
         // Configure session with desktop mode and spoofed UA to prevent mobile redirects
         val settings = GeckoSessionSettings.Builder()
             .usePrivateMode(false)
@@ -34,7 +32,7 @@ class MainActivity : AppCompatActivity() {
             .userAgentOverride(DESKTOP_UA)
             .suspendMediaWhenInactive(false)
             .build()
-        geckoSession.settings = settings
+        geckoSession = GeckoSession(settings)
 
         val runtime = WAIncognitoApp.geckoRuntime
         geckoSession.open(runtime)
