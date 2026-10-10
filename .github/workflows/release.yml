@@ -458,7 +458,6 @@ jobs:
         include:
           - { name: linux-x64,   os: ubuntu-latest, args: --linux --x64 }
           - { name: windows-x64, os: windows-latest, args: --win --x64, cert: WIN_CSC_LINK, pass: WIN_CSC_PASSWORD }
-          - { name: macos-x64,   os: macos-13, args: --mac --x64, cert: MAC_CSC_LINK, pass: MAC_CSC_PASSWORD, notarize: true }
           - { name: macos-arm64, os: macos-14, args: --mac --arm64, cert: MAC_CSC_LINK, pass: MAC_CSC_PASSWORD, notarize: true }
 
     steps:
