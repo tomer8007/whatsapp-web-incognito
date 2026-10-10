@@ -73,19 +73,17 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Version consistency
-        # manifest.json is the source of truth for the extension; package.json is the
-        # source of truth for the electron-builder artefact name. A skew means the
-        # AppImage says one version and the Web Store listing says another.
+      - name: Validate version
+        # package.json is the single source of truth for the entire repo.
+        # Targets (Chrome, Firefox, Electron, Android) derive their version at build time.
         run: |
           set -euo pipefail
-          M=$(node -p "require('./manifest.json').version")
           P=$(node -p "require('./package.json').version")
-          if [ "$M" != "$P" ]; then
-            echo "::error::version skew: manifest.json=$M package.json=$P"
+          if ! [[ "$P" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::package.json version '$P' is not valid semver"
             exit 1
           fi
-          echo "version $M consistent across manifest.json and package.json"
+          echo "Building WAIncognito version $P"
 
       - name: Build all targets
         # firefox + chrome + electron. Any target that stops building is a release

@@ -3,6 +3,16 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val packageJsonFile = rootDir.resolve("../../package.json")
+val appVersionName: String = if (packageJsonFile.exists()) {
+    Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(packageJsonFile.readText())?.groupValues?.get(1) ?: "1.0.0"
+} else "1.0.0"
+
+val semverParts = appVersionName.split('.').mapNotNull { it.takeWhile { c -> c.isDigit() }.toIntOrNull() }
+val appVersionCode = (semverParts.getOrElse(0) { 0 } * 10000) +
+                     (semverParts.getOrElse(1) { 0 } * 100) +
+                     semverParts.getOrElse(2) { 0 }
+
 android {
     namespace = "com.waincognito.app"
     compileSdk = 35
@@ -11,8 +21,8 @@ android {
         applicationId = "com.waincognito.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 20595
-        versionName = "2.5.95"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

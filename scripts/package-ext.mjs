@@ -116,9 +116,9 @@ function epoch() {
 }
 
 function version() {
-  const m = JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8'));
-  if (!m.version) throw new Error('manifest.json has no version');
-  return m.version;
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  if (!pkg.version) throw new Error('package.json has no version field');
+  return pkg.version;
 }
 
 // ---------------------------------------------------------------- pack

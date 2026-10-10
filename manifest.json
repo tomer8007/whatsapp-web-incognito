@@ -3,7 +3,6 @@
   "name": "WAIncognito - Incognito for WhatsApp™",
   "short_name": "WAIncognito",
   "description": "Be invisible on WhatsApp™ Web by controlling read receipts and presence updates",
-  "version": "2.5.97",
   "permissions": [
     "storage",
     "declarativeNetRequest"

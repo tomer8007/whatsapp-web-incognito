@@ -259,12 +259,25 @@ function cssInjector(cssFiles) {
 
 // ---------------------------------------------------------------- extension targets
 
-/** Firefox: the upstream manifest, byte-for-byte semantics. */
+function formatManifest(manifest, version) {
+  const { manifest_version, name, short_name, description, ...rest } = manifest;
+  return {
+    manifest_version,
+    name,
+    ...(short_name ? { short_name } : {}),
+    ...(description ? { description } : {}),
+    version,
+    ...rest,
+  };
+}
+
+/** Firefox: the upstream manifest, byte-for-byte semantics, with version injected from package.json. */
 function buildFirefox(manifest, files) {
   const out = join(DIST, 'extension', 'firefox');
   rmSync(out, { recursive: true, force: true });
   copyInto(files, out);
-  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  const m = formatManifest(manifest, pkg.version);
+  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
   console.log(`  firefox    ${relative(ROOT, out)}  (${human(dirSize(out))}, ${files.length} files)`);
 }
 
@@ -279,7 +292,8 @@ function buildChrome(manifest, files) {
   m.background = { service_worker: bg.service_worker ?? bg.scripts?.[0] ?? 'background.js' };
   delete m.browser_specific_settings;
 
-  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
+  const formatted = formatManifest(m, pkg.version);
+  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(formatted, null, 2)}\n`);
   console.log(`  chrome     ${relative(ROOT, out)}  (${human(dirSize(out))}, ${files.length} files)`);
 }
 
@@ -288,7 +302,8 @@ function buildGeckoView(manifest, files) {
   const out = join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito');
   rmSync(out, { recursive: true, force: true });
   copyInto(files, out);
-  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  const m = formatManifest(manifest, pkg.version);
+  writeFileSync(join(out, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
   console.log(`  geckoview  ${relative(ROOT, out)}  (${human(dirSize(out))}, ${files.length} files)`);
 }
 
@@ -363,7 +378,7 @@ function buildElectron(manifest, files) {
   writeFileSync(join(EBUILD, 'ext-files.json'), `${JSON.stringify(files, null, 2)}\n`);
 
   const meta = {
-    version: manifest.version,
+    version: pkg.version,
     generatedFrom: 'scripts/build.mjs',
     lazyInjection: flag('lazy'),
     order: { critical: MAIN_CRITICAL, rest: MAIN_REST, ui: UI, deferred: DEFERRED, css: CSS },
@@ -402,6 +417,8 @@ function extname(p) {
 
 // ---------------------------------------------------------------- cli
 
+const pkg = readJSON(join(ROOT, 'package.json'));
+if (!pkg.version) throw new Error('package.json has no version field');
 const manifest = readJSON(join(ROOT, 'manifest.json'));
 const files = collectFiles(manifest);
 
@@ -417,7 +434,7 @@ const targets = target === 'extension' ? ['firefox', 'chrome'] :
   (target === 'geckoview' || target === 'android') ? ['geckoview'] :
   [target ?? 'firefox', target ? null : 'chrome', target ? null : 'electron'].filter(Boolean);
 
-console.log(`WAIncognito build  version ${manifest.version}  ${files.length} manifest files\n`);
+console.log(`WAIncognito build  version ${pkg.version}  ${files.length} manifest files\n`);
 if (flag('lazy')) console.log('  (§8.1 lazy injection ENABLED: only ws_hook.js loads at document_start)\n');
 
 for (const t of targets) {

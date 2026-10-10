@@ -39,17 +39,24 @@ class MainActivity : AppCompatActivity() {
         geckoView.setSession(geckoSession)
 
         // Register built-in WAIncognito WebExtension from assets
-        runtime.webExtensionController.installBuiltIn("resource://android/assets/waincognito/")
+        Log.i(TAG, "Registering extension...")
+        runtime.webExtensionController.ensureBuiltIn("resource://android/assets/waincognito/", "waincognito@wa-incognito.com")
             .accept(
-                { extension ->
+                org.mozilla.geckoview.GeckoResult.Consumer { extension ->
                     Log.i(TAG, "WAIncognito extension registered: ${extension?.id}")
+                    runOnUiThread {
+                        Log.i(TAG, "Loading URI after extension install...")
+                        geckoSession.loadUri(WHATSAPP_WEB_URL)
+                    }
                 },
-                { throwable ->
+                org.mozilla.geckoview.GeckoResult.Consumer { throwable ->
                     Log.e(TAG, "Failed to register WAIncognito extension", throwable)
+                    runOnUiThread {
+                        Log.i(TAG, "Loading URI anyway...")
+                        geckoSession.loadUri(WHATSAPP_WEB_URL)
+                    }
                 }
             )
-
-        geckoSession.loadUri(WHATSAPP_WEB_URL)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

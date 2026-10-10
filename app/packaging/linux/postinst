@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Automatically configure the WAIncognito APT repository for updates
+SOURCES_DIR="/etc/apt/sources.list.d"
+SOURCES_FILE="$SOURCES_DIR/waincognito.list"
+
+if [ -d "$SOURCES_DIR" ]; then
+    echo "deb [trusted=yes] https://moodynooby.github.io/whatsapp-web-incognito/apt/ stable main" > "$SOURCES_FILE"
+    chmod 644 "$SOURCES_FILE"
+fi

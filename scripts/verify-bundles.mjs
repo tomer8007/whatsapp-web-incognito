@@ -241,28 +241,36 @@ check('A10b', 'no BOM at any emitted bundle seam', () => {
   return bad.length ? `BOM in: ${bad.join(', ')}` : true;
 });
 
-// A4 — Chrome MV3 vs Firefox MV3, from one source manifest.
+// A4 — Chrome MV3 vs Firefox MV3, from one source manifest with version from package.json.
 check('A4', 'chrome/firefox manifests are correctly derived from the root manifest', () => {
   if (!haveBuild) return 'no build output';
   const root = readJSON(join(ROOT, 'manifest.json'));
+  const pkg = readJSON(join(ROOT, 'package.json'));
   const ff = readJSON(join(DIST, 'extension', 'firefox', 'manifest.json'));
   const ch = readJSON(join(DIST, 'extension', 'chrome', 'manifest.json'));
   const msgs = [];
-  if (JSON.stringify(ff) !== JSON.stringify(root)) msgs.push('firefox manifest is not verbatim from root');
+  if (ff.version !== pkg.version) msgs.push(`firefox manifest version ${ff.version} != package.json ${pkg.version}`);
+  const ffWithoutVersion = { ...ff };
+  delete ffWithoutVersion.version;
+  if (JSON.stringify(ffWithoutVersion) !== JSON.stringify(root)) {
+    msgs.push('firefox manifest is not verbatim from root (excluding version)');
+  }
+  if (ch.version !== pkg.version) msgs.push(`chrome manifest version ${ch.version} != package.json ${pkg.version}`);
   if (!ch.background?.service_worker) msgs.push('chrome manifest has no background.service_worker');
   if (ch.background?.scripts) msgs.push('chrome manifest still has background.scripts');
   if (ch.browser_specific_settings) msgs.push('chrome manifest still has browser_specific_settings');
   return msgs.length ? msgs.join('; ') : true;
 });
 
-// A5 — three outputs, one version.
-check('A5', 'all outputs report the same version', () => {
+// A5 — all outputs report the same version, matching package.json.
+check('A5', 'all outputs report the same version matching package.json', () => {
   if (!haveBuild) return 'no build output';
-  const root = readJSON(join(ROOT, 'manifest.json')).version;
+  const pkg = readJSON(join(ROOT, 'package.json')).version;
   const ch = readJSON(join(DIST, 'extension', 'chrome', 'manifest.json')).version;
   const ff = readJSON(join(DIST, 'extension', 'firefox', 'manifest.json')).version;
   const el = readJSON(join(EBUILD, 'meta.json')).version;
-  const set = new Set([root, ch, ff, el]);
+  const gv = readJSON(join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito', 'manifest.json')).version;
+  const set = new Set([pkg, ch, ff, el, gv]);
   return set.size === 1 ? true : `versions differ: ${[...set].join(', ')}`;
 });
 
@@ -572,11 +580,12 @@ check('A-panelkeys', 'every option key the extension panel uses is one backgroun
 
 const EXT_OUT = join(ROOT, 'release', 'extensions');
 
-/** The packaged zips, or [] when nothing has been packaged yet. */
+/** The packaged zips for the current package.json version, or [] when nothing has been packaged yet. */
 function packagedZips() {
   if (!existsSync(EXT_OUT)) return [];
+  const pkg = readJSON(join(ROOT, 'package.json'));
   return readdirSync(EXT_OUT)
-    .filter((f) => f.endsWith('.zip'))
+    .filter((f) => f.endsWith('.zip') && f.includes(`-${pkg.version}-`))
     .map((f) => join(EXT_OUT, f));
 }
 
@@ -623,7 +632,7 @@ if (!zips.length) {
   // already checks the manifests in dist/; this checks the copy that actually ships, which
   // is a different file written by a different step.
   check('A19', 'the manifest inside each zip is the correct browser variant', () => {
-    const root = readJSON(join(ROOT, 'manifest.json'));
+    const pkg = readJSON(join(ROOT, 'package.json'));
     const msgs = [];
     for (const zip of zips) {
       const browser = /-(chrome|firefox)\.zip$/.exec(zip)?.[1];
@@ -631,8 +640,8 @@ if (!zips.length) {
       let m;
       try { m = JSON.parse(zipRead(zip, 'manifest.json')); }
       catch (e) { msgs.push(`${basename(zip)}: manifest.json is unreadable (${e.message.split('\n')[0]})`); continue; }
-      if (m.version !== root.version) {
-        msgs.push(`${basename(zip)}: version ${m.version} != root ${root.version}`);
+      if (m.version !== pkg.version) {
+        msgs.push(`${basename(zip)}: version ${m.version} != package.json ${pkg.version}`);
       }
       if (browser === 'firefox') {
         if (!m.background?.scripts) msgs.push(`${basename(zip)}: firefox zip has no background.scripts`);

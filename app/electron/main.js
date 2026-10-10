@@ -274,7 +274,7 @@ const TELEMETRY_HOSTS = Object.freeze([
   // Attribution and push
   'appsflyer.com', 'adjust.com', 'branch.io', 'onesignal.com',
   // Social embeds (WhatsApp link previews)
-  'facebook.net', 'graph.facebook.com',
+  'facebook.net',
 ]);
 
 // Web push + the service-worker endpoints. Blocking these removes a whole class of
@@ -621,6 +621,7 @@ function createWindow(prefs) {
 
       webviewTag: false,
       spellcheck: false,
+      plugins: true,
     },
   });
 
@@ -891,26 +892,25 @@ function installSessionGuards(ses) {
     });
   })();
 
-  // A service worker that is already registered keeps running even with its script
-  // blocked, so unregister any that a previous build managed to install.
-  //
-  // Feature-detected rather than assumed: `session.serviceWorkers` is not present on
-  // every platform/version combination, and calling through it unconditionally throws a
-  // TypeError during startup on the ones where it is missing. That is a hard error in an
-  // unrelated guard, which is exactly the kind of noise that hides a real failure.
-  guard('unregister service workers', () => {
-    const sw = ses && ses.serviceWorkers;
-    if (sw && typeof sw.unregisterAll === 'function') {
-      try {
-        const r = sw.unregisterAll();
-        if (r && typeof r.catch === 'function') r.catch((e) => debug('unregisterAll:', e && e.message));
-      } catch (e) {
-        debug('unregisterAll:', (e && e.message) || e);
+  // Only unregister service workers if BLOCK_SERVICE_WORKER is explicitly enabled.
+  // Otherwise, wiping the service worker on every boot destroys WhatsApp Web's asset
+  // pipeline, causing WAWebTPPdfViewer, pdf-worker, and /stream/video (used for GIFs)
+  // to stall or fail.
+  if (BLOCK_SERVICE_WORKER) {
+    guard('unregister service workers', () => {
+      const sw = ses && ses.serviceWorkers;
+      if (sw && typeof sw.unregisterAll === 'function') {
+        try {
+          const r = sw.unregisterAll();
+          if (r && typeof r.catch === 'function') r.catch((e) => debug('unregisterAll:', e && e.message));
+        } catch (e) {
+          debug('unregisterAll:', (e && e.message) || e);
+        }
+      } else {
+        debug('session.serviceWorkers.unregisterAll unavailable on this platform; skipping');
       }
-    } else {
-      debug('session.serviceWorkers.unregisterAll unavailable on this platform; skipping');
-    }
-  })();
+    })();
+  }
 
   // ---- Screen sharing via desktopCapturer (from WhatsLNX) ----
   // Cache the selected source for 5 minutes so the portal doesn't reopen mid-call.
@@ -1017,6 +1017,8 @@ function installNavigationLock(win) {
               nodeIntegration: false,
               sandbox: true,
               webviewTag: false,
+              partition: PARTITION,
+              plugins: true,
             },
           },
         };

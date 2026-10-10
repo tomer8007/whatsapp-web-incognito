@@ -16,12 +16,13 @@ name: Release
 
 on:
   push:
+    branches: ['master']
     tags: ['v*']
 
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, e.g. 2.5.7 (blank = use manifest.json)'
+        description: 'Version to release, e.g. 2.5.7 (blank = use package.json)'
         required: false
         type: string
       tag:
@@ -35,7 +36,7 @@ on:
         type: choice
         options: [all, extension, electron]
       bump_manifest:
-        description: 'Rewrite manifest.json + package.json to <version> and commit to master'
+        description: 'Rewrite package.json to <version> and commit to master'
         required: false
         default: false
         type: boolean
@@ -91,6 +92,7 @@ jobs:
     name: resolve
     runs-on: ubuntu-latest
     outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
       targets: ${{ steps.plan.outputs.targets }}
@@ -147,11 +149,12 @@ jobs:
             printf '%s' "${v%"${v##*[![:space:]]}"}"
           }
 
-          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
           PKG_VERSION=$(node -p "require('./package.json').version")
 
           FROM_TAG=false
-          if [ "$EVENT_NAME" = "push" ]; then
+          SHOULD_RELEASE=true
+
+          if [ "$EVENT_NAME" = "push" ] && [[ "$REF_NAME" == v* ]]; then
             FROM_TAG=true
             TAG="$REF_NAME"
             VERSION="$(strip_v "$REF_NAME")"
@@ -166,9 +169,29 @@ jobs:
             PRERELEASE=false
             TARGETS=all
             FORCE=false
+          elif [ "$EVENT_NAME" = "push" ]; then
+            # Push to master: check if package.json has a new version that hasn't been tagged yet
+            VERSION="$PKG_VERSION"
+            TAG="v$VERSION"
+            git fetch --tags origin || true
+            if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              say "Version $VERSION (tag $TAG) already released. Skipping automatic release."
+              SHOULD_RELEASE=false
+              CREATE_TAG=false
+            else
+              say "New version $VERSION in package.json on $REF_NAME! Triggering automatic release $TAG."
+              SHOULD_RELEASE=true
+              CREATE_TAG=true
+            fi
+            DRY_RUN=false
+            BUMP=false
+            DRAFT=false
+            PRERELEASE=false
+            TARGETS=all
+            FORCE=false
           else
             # Normalise the version BEFORE deriving the tag, or "v2.5.7" yields "vv2.5.7".
-            VERSION="$(strip_v "${IN_VERSION:-$MANIFEST_VERSION}")"
+            VERSION="$(strip_v "${IN_VERSION:-$PKG_VERSION}")"
             TAG="$(trim "$IN_TAG")"
             [ -n "$TAG" ] || TAG="v$VERSION"
             TARGETS="${IN_TARGETS:-all}"
@@ -200,19 +223,15 @@ jobs:
             exit 1
           fi
 
-          if [ "$MANIFEST_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::version skew in the repo: manifest.json=$MANIFEST_VERSION package.json=$PKG_VERSION. Fix the skew before releasing."
+          if [ "$VERSION" != "$PKG_VERSION" ] && [ "$FORCE" != true ] && [ "$BUMP" != true ]; then
+            echo "::error::requested version $VERSION != package.json $PKG_VERSION."
+            echo "::error::Either set bump_manifest=true (updates package.json), or force=true to release $VERSION as-is."
             exit 1
           fi
 
-          if [ "$VERSION" != "$MANIFEST_VERSION" ] && [ "$FORCE" != true ] && [ "$BUMP" != true ]; then
-            echo "::error::requested version $VERSION != manifest.json $MANIFEST_VERSION."
-            echo "::error::Either set bump_manifest=true (updates manifest.json + package.json), or force=true to release $VERSION as-is."
-            exit 1
-          fi
-
-          say "version=$VERSION tag=$TAG targets=$TARGETS dry_run=$DRY_RUN draft=$DRAFT prerelease=$PRERELEASE"
+          say "should_release=$SHOULD_RELEASE version=$VERSION tag=$TAG targets=$TARGETS dry_run=$DRY_RUN draft=$DRAFT prerelease=$PRERELEASE"
           {
+            echo "should_release=$SHOULD_RELEASE"
             echo "version=$VERSION"
             echo "tag=$TAG"
             echo "targets=$TARGETS"
@@ -234,7 +253,7 @@ jobs:
             fi
           } >> "$GITHUB_OUTPUT"
 
-      - name: Bump version in manifest.json and package.json
+      - name: Bump version in package.json
         # Only meaningful on a manual run, and only safe from master: the commit goes
         # back to the branch that the release is cutting from.
         if: needs.resolve.outputs.bump == 'true' && needs.resolve.outputs.dry_run == 'false'
@@ -243,8 +262,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$VERSION" = "$(node -p "require('./manifest.json').version")" ]; then
-            echo "manifest.json is already at $VERSION; nothing to bump"
+          if [ "$VERSION" = "$(node -p "require('./package.json').version")" ]; then
+            echo "package.json is already at $VERSION; nothing to bump"
             exit 0
           fi
 
@@ -253,42 +272,31 @@ jobs:
             exit 1
           fi
 
-          # Surgical replacement, not a re-serialisation. JSON.stringify(j, null, 2)
-          # reflows every line of these hand-formatted files, which would bury a
-          # one-line version change in a whole-file rewrite.
+          # Surgical replacement in package.json
           node -e '
             const fs = require("fs");
             const v = process.env.VERSION;
-            for (const f of ["manifest.json", "package.json"]) {
-              const raw = fs.readFileSync(f, "utf8");
-              // Anchored to the start of a line and a quoted value, so a nested
-              // "version" key elsewhere in the file cannot be matched by mistake.
-              const re = /^([ \t]*)"version"[ \t]*:[ \t]*"[^"]*"/m;
-              const m = re.exec(raw);
-              if (!m) throw new Error(`${f}: no "version" field found`);
-              // The indent comes from the match, not a "$1" backreference: the
-              // replacer is a function, where $1 would be a literal dollar-one.
-              const indent = m[1];
-              const next = raw.replace(re, () => `${indent}"version": ${JSON.stringify(v)}`);
-              // Proves the *top-level* version is the one that moved.
-              if (JSON.parse(next).version !== v) {
-                throw new Error(`${f}: version did not change to ${v}`);
-              }
-              fs.writeFileSync(f, next);
+            const f = "package.json";
+            const raw = fs.readFileSync(f, "utf8");
+            const re = /^([ \t]*)"version"[ \t]*:[ \t]*"[^"]*"/m;
+            const m = re.exec(raw);
+            if (!m) throw new Error(`${f}: no "version" field found`);
+            const indent = m[1];
+            const next = raw.replace(re, () => `${indent}"version": ${JSON.stringify(v)}`);
+            if (JSON.parse(next).version !== v) {
+              throw new Error(`${f}: version did not change to ${v}`);
             }
+            fs.writeFileSync(f, next);
           '
 
-          # Exactly one changed line per file, or the bump touched something it had
-          # no business touching. Plain bash arithmetic: the awk one-liner this
-          # replaces is mis-parsed by mawk, which is what Ubuntu runners ship.
           FILES=0; ADDED=0; REMOVED=0
           while read -r a d f; do
             [ -n "$f" ] || continue
             FILES=$((FILES + 1)); ADDED=$((ADDED + a)); REMOVED=$((REMOVED + d))
-          done <<< "$(git diff --numstat -- manifest.json package.json)"
+          done <<< "$(git diff --numstat -- package.json)"
 
-          if [ "$FILES" -ne 2 ] || [ "$ADDED" -ne 2 ] || [ "$REMOVED" -ne 2 ]; then
-            echo "::error::expected a 1-line version swap in each of manifest.json and package.json, got files=$FILES +$ADDED -$REMOVED"
+          if [ "$FILES" -ne 1 ] || [ "$ADDED" -ne 1 ] || [ "$REMOVED" -ne 1 ]; then
+            echo "::error::expected a 1-line version swap in package.json, got files=$FILES +$ADDED -$REMOVED"
             git diff
             exit 1
           fi
@@ -296,7 +304,7 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add manifest.json package.json
+          git add package.json
           git commit -m "chore: release v$VERSION" -m "[skip ci]"
           git push origin "HEAD:$GITHUB_REF"
           echo "::notice::committed the bump to $GITHUB_REF_NAME and pushed it"
@@ -335,6 +343,7 @@ jobs:
   verify:
     name: verify
     needs: resolve
+    if: needs.resolve.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -370,7 +379,7 @@ jobs:
   build-extension:
     name: build extension (${{ matrix.browser }})
     needs: [resolve, verify]
-    if: needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'extension'
+    if: needs.resolve.outputs.should_release == 'true' && (needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'extension')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -432,7 +441,7 @@ jobs:
   build-electron:
     name: build electron (${{ matrix.name }})
     needs: [resolve, verify]
-    if: needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'electron'
+    if: needs.resolve.outputs.should_release == 'true' && (needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'electron')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -599,6 +608,7 @@ jobs:
     if: >-
       always()
       && needs.resolve.result == 'success'
+      && needs.resolve.outputs.should_release == 'true'
       && needs.verify.result == 'success'
       && (needs.build-extension.result == 'success' || needs.build-extension.result == 'skipped')
       && (needs.build-electron.result == 'success' || needs.build-electron.result == 'skipped')
@@ -659,6 +669,59 @@ jobs:
             artifacts/**/*.deb
             artifacts/**/*.blockmap
           fail_on_unmatched_files: false
+
+      - name: Update APT repository on GitHub Pages
+        if: needs.resolve.outputs.dry_run == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          DEB_COUNT=$(find artifacts -name '*.deb' | wc -l)
+          if [ "$DEB_COUNT" -eq 0 ]; then
+            echo "No .deb packages in this release; skipping APT repository update."
+            exit 0
+          fi
+
+          echo "Installing dpkg-dev for dpkg-scanpackages..."
+          sudo apt-get update && sudo apt-get install -y dpkg-dev
+
+          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          TARGET_DIR="${{ github.workspace }}/../gh-pages-repo"
+          rm -rf "$TARGET_DIR"
+
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            echo "Cloning existing gh-pages branch..."
+            git clone --branch gh-pages --single-branch "$REPO_URL" "$TARGET_DIR"
+          else
+            echo "Initializing fresh gh-pages branch..."
+            mkdir -p "$TARGET_DIR"
+            cd "$TARGET_DIR"
+            git init
+            git checkout -b gh-pages
+            git remote add origin "$REPO_URL"
+            cd "${{ github.workspace }}"
+          fi
+
+          # Update the APT repository layout
+          node scripts/update-apt-repo.mjs --artifacts=artifacts --out="$TARGET_DIR/apt"
+
+          # Redirect root index.html to apt/ if no root index.html exists
+          if [ ! -f "$TARGET_DIR/index.html" ]; then
+            echo '<meta http-equiv="refresh" content="0; url=apt/">' > "$TARGET_DIR/index.html"
+          fi
+
+          cd "$TARGET_DIR"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to APT repository."
+          else
+            git commit -m "chore(apt): update repository for ${{ needs.resolve.outputs.tag }}"
+            git push origin gh-pages
+            echo "Successfully updated and published APT repository on gh-pages!"
+          fi
 
       - name: Release summary
         if: always() && needs.resolve.outputs.dry_run == 'false'
