@@ -425,14 +425,15 @@ const files = collectFiles(manifest);
 if (flag('clean')) {
   rmSync(DIST, { recursive: true, force: true });
   rmSync(EBUILD, { recursive: true, force: true });
-  console.log('removed dist/ and app/.build/');
+  rmSync(join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito'), { recursive: true, force: true });
+  console.log('removed dist/, app/.build/, and android assets');
   process.exit(0);
 }
 
 const target = opt('target');
 const targets = target === 'extension' ? ['firefox', 'chrome'] :
   (target === 'geckoview' || target === 'android') ? ['geckoview'] :
-  [target ?? 'firefox', target ? null : 'chrome', target ? null : 'electron'].filter(Boolean);
+  [target ?? 'firefox', target ? null : 'chrome', target ? null : 'electron', target ? null : 'geckoview'].filter(Boolean);
 
 console.log(`WAIncognito build  version ${pkg.version}  ${files.length} manifest files\n`);
 if (flag('lazy')) console.log('  (§8.1 lazy injection ENABLED: only ws_hook.js loads at document_start)\n');

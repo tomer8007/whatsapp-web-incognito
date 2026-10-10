@@ -15,6 +15,7 @@
     "build:android": "node scripts/build.mjs --target=geckoview",
     "build:electron": "node scripts/build.mjs --target=electron",
     "package": "node scripts/package-ext.mjs",
+    "package:ext": "node scripts/package-ext.mjs",
     "package:chrome": "node scripts/package-ext.mjs --browser=chrome",
     "package:firefox": "node scripts/package-ext.mjs --browser=firefox",
     "package:android": "node scripts/package-android.mjs",

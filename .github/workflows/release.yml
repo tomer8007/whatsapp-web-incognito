@@ -34,7 +34,7 @@ on:
         required: false
         default: all
         type: choice
-        options: [all, extension, electron]
+        options: [all, extension, electron, android]
       bump_manifest:
         description: 'Rewrite package.json to <version> and commit to master'
         required: false
@@ -256,9 +256,9 @@ jobs:
       - name: Bump version in package.json
         # Only meaningful on a manual run, and only safe from master: the commit goes
         # back to the branch that the release is cutting from.
-        if: needs.resolve.outputs.bump == 'true' && needs.resolve.outputs.dry_run == 'false'
+        if: steps.plan.outputs.bump == 'true' && steps.plan.outputs.dry_run == 'false'
         env:
-          VERSION: ${{ needs.resolve.outputs.version }}
+          VERSION: ${{ steps.plan.outputs.version }}
         run: |
           set -euo pipefail
 
@@ -310,9 +310,9 @@ jobs:
           echo "::notice::committed the bump to $GITHUB_REF_NAME and pushed it"
 
       - name: Ensure the tag exists
-        if: needs.resolve.outputs.create_tag == 'true' && needs.resolve.outputs.dry_run == 'false'
+        if: steps.plan.outputs.create_tag == 'true' && steps.plan.outputs.dry_run == 'false'
         env:
-          TAG: ${{ needs.resolve.outputs.tag }}
+          TAG: ${{ steps.plan.outputs.tag }}
         run: |
           set -euo pipefail
 
@@ -348,6 +348,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch upstream master for patch verification
+        run: git fetch https://github.com/tomer8007/whatsapp-web-incognito.git master:refs/remotes/upstream/master || true
+
       - uses: pnpm/action-setup@v4
         with:
           version: 12
@@ -362,6 +365,9 @@ jobs:
 
       - name: Build all targets
         run: pnpm run build
+
+      - name: Package extensions
+        run: pnpm run package:ext
 
       - name: Verify bundles
         run: pnpm run verify
@@ -424,14 +430,17 @@ jobs:
                | TZ=UTC xargs -0 zip -X -9 -q "$GITHUB_WORKSPACE/$OUT" )
 
           echo "packed $(unzip -l "$OUT" | tail -1 | awk '{print $2}') files into $OUT"
-          sha256sum "$OUT"
-          ls -l "$OUT"
+          if [ "$BROWSER" = "firefox" ]; then
+            cp "$OUT" "${OUT%.zip}.xpi"
+          fi
+          sha256sum "$OUT"*
+          ls -l "$OUT"*
 
       - name: Upload extension zip
         uses: actions/upload-artifact@v4
         with:
           name: extension-${{ matrix.browser }}
-          path: artifacts/*.zip
+          path: artifacts/*
           retention-days: 14
           if-no-files-found: error
 
@@ -599,12 +608,51 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # Android GeckoView APK.
+  # ---------------------------------------------------------------------------
+  build-android:
+    name: build android (apk)
+    needs: [resolve, verify]
+    if: needs.resolve.outputs.should_release == 'true' && (needs.resolve.outputs.targets == 'all' || needs.resolve.outputs.targets == 'android')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Package Android APK
+        run: node scripts/package-android.mjs
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: release/android/*.apk
+          retention-days: 14
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
   # Publish. The explicit result check is required: a skipped build job (because
   # targets=extension) would otherwise skip the whole publish chain.
   # ---------------------------------------------------------------------------
   publish:
     name: publish
-    needs: [resolve, verify, build-extension, build-electron]
+    needs: [resolve, verify, build-extension, build-electron, build-android]
     if: >-
       always()
       && needs.resolve.result == 'success'
@@ -612,6 +660,7 @@ jobs:
       && needs.verify.result == 'success'
       && (needs.build-extension.result == 'success' || needs.build-extension.result == 'skipped')
       && (needs.build-electron.result == 'success' || needs.build-electron.result == 'skipped')
+      && (needs.build-android.result == 'success' || needs.build-android.result == 'skipped')
     runs-on: ubuntu-latest
 
     steps:
@@ -620,9 +669,6 @@ jobs:
       - name: Download build artefacts
         uses: actions/download-artifact@v4
         with:
-          pattern: |
-            extension-*
-            electron-*
           path: artifacts
           merge-multiple: true
 
@@ -662,6 +708,8 @@ jobs:
           generate_release_notes: ${{ needs.resolve.outputs.notes == '' }}
           files: |
             artifacts/**/*.zip
+            artifacts/**/*.xpi
+            artifacts/**/*.apk
             artifacts/**/*.exe
             artifacts/**/*.msi
             artifacts/**/*.dmg

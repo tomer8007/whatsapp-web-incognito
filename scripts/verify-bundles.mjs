@@ -178,6 +178,11 @@ check('A7', 'core/ + lib/ divergence is within the recorded patch set', () => {
   const rec = readJSON(recPath);
   let diffOut = '';
   try {
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', rec.upstreamRef], { cwd: ROOT, stdio: 'ignore' });
+    } catch {
+      execFileSync('git', ['fetch', 'https://github.com/tomer8007/whatsapp-web-incognito.git', 'master:refs/remotes/upstream/master'], { cwd: ROOT, stdio: 'ignore' });
+    }
     diffOut = execFileSync('git', ['diff', '--name-only', rec.upstreamRef, '--', 'core', 'lib'],
       { cwd: ROOT, encoding: 'utf8' });
   } catch (e) {
@@ -269,7 +274,9 @@ check('A5', 'all outputs report the same version matching package.json', () => {
   const ch = readJSON(join(DIST, 'extension', 'chrome', 'manifest.json')).version;
   const ff = readJSON(join(DIST, 'extension', 'firefox', 'manifest.json')).version;
   const el = readJSON(join(EBUILD, 'meta.json')).version;
-  const gv = readJSON(join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito', 'manifest.json')).version;
+  const gvPath = join(ROOT, 'app', 'android', 'app', 'src', 'main', 'assets', 'waincognito', 'manifest.json');
+  if (!existsSync(gvPath)) return 'missing android assets output; run `npm run build` first';
+  const gv = readJSON(gvPath).version;
   const set = new Set([pkg, ch, ff, el, gv]);
   return set.size === 1 ? true : `versions differ: ${[...set].join(', ')}`;
 });

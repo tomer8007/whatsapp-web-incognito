@@ -58,6 +58,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch upstream master for patch verification
+        run: git fetch https://github.com/tomer8007/whatsapp-web-incognito.git master:refs/remotes/upstream/master || true
+
       - uses: pnpm/action-setup@v4
         with:
           # pnpm-workspace.yaml uses the `allowBuilds` key, which is pnpm 12 syntax.
