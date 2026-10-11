@@ -99,14 +99,21 @@ Packaging the desktop app is `pnpm exec electron-builder` — the same command t
 workflow runs. Two flags that are not scripts, because both files document them already:
 `node scripts/build.mjs --clean` and `node scripts/dev.mjs --once`.
 
-> **On Linux the app runs without the Chromium zygote sandbox.** Chromium wants
-> `chrome-sandbox` to be root-owned with mode `4755`, which an `npm`/`pnpm` install never
-> produces, and where the unprivileged-namespace fallback is also unavailable — a container,
-> a restricted VM, a seccomp/AppArmor profile blocking `unshare(CLONE_NEWUSER)` — Chromium
-> aborts before a window exists. `app/electron/main.js` therefore passes `--no-sandbox`
-> itself on Linux, unconditionally, so there is nothing to set and nothing to remember. The
-> per-renderer `sandbox: false` and the navigation lock to `web.whatsapp.com` are unchanged
-> and are what actually bound what this app loads. See
+> **On Linux the `.deb` install runs with the Chromium zygote sandbox on.**
+> Chromium wants `chrome-sandbox` to be root-owned with mode `4755`, which the
+> package's `postinst` script sets on install and on upgrade (it runs as root
+> in both cases). A dev checkout (`npm`/`pnpm`) can never produce those
+> permissions, so `pnpm start` passes `--no-sandbox` on its own command line —
+> and where the unprivileged-namespace fallback is also unavailable (a
+> container, a restricted VM, a seccomp/AppArmor profile blocking
+> `unshare(CLONE_NEWUSER)`), that flag is the only thing standing between you
+> and a silent abort before any window exists. Note the ordering trap that
+> caused a real "clicking the icon does nothing" bug: the abort happens during
+> early Chromium startup, *before* the app's JavaScript runs, so appending the
+> switch from `main.js` cannot save a launch — `main.js` only appends it when
+> the helper is misconfigured, as best-effort for child processes. The
+> per-renderer `sandbox: false` and the navigation lock to `web.whatsapp.com`
+> are unchanged and are what actually bound what this app loads. See
 > [ARCHITECTURE.md](docs/ARCHITECTURE.md) §2.
 
 `build` only ever wrote *unpacked* directories, so `package:ext` is what turns them into

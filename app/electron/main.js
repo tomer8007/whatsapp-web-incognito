@@ -38,31 +38,53 @@ if (process.platform === 'linux') {
 
 // ---------------------------------------------------------------- Linux sandbox (must be before app loads)
 //
-// Chromium needs `chrome-sandbox` to be owned by root with mode 4755. An npm/pnpm install
-// unpacks it as the invoking user, so it never is, and Chromium normally falls back to the
-// unprivileged namespace sandbox. Where that fallback is unavailable — a container, a
-// restricted VM, any seccomp/AppArmor profile that blocks unshare(CLONE_NEWUSER) — Chromium
-// aborts before a window exists:
+// Chromium needs `chrome-sandbox` to be owned by root with mode 4755. A .deb
+// install gets that from the postinst script (app/packaging/linux/postinst),
+// which runs as root on install and on upgrade.
+//
+// Every other way of running the app cannot have it: an npm/pnpm install
+// unpacks the helper as the invoking user, and an AppImage mounts it from a
+// user-owned squashfs. Chromium normally falls back to the unprivileged
+// namespace sandbox there, but where that fallback is also unavailable — a
+// container, a restricted VM, any seccomp/AppArmor profile that blocks
+// unshare(CLONE_NEWUSER) — Chromium aborts before a window exists:
 //
 //   [FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc] The SUID sandbox helper binary
 //   was found, but is not configured correctly. Rather than run without sandboxing I'm
 //   aborting now.
 //
-// The alternative is a sudo chown/chmod of a file inside node_modules, which is not something
-// an app can ask of its user at every launch and which a reinstall undoes anyway. So the
-// zygote sandbox is off by default on Linux and this line is the whole of it.
+// Two facts about `--no-sandbox` that an earlier revision of this comment got
+// wrong, stated plainly so they are not re-learned:
 //
-// WHAT THAT COSTS, stated plainly: --no-sandbox drops the zygote boundary for the entire
-// process, so utility processes are not contained. The per-renderer `sandbox: false` in
-// createWindow (C2) is a separate and much narrower decision — it covers the one renderer that
-// loads our bundles — and it is unchanged. The surface this actually matters for is the
-// WhatsApp page itself, which already runs unsandboxed, and which this app deliberately points
-// at web.whatsapp.com and nothing else (see isAllowedNavigation).
+//   1. Appending the switch here can NOT save a launch whose helper is already
+//      misconfigured. The abort happens during early Chromium startup, before
+//      this file's JavaScript runs — proven on a real system install, whose
+//      log contained the FATAL and not a single [wai] line. A process that
+//      needs the switch must receive it on its command line (the `start`
+//      script does: `electron . --no-sandbox`) or from its .desktop Exec line.
+//   2. Passing it unconditionally would throw away the sandbox on systems
+//      where postinst configured it correctly. So it is appended only when
+//      the helper next to this binary is NOT root-owned setuid — i.e. exactly
+//      the dev/AppImage cases that cannot have correct permissions.
+//
+// WHAT UNSANDBOXED COSTS, stated plainly: --no-sandbox drops the zygote boundary for
+// the entire process, so utility processes are not contained. The per-renderer
+// `sandbox: false` in createWindow (C2) is a separate and much narrower decision — it
+// covers the one renderer that loads our bundles — and it is unchanged. The surface this
+// actually matters for is the WhatsApp page itself, which already runs unsandboxed, and
+// which this app deliberately points at web.whatsapp.com and nothing else
+// (see isAllowedNavigation).
 //
 // Windows and macOS are untouched: this switch is Linux-only, and on those platforms the
 // platform sandbox is a real boundary that nothing here disables.
+//
+// The predicate lives in sandbox.js (unit-tested) because main.js cannot be
+// required from `node --test`.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('no-sandbox');
+  const { isSandboxHelperConfigured } = require('./sandbox.js');
+  if (!isSandboxHelperConfigured(process.execPath)) {
+    app.commandLine.appendSwitch('no-sandbox');
+  }
 }
 
 // stdout/stderr are closed when the app is launched from a dock/dash/desktop file
@@ -1246,9 +1268,14 @@ function applyAutostart(enabled) {
 function syncAutostartFile(on) {
   const file = desktopIntegration.autostartFilePath();
   if (!on) return desktopIntegration.removeAutostartFile(file);
-  // Inside an AppImage the image itself is the executable; in dev (`electron .`)
-  // re-launch the app path with the current runtime.
-  const execCmd = process.env.APPIMAGE || `"${process.execPath}" "${app.getAppPath()}"`;
+  // Inside an AppImage the image itself is the executable; in a packaged build
+  // the binary finds its own asar, so it takes no arguments. Only a dev run
+  // (`electron .`, where the runtime and the app are separate things) needs the
+  // app path appended — passing it in a packaged build left a stray asar path
+  // on the autostart command line.
+  const execCmd = process.env.APPIMAGE || (process.defaultApp
+    ? `"${process.execPath}" "${app.getAppPath()}"`
+    : `"${process.execPath}"`);
   return desktopIntegration.writeAutostartFile(file, desktopIntegration.buildDesktopEntry(execCmd));
 }
 
@@ -1268,7 +1295,9 @@ function syncAutostartFile(on) {
  */
 function syncNotificationEntry() {
   if (process.platform !== 'linux') return true;
-  const execCmd = process.env.APPIMAGE || `"${process.execPath}" "${app.getAppPath()}"`;
+  const execCmd = process.env.APPIMAGE || (process.defaultApp
+    ? `"${process.execPath}" "${app.getAppPath()}"`
+    : `"${process.execPath}"`);
   const ok = desktopIntegration.ensureNotificationEntry({
     appId: APP_ID,
     exec: execCmd,

@@ -9,3 +9,28 @@ if [ -d "$SOURCES_DIR" ]; then
     echo "deb [trusted=yes] https://moodynooby.github.io/whatsapp-web-incognito/apt/ stable main" > "$SOURCES_FILE"
     chmod 644 "$SOURCES_FILE"
 fi
+
+# Fix the Chromium SUID sandbox helper permissions.
+#
+# Why this exists: dpkg installs chrome-sandbox as root:root with mode 755
+# (the permission bits are preserved from the build machine, where the file
+# is unpacked by an unprivileged user and can never be setuid). Chromium
+# requires it to be root-owned with mode 4755; anything else aborts the whole
+# app before its first window — and before its own code runs, so no in-app
+# workaround can save a launch that reaches this state:
+#
+#   [FATAL:sandbox/.../setuid_sandbox_host.cc] The SUID sandbox helper binary
+#   was found, but is not configured correctly. Rather than run without
+#   sandboxing I'm aborting now.
+#
+# That abort is exactly the "clicking the icon does nothing" report: the menu
+# and autostart entries launch the binary with no terminal and no extra flags,
+# so the crash is silent. postinst runs as root on install AND on upgrade, so
+# this repairs already-installed systems as well as fresh ones.
+for _dir in "/opt/Whatsapp Incognito" "/opt/waincognito"; do
+    _sandbox="$_dir/chrome-sandbox"
+    if [ -f "$_sandbox" ]; then
+        chown root:root "$_sandbox"
+        chmod 4755 "$_sandbox"
+    fi
+done

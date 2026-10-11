@@ -62,13 +62,25 @@ to those bytes is a synchronous `ipcRenderer.sendSync` to main — which puts th
 process on the critical path of the one file with a hard deadline. Trading a real C1 risk
 for defence-in-depth on our own preload is a bad trade.
 
-This also settles the Chromium-level sandbox. A port from another Electron app brought
-`ELECTRON_DISABLE_SANDBOX=1` along with it, and this app now does the equivalent itself:
-`app/electron/main.js` appends `--no-sandbox` on Linux, **unconditionally**. The
-justification changed. The port's reasoning was that this app runs
-`webPreferences.sandbox: true` and has to load its hook bundle from disk, which is only half
-true — the renderer `sandbox: false` above is the part that actually forced it. What decided
-it is the environment. Chromium requires `chrome-sandbox` to be root-owned with mode `4755`,
+This also settles the Chromium-level sandbox, with a correction to what an earlier
+revision of this document claimed. A port from another Electron app brought
+`ELECTRON_DISABLE_SANDBOX=1` along with it, and this app used to do the equivalent
+itself: `app/electron/main.js` appended `--no-sandbox` on Linux, **unconditionally**,
+with a comment saying there was nothing to set and nothing to remember. That comment
+was wrong, and it shipped a real bug: the SUID-helper abort happens during early
+Chromium startup, *before* the app's JavaScript runs, so the in-code switch cannot
+save a launch — proven by a system `.deb` install whose log held the FATAL and not a
+single `[wai]` line, i.e. "clicking the icon does nothing". What actually fixes it:
+
+- the `.deb` `postinst` (app/packaging/linux/postinst, root on install and upgrade)
+  sets `chrome-sandbox` to root-owned `4755`, so installed builds keep the sandbox;
+- dev runs, which can never have those permissions, pass `--no-sandbox` on the command
+  line (`pnpm start` does), because only a flag present at process launch counts;
+- `main.js` appends the switch only when the helper next to the binary is misconfigured
+  (see `app/electron/sandbox.js`, unit-tested) — best-effort for child processes, and
+  deliberately not unconditional, so a fixed install is not needlessly unsandboxed.
+
+Chromium requires `chrome-sandbox` to be root-owned with mode `4755`,
 an `npm`/`pnpm` install never produces that, and where the unprivileged-namespace fallback is
 *also* unavailable — a container, a restricted VM, a seccomp/AppArmor profile blocking
 `unshare(CLONE_NEWUSER)` — Chromium aborts with
@@ -78,9 +90,7 @@ an `npm`/`pnpm` install never produces that, and where the unprivileged-namespac
 was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now.
 ```
 
-before a window exists. There is no settings screen to reach and no diagnostic to read. The
-only real alternative is a `sudo chown`/`chmod` of a file inside `node_modules`, which an app
-cannot ask of its user at every launch and which a reinstall undoes.
+before a window exists. There is no settings screen to reach and no diagnostic to read.
 
 **What that costs:** the zygote boundary is off process-wide on Linux, so utility processes
 are not contained. The two narrower boundaries are untouched — the per-renderer
