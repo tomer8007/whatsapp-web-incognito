@@ -15,12 +15,12 @@ val appVersionCode = (semverParts.getOrElse(0) { 0 } * 10000) +
 
 android {
     namespace = "com.waincognito.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.waincognito.app"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
 
@@ -30,6 +30,19 @@ android {
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64", "armeabi-v7a"))
         }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64", "armeabi-v7a")
+            isUniversalApk = true
+        }
+    }
+
+    androidResources {
+        noCompress.addAll(listOf("html", "js", "css", "json", "png", "svg", "webp"))
     }
 
     buildTypes {
@@ -65,8 +78,9 @@ android {
 
 dependencies {
     // Mozilla GeckoView engine
-    implementation("org.mozilla.geckoview:geckoview:135.0.+")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("org.mozilla.geckoview:geckoview:144.0.+")
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation("com.google.android.material:material:1.12.0")
 }

@@ -23,21 +23,24 @@ const OUTDIR = join(ROOT, 'release', 'android');
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(`--${name}`);
+const opt = (name) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
 
 if (flag('help') || flag('h')) {
   console.log(`
   Package the Android GeckoView app into an installable APK.
 
-    node scripts/package-android.mjs [--debug] [--check]
+    node scripts/package-android.mjs [--debug] [--check] [--abi=<name>]
 
-    --debug    Build debug variant (assembleDebug) instead of release
-    --check    Only check JDK, Gradle wrapper, and Android SDK prerequisites
+    --debug       Build debug variant (assembleDebug) instead of release
+    --check       Only check JDK, Gradle wrapper, and Android SDK prerequisites
+    --abi=<name>  Filter packaged APK by ABI (e.g. arm64-v8a, x86_64, universal)
 `);
   process.exit(0);
 }
 
 const isDebug = flag('debug');
 const isCheckOnly = flag('check');
+const targetAbi = opt('abi');
 
 // ---------------------------------------------------------------- helpers
 
@@ -247,7 +250,7 @@ try {
   process.exit(1);
 }
 
-// 6. Collect output APK
+// 6. Collect output APKs
 const variant = isDebug ? 'debug' : 'release';
 const apkDir = join(ANDROID_DIR, 'app', 'build', 'outputs', 'apk', variant);
 if (!existsSync(apkDir)) {
@@ -255,23 +258,43 @@ if (!existsSync(apkDir)) {
   process.exit(1);
 }
 
-const apks = readdirSync(apkDir).filter((f) => f.endsWith('.apk'));
+let apks = readdirSync(apkDir).filter((f) => f.endsWith('.apk'));
 if (!apks.length) {
   console.error('\nNo APK was emitted by the Gradle build.');
   process.exit(1);
 }
 
+if (targetAbi) {
+  const filtered = apks.filter((f) => f.includes(targetAbi));
+  if (filtered.length) {
+    apks = filtered;
+  } else {
+    console.warn(`\n[!] Warning: No APK matched --abi=${targetAbi}. Available: ${apks.join(', ')}`);
+  }
+}
+
 mkdirSync(OUTDIR, { recursive: true });
-const emittedApk = join(apkDir, apks[0]);
-const destApkName = `WAIncognito-${getVersion()}-${variant}.apk`;
-const destApk = join(OUTDIR, destApkName);
 
-copyFileSync(emittedApk, destApk);
+console.log(`\n== Output Artifacts (${variant}) ==\n`);
+for (const apkName of apks) {
+  const emittedApk = join(apkDir, apkName);
 
-const size = statSync(destApk).size;
-const hash = sha256(destApk);
+  // Extract ABI tag from APK name (e.g. app-arm64-v8a-debug.apk -> -arm64-v8a)
+  let abiTag = '';
+  const match = apkName.match(/^app-(.+)-(?:debug|release)\.apk$/);
+  if (match) {
+    abiTag = `-${match[1]}`;
+  }
 
-console.log(`\n== Output ==`);
-console.log(`  Path:    ${relative(ROOT, destApk)}`);
-console.log(`  Size:    ${human(size)}`);
-console.log(`  SHA-256: ${hash}\n`);
+  const destApkName = `WAIncognito-${getVersion()}${abiTag}-${variant}.apk`;
+  const destApk = join(OUTDIR, destApkName);
+
+  copyFileSync(emittedApk, destApk);
+
+  const size = statSync(destApk).size;
+  const hash = sha256(destApk);
+
+  console.log(`  Artifact: ${relative(ROOT, destApk)}`);
+  console.log(`    Size:    ${human(size)}`);
+  console.log(`    SHA-256: ${hash}\n`);
+}

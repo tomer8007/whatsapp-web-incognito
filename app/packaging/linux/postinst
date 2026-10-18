@@ -1,12 +1,57 @@
 #!/bin/sh
 set -e
 
-# Automatically configure the WAIncognito APT repository for updates
+# Automatically configure the WAIncognito APT repository for updates using modern deb822
 SOURCES_DIR="/etc/apt/sources.list.d"
-SOURCES_FILE="$SOURCES_DIR/waincognito.list"
+SOURCES_FILE="$SOURCES_DIR/waincognito.sources"
+LEGACY_FILE="$SOURCES_DIR/waincognito.list"
+KEYRINGS_DIR="/etc/apt/keyrings"
+TARGET_KEYRING="$KEYRINGS_DIR/waincognito.gpg"
 
 if [ -d "$SOURCES_DIR" ]; then
-    echo "deb [trusted=yes] https://moodynooby.github.io/whatsapp-web-incognito/apt/ stable main" > "$SOURCES_FILE"
+    # 1. Clean up legacy one-line entry to prevent duplicate target warnings
+    rm -f "$LEGACY_FILE"
+
+    # 2. Check if a bundled or pre-installed keyring exists
+    KEYRING_FOUND=0
+    for _candidate in \
+        "/opt/waincognito/waincognito.gpg" \
+        "/opt/waincognito/resources/waincognito.gpg" \
+        "/opt/Whatsapp Incognito/waincognito.gpg" \
+        "/opt/Whatsapp Incognito/resources/waincognito.gpg" \
+        "$TARGET_KEYRING"; do
+        if [ -f "$_candidate" ]; then
+            mkdir -p "$KEYRINGS_DIR"
+            if [ "$_candidate" != "$TARGET_KEYRING" ]; then
+                cp "$_candidate" "$TARGET_KEYRING"
+            fi
+            chmod 644 "$TARGET_KEYRING"
+            KEYRING_FOUND=1
+            break
+        fi
+    done
+
+    # 3. Write deb822 stanza with explicit architecture restrictions
+    if [ "$KEYRING_FOUND" -eq 1 ]; then
+        cat << 'EOF' > "$SOURCES_FILE"
+Types: deb
+URIs: https://moodynooby.github.io/whatsapp-web-incognito/apt/
+Suites: stable
+Components: main
+Architectures: amd64 arm64
+Signed-By: /etc/apt/keyrings/waincognito.gpg
+EOF
+    else
+        cat << 'EOF' > "$SOURCES_FILE"
+Types: deb
+URIs: https://moodynooby.github.io/whatsapp-web-incognito/apt/
+Suites: stable
+Components: main
+Architectures: amd64 arm64
+Trusted: yes
+EOF
+    fi
+
     chmod 644 "$SOURCES_FILE"
 fi
 

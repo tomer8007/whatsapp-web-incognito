@@ -2,7 +2,7 @@
   "name": "waincognito",
   "productName": "WAIncognito",
   "desktopName": "waincognito",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "description": "Be invisible on WhatsApp Web by disabling read receipts and presence updates",
   "license": "GPL-3.0",
   "private": true,
@@ -63,7 +63,13 @@
         "deb"
       ],
       "category": "Network",
-      "syncDesktopName": true
+      "syncDesktopName": true,
+      "extraResources": [
+        {
+          "from": "app/packaging/linux/waincognito.gpg",
+          "to": "waincognito.gpg"
+        }
+      ]
     },
     "deb": {
       "afterInstall": "app/packaging/linux/postinst",
