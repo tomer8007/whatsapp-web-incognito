@@ -1,8 +1,6 @@
 {
   "$comment": "The patch-set record. This is the budget for local divergence from upstream: docs/ELECTRON_APP_PLAN.md §1. A7 in scripts/verify-bundles.mjs diffs core/ and lib/ against upstreamRef and fails the build if the changed file set differs from patchedFiles. Deliberate new patches must be added here; accidental edits must not be.",
-
   "upstreamRef": "upstream/master",
-
   "patchedFiles": [
     "core/interception.js",
     "core/multi_device.js",
@@ -12,9 +10,9 @@
     "core/parsing/protobuf/WhisperTextProtocol.js",
     "core/ui.js",
     "core/ui_class_names.js",
-    "core/utils.js"
+    "core/utils.js",
+    "core/ws_hook.js"
   ],
-
   "patches": [
     {
       "id": "P0a",
@@ -120,43 +118,53 @@
       "note": "ui.js is already in the patch set via P0b, so this adds no new merge-conflict domain."
     },
     {
-    "id": "P8",
-    "file": "scripts/build.mjs (build-time, not a source patch)",
-    "status": "applied",
-    "summary": "Wrap UMD vendor files so they take the browser-global branch instead of the AMD branch.",
-    "kind": "single-world-fix",
-    "why": "Observed at runtime: `Uncaught ReferenceError: Tether is not defined`, and the whole ui group failed to inject. lib/drop.js, lib/pako.js, lib/pbf.3.0.5.min.js and lib/sweetalert.min.js each begin with a UMD wrapper that prefers `define.amd`. In the extension those files run in the ISOLATED content-script world, where WhatsApp's globals do not exist, so the browser-global branch is taken. The app has ONE world — the page's — and WhatsApp's webpack bundle installs a global AMD `define`, so the same files publish NOTHING. This is a direct consequence of the two-worlds-to-one-worlds difference in §2.2.",
-    "severity": "critical-silent",
-    "severityNote": "core/ calls `pako.inflate(...)` as a bare global in three places (utils.js:442, multi_device.js:118, interception.js:751). With pako undefined, every compressed frame throws inside wsHook.before, the catch passes the frame through UNBLOCKED, and the watchdog still reports PROTECTED because the hook did arm. That is a silent receipt leak — the exact failure this project exists to prevent — and nothing throws at load time, because the global is simply absent until the first message arrives.",
-    "fix": "Each UMD file is wrapped as `;(function(){var define=void 0, exports=void 0, module=void 0;<file>})();`. The three identifiers are declared function-scoped so they SHADOW the page globals without mutating them — assigning window.define = undefined would be undone by a non-writable or accessor property, and would be visible to concurrent code. The IIFE is deliberately non-strict and called with no receiver, so top-level `this` inside the wrapped file is still the global object, which is what the UMD wrapper passes to the factory as `root`.",
-    "assertion": "A-umd, A-umd2",
-    "scope": "electron target only — the extension stages raw files, and there the isolated world has no `define`, so it already takes the global branch."
-  },
-  {
-    "id": "P9",
-    "file": "app/electron/user-agent.js (shell, not a core patch)",
-    "status": "applied",
-    "summary": "Rewrite the session user agent from Electron's stock form to a real Chrome UA.",
-    "kind": "browser-gate",
-    "why": "Observed at runtime: web.whatsapp.com serves a 'WhatsApp works with Google Chrome 100+' page instead of the app, because Electron's UA carries an `Electron/x.y.z` token.",
-    "fix": "Removes the Electron token and the app's own product token, and substitutes the REAL embedded Chromium version (process.versions.chrome) into the Chrome slot. Deliberately not a newer Chrome than is embedded: claiming one invites feature detection that then disagrees with the actual engine, which is harder to diagnose than a clean block.",
-    "scope": "This is a browser-gate bypass and NOTHING more. It is not anonymity and not anti-fingerprinting: it changes exactly one signal. Electron remains distinguishable via renderer strings, feature quirks and network fingerprint. Overridable with WAI_USER_AGENT for debugging.",
-    "assertion": "user-agent.test.js (11 tests)",
-    "note": "The extension targets are unaffected — they run in a real browser and already send a real UA."
+      "id": "P8",
+      "file": "scripts/build.mjs (build-time, not a source patch)",
+      "status": "applied",
+      "summary": "Wrap UMD vendor files so they take the browser-global branch instead of the AMD branch.",
+      "kind": "single-world-fix",
+      "why": "Observed at runtime: `Uncaught ReferenceError: Tether is not defined`, and the whole ui group failed to inject. lib/drop.js, lib/pako.js, lib/pbf.3.0.5.min.js and lib/sweetalert.min.js each begin with a UMD wrapper that prefers `define.amd`. In the extension those files run in the ISOLATED content-script world, where WhatsApp's globals do not exist, so the browser-global branch is taken. The app has ONE world — the page's — and WhatsApp's webpack bundle installs a global AMD `define`, so the same files publish NOTHING. This is a direct consequence of the two-worlds-to-one-worlds difference in §2.2.",
+      "severity": "critical-silent",
+      "severityNote": "core/ calls `pako.inflate(...)` as a bare global in three places (utils.js:442, multi_device.js:118, interception.js:751). With pako undefined, every compressed frame throws inside wsHook.before, the catch passes the frame through UNBLOCKED, and the watchdog still reports PROTECTED because the hook did arm. That is a silent receipt leak — the exact failure this project exists to prevent — and nothing throws at load time, because the global is simply absent until the first message arrives.",
+      "fix": "Each UMD file is wrapped as `;(function(){var define=void 0, exports=void 0, module=void 0;<file>})();`. The three identifiers are declared function-scoped so they SHADOW the page globals without mutating them — assigning window.define = undefined would be undone by a non-writable or accessor property, and would be visible to concurrent code. The IIFE is deliberately non-strict and called with no receiver, so top-level `this` inside the wrapped file is still the global object, which is what the UMD wrapper passes to the factory as `root`.",
+      "assertion": "A-umd, A-umd2",
+      "scope": "electron target only — the extension stages raw files, and there the isolated world has no `define`, so it already takes the global branch."
     },
-  {
-    "id": "P10",
-    "file": "scripts/package-ext.mjs (build-time, not a source patch)",
-    "status": "applied",
-    "summary": "Add a local packer for the extension zips, plus A18/A19/A20 to check the packaged artefact.",
-    "kind": "release-tooling",
-    "why": "scripts/build.mjs only ever wrote UNPACKED directories. The only zip in the project was produced by .github/workflows/release.yml, so there was no way to produce the artefact you would actually submit to AMO, and no way to reproduce a release locally. Everything about the shipped zip was therefore untested: nothing checked that the archive held exactly the built files, that it carried the right browser's manifest, or that the reproducibility the README advertises still held.",
-    "fix": "package-ext.mjs reproduces release.yml's zip exactly — commit-date mtime normalisation, LC_ALL=C byte-order file list, zip -X -9 — so a local checksum is comparable with a CI one. The one deliberate difference is that Node produces the file list instead of `find | sort -z | xargs`, which guarantees a single zip invocation at any file count and lets the script refuse to package a directory containing a symlink. Firefox additionally gets a .xpi, a copy rather than a re-zip so the two are provably identical.",
-    "assertion": "A18 (archive contents == build dir), A19 (manifest inside the zip is the right browser variant), A20 (reproducible across a rebuild)",
-    "a20note": "A20 deliberately stamps the build directory with a different mtime before each of its two packs. The obvious formulation — pack the same tree twice — passes even against a packer with the mtime normalisation removed, because nothing rewrites the files in between. The property that matters is reproducibility ACROSS a rebuild, so that is what is tested.",
-    "scope": "extension targets only. The electron target is packaged by electron-builder and is unaffected."
-  }],
-
+    {
+      "id": "P9",
+      "file": "app/electron/user-agent.js (shell, not a core patch)",
+      "status": "applied",
+      "summary": "Rewrite the session user agent from Electron's stock form to a real Chrome UA.",
+      "kind": "browser-gate",
+      "why": "Observed at runtime: web.whatsapp.com serves a 'WhatsApp works with Google Chrome 100+' page instead of the app, because Electron's UA carries an `Electron/x.y.z` token.",
+      "fix": "Removes the Electron token and the app's own product token, and substitutes the REAL embedded Chromium version (process.versions.chrome) into the Chrome slot. Deliberately not a newer Chrome than is embedded: claiming one invites feature detection that then disagrees with the actual engine, which is harder to diagnose than a clean block.",
+      "scope": "This is a browser-gate bypass and NOTHING more. It is not anonymity and not anti-fingerprinting: it changes exactly one signal. Electron remains distinguishable via renderer strings, feature quirks and network fingerprint. Overridable with WAI_USER_AGENT for debugging.",
+      "assertion": "user-agent.test.js (11 tests)",
+      "note": "The extension targets are unaffected — they run in a real browser and already send a real UA."
+    },
+    {
+      "id": "P10",
+      "file": "scripts/package-ext.mjs (build-time, not a source patch)",
+      "status": "applied",
+      "summary": "Add a local packer for the extension zips, plus A18/A19/A20 to check the packaged artefact.",
+      "kind": "release-tooling",
+      "why": "scripts/build.mjs only ever wrote UNPACKED directories. The only zip in the project was produced by .github/workflows/release.yml, so there was no way to produce the artefact you would actually submit to AMO, and no way to reproduce a release locally. Everything about the shipped zip was therefore untested: nothing checked that the archive held exactly the built files, that it carried the right browser's manifest, or that the reproducibility the README advertises still held.",
+      "fix": "package-ext.mjs reproduces release.yml's zip exactly — commit-date mtime normalisation, LC_ALL=C byte-order file list, zip -X -9 — so a local checksum is comparable with a CI one. The one deliberate difference is that Node produces the file list instead of `find | sort -z | xargs`, which guarantees a single zip invocation at any file count and lets the script refuse to package a directory containing a symlink. Firefox additionally gets a .xpi, a copy rather than a re-zip so the two are provably identical.",
+      "assertion": "A18 (archive contents == build dir), A19 (manifest inside the zip is the right browser variant), A20 (reproducible across a rebuild)",
+      "a20note": "A20 deliberately stamps the build directory with a different mtime before each of its two packs. The obvious formulation — pack the same tree twice — passes even against a packer with the mtime normalisation removed, because nothing rewrites the files in between. The property that matters is reproducibility ACROSS a rebuild, so that is what is tested.",
+      "scope": "extension targets only. The electron target is packaged by electron-builder and is unaffected."
+    },
+    {
+      "id": "P11",
+      "file": "core/ws_hook.js, core/interception.js",
+      "status": "applied",
+      "summary": "Fail-closed in wsHook.before and core/interception.js instead of passing through raw unblocked stanzas on decoding errors.",
+      "kind": "privacy",
+      "why": "CRIT-01: When an unhandled error occurs during decompression or stanza decoding, wsHook.before previously caught it and invoked _send.apply with the raw unblocked frame, causing silent read receipt and presence leaks. Now fails closed by dropping the frame and emitting wai:interception_failure.",
+      "risk": "low",
+      "assertion": "A7"
+    }
+  ],
   "encoding": {
     "$comment": "core/parsing/protobuf/{WAProto,WhisperTextProtocol}.js were re-encoded UTF-16 -> UTF-8 by commit 10809c8, which halved them. core/ui.js and background.js still carry a UTF-8 BOM. These are not behavioural patches but they do appear in the diff, so they are declared here rather than left as a surprise."
   }

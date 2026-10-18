@@ -524,6 +524,10 @@ const state = {
   /** Whether a native settings popup is currently on screen (key auto-repeat guard). */
   settingsOpen: false,
   lastFailure: null,
+  /** Whether the app was started hidden (e.g. autostart) and should skip initial showWindow. */
+  startHidden: false,
+  /** Active native Notification instances held to prevent premature garbage collection. */
+  activeNotifications: new Set(),
 };
 
 // ---------------------------------------------------------------- window
@@ -663,7 +667,12 @@ function createWindow(prefs) {
 
   win.once('ready-to-show', () => {
     if (winState.maximized) win.maximize();
-    showWindow(win);
+    if (state.startHidden) {
+      debug('starting hidden in tray');
+      state.startHidden = false;
+    } else {
+      showWindow(win);
+    }
     consumePendingDeepLink(win);
   });
 
@@ -973,15 +982,22 @@ function installSessionGuards(ses) {
   guard('will-download', () => {
     ses.on('will-download', (event, item) => {
       const defaultPath = path.join(app.getPath('downloads'), item.getFilename());
-      const savePath = dialog.showSaveDialogSync(state.win || null, {
+      item.pause();
+      const parentWin = state.win && !state.win.isDestroyed() ? state.win : null;
+      dialog.showSaveDialog(parentWin, {
         defaultPath,
         title: 'Save File',
-      });
-      if (savePath) {
-        item.setSavePath(savePath);
-      } else {
+      }).then(({ canceled, filePath }) => {
+        if (!canceled && filePath) {
+          item.setSavePath(filePath);
+          item.resume();
+        } else {
+          item.cancel();
+        }
+      }).catch((err) => {
+        warn('save dialog error:', err);
         item.cancel();
-      }
+      });
     });
   })();
 }
@@ -993,7 +1009,11 @@ function installNavigationLock(win) {
     wc.on('will-navigate', (event, url) => {
       if (isAllowedNavigation(url)) return;
       event.preventDefault();
-      debug(`blocked navigation to ${url}`);
+      if (isOpenableExternal(url)) {
+        shell.openExternal(url).catch((e) => warn('openExternal failed:', (e && e.message) || e));
+      } else {
+        debug(`blocked navigation to ${url}`);
+      }
     });
   })();
 
@@ -1251,7 +1271,11 @@ function applyAutostart(enabled) {
   guard('login item', () => {
     // Native API on Windows/macOS. No-op elsewhere (guarded, never throws).
     if (process.platform === 'win32' || process.platform === 'darwin') {
-      app.setLoginItemSettings({ openAtLogin: on });
+      app.setLoginItemSettings({
+        openAtLogin: on,
+        openAsHidden: true,
+        args: ['--hidden'],
+      });
     }
   })();
   if (process.platform !== 'linux') return;
@@ -1421,7 +1445,18 @@ function installIpc() {
       // reason people mute the app and then miss the messages they muted it for.
       silent: data.silent === true,
     });
+    if (state.activeNotifications) {
+      state.activeNotifications.add(n);
+    }
+    const cleanup = () => {
+      if (state.activeNotifications) {
+        state.activeNotifications.delete(n);
+      }
+    };
+    n.on('close', cleanup);
+    n.on('failed', cleanup);
     n.on('click', () => {
+      cleanup();
       const win = state.win;
       if (win && !win.isDestroyed()) {
         if (win.isMinimized()) win.restore();
@@ -1453,6 +1488,12 @@ function updateBadgeFromTitle() {
     const match = title && title.match(/^\((\d+)\)/);
     const count = match ? parseInt(match[1], 10) : 0;
     if (state.tray && typeof state.tray.updateBadge === 'function') state.tray.updateBadge(count);
+    if (typeof app.setBadgeCount === 'function') {
+      try { app.setBadgeCount(count); } catch (_) {}
+    }
+    if (process.platform === 'darwin' && app.dock && typeof app.dock.setBadge === 'function') {
+      try { app.dock.setBadge(count > 0 ? String(count) : ''); } catch (_) {}
+    }
   } catch (e) {
     debug('updateBadgeFromTitle failed:', (e && e.message) || e);
   }
@@ -1595,13 +1636,54 @@ function startWatchdog(win) {
  * Both are guarded so a crash in the handler cannot cascade.
  */
 function installCrashRecovery() {
+  const crashTimestamps = [];
+  const MAX_CRASHES = 3;
+  const CRASH_WINDOW_MS = 30000;
+
   app.on('render-process-gone', guard('render-process-gone', (_event, webContents, details) => {
     error(`renderer gone: ${details && details.reason} — recreating window`);
+
+    if (state.watchdog) {
+      try {
+        state.watchdog.stop();
+      } catch (e) {
+        warn('failed to stop watchdog on crash:', e);
+      }
+      state.watchdog = null;
+    }
+
     const win = state.win;
     if (win && !win.isDestroyed() && win.webContents === webContents) {
       try { win.destroy(); } catch (e) { /* already gone */ }
       state.win = null;
     }
+
+    const now = Date.now();
+    crashTimestamps.push(now);
+    while (crashTimestamps.length > 0 && now - crashTimestamps[0] > CRASH_WINDOW_MS) {
+      crashTimestamps.shift();
+    }
+
+    if (crashTimestamps.length > MAX_CRASHES) {
+      error(`Renderer crashed ${crashTimestamps.length} times within ${CRASH_WINDOW_MS / 1000}s. Halting automatic recovery.`);
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Whatsapp Incognito - Repeated Crash',
+        message: 'The WhatsApp renderer process has crashed repeatedly.',
+        detail: `Reason: ${(details && details.reason) || 'unknown'}. Automatic restart has been stopped to prevent an infinite loop.`,
+        buttons: ['Restart App', 'Quit'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) {
+          app.relaunch();
+          app.exit(0);
+        } else {
+          app.quit();
+        }
+      }).catch(() => app.quit());
+      return;
+    }
+
     // Give the GPU process a moment to settle before opening a fresh window
     setTimeout(() => {
       guard('crash:recreate-window', () => {
@@ -1678,6 +1760,12 @@ function boot() {
   // Check for a deep link on cold start (argv)
   const coldUrl = process.argv.find(isDeepLink);
   if (coldUrl) _pendingDeepLink = buildDeepLinkUrl(coldUrl) || null;
+
+  const isHiddenLaunch = !coldUrl && (
+    process.argv.includes('--hidden') ||
+    (typeof app.getLoginItemSettings === 'function' && app.getLoginItemSettings().wasOpenedAsHidden === true)
+  );
+  state.startHidden = isHiddenLaunch;
 
   app.on('second-instance', (_event, argv) => {
     const win = state.win;

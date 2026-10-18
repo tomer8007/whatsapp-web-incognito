@@ -21,9 +21,9 @@ function isAllowedNavigation(url) {
   }
 }
 
-/** A genuine web link we are willing to hand to the OS browser. */
+/** A genuine web or communication link we are willing to hand to the OS browser/handlers. */
 function isOpenableExternal(url) {
-  return /^https?:\/\//i.test(String(url || ''));
+  return /^(https?:\/\/|mailto:|tel:)/i.test(String(url || ''));
 }
 
 /**

@@ -74,8 +74,9 @@ const PROBE = `(function () {
     // A bare identifier on purpose: if core/ ever renames it the read must not throw.
     try { wd.held = (typeof exceptionsList !== 'undefined' && exceptionsList && exceptionsList.length) || 0; } catch (e) {}
     var st = (window.__WAI__ && window.__WAI__.state) ? window.__WAI__.state() : null;
+    var vendorAlive = (typeof window.pako === 'object' && window.pako !== null && typeof window.pako.inflate === 'function') && (typeof window.Pbf === 'function');
     return {
-      ok: true, state: st, wd: wd,
+      ok: true, state: st, wd: wd, vendorAlive: vendorAlive,
       hasWai: !!(window.__WAI__ && window.__WAI__.state),
       url: location.href, readyState: document.readyState
     };
@@ -202,6 +203,9 @@ function createWatchdog(opts) {
     // (d) arm() ran but wsHook.before/after are missing or unwrapped. Precisely the §2.3
     //     silent no-op, and the case nothing else can catch.
     if (!st.hookAlive) return { status: STATUS.NOT_PROTECTED, reason: 'wsHook is not wrapped' };
+
+    // (d2) Vendor libraries (pako, Pbf) missing or broken (CRIT-04).
+    if (answer.vendorAlive === false) return { status: STATUS.NOT_PROTECTED, reason: 'vendor dependencies missing' };
 
     // (e) The page's generation went backwards: a new document with its own counter, so
     //     the hook previously observed is provably gone even though this one looks armed.

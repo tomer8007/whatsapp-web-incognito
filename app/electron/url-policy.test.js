@@ -75,9 +75,11 @@ test('malformed and empty input is refused rather than thrown on', () => {
 
 // ---------------------------------------------------------------- isOpenableExternal
 
-test('http(s) links are the ones handed to the OS browser', () => {
+test('http(s), mailto, and tel links are handed to the OS', () => {
   assert.strictEqual(isOpenableExternal('https://example.com/article'), true);
   assert.strictEqual(isOpenableExternal('http://example.com/article'), true);
+  assert.strictEqual(isOpenableExternal('mailto:user@example.com'), true);
+  assert.strictEqual(isOpenableExternal('tel:+1234567890'), true);
 });
 
 test('non-web schemes are never handed to the OS', () => {

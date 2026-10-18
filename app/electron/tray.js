@@ -20,7 +20,11 @@
 
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { Menu, Tray, nativeImage } = require('electron');
+let electron = null;
+try {
+  electron = require('electron');
+} catch (_) {}
+const { Menu, Tray, nativeImage } = (typeof electron === 'object' && electron !== null) ? electron : {};
 const { quickToggles, settingsFor } = require('./settings-menu.js');
 
 // ---------------------------------------------------------------- badge renderer (ported from WhatsLNX)
@@ -100,7 +104,17 @@ function createBadgedIcon(icon, count, image) {
   if (!icon || !Number.isFinite(n) || n <= 0) return icon;
   const img = image || nativeImage;
   if (!img || typeof img.createFromBuffer !== 'function') return icon;
-  const size = 24; // tray icon size on Linux; resize first
+  let size = 24;
+  if (typeof icon.getSize === 'function') {
+    const s = icon.getSize();
+    if (s && s.width) size = s.width;
+  } else if (icon.resized && icon.resized.width) {
+    size = icon.resized.width;
+  } else if (icon.rgba && typeof icon.rgba.length === 'number') {
+    size = Math.round(Math.sqrt(icon.rgba.length / 4));
+  } else if (process.platform !== 'linux') {
+    size = 16;
+  }
   const resized = icon.resize({ width: size, height: size });
   const bgra = resized.toBitmap(); // Electron returns BGRA on Linux
   // Convert BGRA → RGBA
@@ -462,11 +476,19 @@ function createTray(opts) {
     })();
   }
 
-  // macOS: a left click on the tray icon should do the obvious thing.
-  if (app && process.platform === 'darwin' && typeof tray.on === 'function') {
+  // Windows & macOS: a left click on the tray icon toggles or restores the window.
+  if (app && (process.platform === 'darwin' || process.platform === 'win32') && typeof tray.on === 'function') {
     tray.on('click', () => {
       const win = getWindow();
-      if (win && !win.isDestroyed()) { win.show(); win.focus(); }
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        if (win.isVisible() && win.isFocused()) {
+          win.hide();
+        } else {
+          win.show();
+          win.focus();
+        }
+      }
     });
   }
 

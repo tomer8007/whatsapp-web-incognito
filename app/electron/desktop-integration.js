@@ -83,13 +83,21 @@ function runDbusSendHasOwner(name) {
   return parseNameHasOwner(r.stdout);
 }
 
+let watcherCacheTime = 0;
+const NEGATIVE_CACHE_TTL_MS = 10000;
+
 /**
  * Is any StatusNotifier watcher on the session bus? Sync, cached, ~ms. Never
  * throws; { present:false, method:null } means "no tools / no watcher", and the
  * caller must treat it as "no tray host".
  */
 function hasStatusNotifierWatcher() {
-  if (watcherCache) return watcherCache;
+  const now = Date.now();
+  if (watcherCache) {
+    if (watcherCache.present || (now - watcherCacheTime < NEGATIVE_CACHE_TTL_MS)) {
+      return watcherCache;
+    }
+  }
   let result = { present: false, method: null };
   try {
     for (const name of WATCHER_NAMES) {
@@ -100,11 +108,15 @@ function hasStatusNotifierWatcher() {
     }
   } catch (e) { result = { present: false, method: null }; }
   watcherCache = result;
+  watcherCacheTime = now;
   return result;
 }
 
 /** For tests / re-probing. */
-function resetWatcherCache() { watcherCache = null; }
+function resetWatcherCache() {
+  watcherCache = null;
+  watcherCacheTime = 0;
+}
 
 /**
  * Diagnostic only: is the AppIndicator client library visible to this process?
@@ -231,13 +243,14 @@ function autostartFilePath(env) {
 
 /** XDG autostart entry. execCmd is already shell-quoted by the caller. */
 function buildDesktopEntry(execCmd) {
+  const fullExec = execCmd.includes('--hidden') ? execCmd : `${execCmd} --hidden`;
   return [
     '[Desktop Entry]',
     'Type=Application',
     'Version=1.0',
     'Name=Whatsapp Incognito',
     'Comment=Whatsapp Incognito — starts on login when enabled in the tray menu',
-    `Exec=${execCmd}`,
+    `Exec=${fullExec}`,
     'Icon=waincognito',
     'Terminal=false',
     'Categories=Network;InstantMessaging;',

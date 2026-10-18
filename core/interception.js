@@ -106,11 +106,19 @@ wsHook.before = function (originalData, url)
             return originalData;
         }
         
-        console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
+        console.error("WhatsIncognito: Dropping outgoing packet due to exception to prevent privacy leak:");
         console.error(exception);
         console.error("outgoing noise packet was:");
         console.error(originalData);
-        return originalData;
+        try
+        {
+            if (typeof window !== "undefined" && window.dispatchEvent)
+            {
+                window.dispatchEvent(new CustomEvent('wai:interception_failure', { detail: { error: String(exception && exception.message || exception), direction: 'outgoing' } }));
+            }
+        }
+        catch (_) {}
+        return null;
     }
 
     };

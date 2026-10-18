@@ -163,10 +163,9 @@ function sendSnapshot(event, extra) {
 // ------------------------------------------------------------------ step 1: the bridge
 
 /**
- * The only thing the page world can see. Exactly the four functions the shim calls, plus
- * a readState() probe for the preload's own reporting. ipcRenderer is deliberately not
- * exposed: a page that can reach the main process can do anything, and the whole point of
- * C2 is that it cannot.
+ * The only thing the page world can see. Exactly the functions the shim calls.
+ * ipcRenderer is deliberately not exposed: a page that can reach the main process
+ * can do anything, and the whole point of C2 is that it cannot.
  */
 function installBridge() {
   if (state.bridgeReady) return;
@@ -211,14 +210,6 @@ function installBridge() {
     sendNotification: (data) => {
       try { ipcRenderer.send('wai:notification', data); } catch (e) { /* ignore */ }
     },
-
-    /**
-     * The page's liveness snapshot. In the isolated world `window.__WAI__` is invisible,
-     * so the preload has to ask the page to evaluate it. Resolves to null when the shim
-     * is not there — that is the NOT_PROTECTED case, not an error.
-     */
-    readState: () => webFrame.executeJavaScript('window.__WAI__ && window.__WAI__.state()')
-      .catch(() => null),
   });
   state.bridgeReady = true;
 }
@@ -561,8 +552,20 @@ const NOTIFICATION_INTERCEPT_SRC = `(function () {
 
   window.Notification = function (title, options) {
     relay(title, options);
-    // Return a stand-in so WA Web's .close() / .onclick assignment does not throw.
-    return { close: function () {}, onclick: null, onerror: null };
+    // Return a stand-in EventTarget so WA Web's .close(), .addEventListener, .onclick assignments do not throw.
+    var target = (typeof EventTarget !== 'undefined') ? new EventTarget() : {};
+    target.title = title || '';
+    target.close = function () {};
+    target.onclick = null;
+    target.onerror = null;
+    target.onclose = null;
+    target.onshow = null;
+    if (typeof target.addEventListener !== 'function') {
+      target.addEventListener = function () {};
+      target.removeEventListener = function () {};
+      target.dispatchEvent = function () { return true; };
+    }
+    return target;
   };
   window.Notification.requestPermission = function () { return Promise.resolve('granted'); };
   // Only the accessor. Assigning window.Notification.permission first and then defining
