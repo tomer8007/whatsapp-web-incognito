@@ -193,12 +193,8 @@ MultiDevice.encryptPacket = async function(payload, isIncoming = true, counter =
 
 MultiDevice.sizeOfPacket = function(payload)
 {
-    var binaryReader = new BinaryReader();
-    binaryReader.writeBuffer(payload);
-    binaryReader._readIndex = 0;
-
-    var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
-    return size;
+    var bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+    return (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
 };
 
 

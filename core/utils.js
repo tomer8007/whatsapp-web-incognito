@@ -201,12 +201,13 @@ function normalizeJID(jid)
 
 const arrayBufferToBase64 = (buffer) =>
 {
-    var binary = '';
     var bytes = new Uint8Array(buffer);
     var len = bytes.byteLength;
-    for (var i = 0; i < len; i++)
+    var binary = '';
+    var CHUNK_SIZE = 8192;
+    for (var i = 0; i < len; i += CHUNK_SIZE)
     {
-        binary += String.fromCharCode(bytes[i]);
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, len)));
     }
     return btoa(binary);
 }

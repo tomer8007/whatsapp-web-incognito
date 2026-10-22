@@ -6,11 +6,16 @@ var allowStatusDownload = true;
 
 function determineIfNodeIsStatus(node) 
 {
+    if (!node || node.nodeType !== 1) return false;
     var isNodeStatus = false;
     // is node a picture
     if (node.nodeName == "IMG")
     {
-        // get the element 12 levels up
+        if (node.closest && node.closest('[data-animate-status-viewer]'))
+        {
+            return true;
+        }
+        // fallback
         var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
         if (parent?.getAttribute("data-animate-status-viewer") != null)
         {
@@ -19,7 +24,11 @@ function determineIfNodeIsStatus(node)
     }
     else if (node.nodeName == "VIDEO")
     {
-        // get the element 8 levels up
+        if (node.closest && node.closest('[data-testid="status-video"]'))
+        {
+            return true;
+        }
+        // fallback
         var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
         if (parent?.getAttribute("data-testid") == "status-video")
         {
@@ -104,29 +113,26 @@ function handleSRCRemove(src, node)
 
 function checkNodeAndChildrenForSRC(node, functionToCall)
 {
-    // if the node is an img or video
-    if (node.nodeName == "IMG" ||
-        node.nodeName == "VIDEO") 
+    if (!node || node.nodeType !== 1) return;
+    if (node.nodeName == "IMG" || node.nodeName == "VIDEO") 
     {
-        // pass the element's src to the handler
-        functionToCall(node.src, node)
+        functionToCall(node.src, node);
     }
-    // then check if the node has any children and check them, recursively
-    if (node.children !== undefined)
+    if (node.querySelectorAll)
     {
-        if (node.children.length > 0) 
+        var mediaList = node.querySelectorAll("img, video");
+        for (var j = 0; j < mediaList.length; j++) 
         {
-            for (var j = 0; j < node.children.length; j++) 
-            {
-                checkNodeAndChildrenForSRC(node.children[j], functionToCall)
-            }
+            functionToCall(mediaList[j].src, mediaList[j]);
         }
-    } 
+    }
 }
 
 // create a mutation observer that looks for any img or video tags being added to the page, any of their src attributes changing, or any of them being removed
 var observer = new MutationObserver(function (mutations) 
 {
+    if (!allowStatusDownload) return;
+
     mutations.forEach(function (mutation) 
     {
         if (mutation.type == "childList") 
@@ -134,12 +140,12 @@ var observer = new MutationObserver(function (mutations)
             // if a child is added, loop through the added nodes
             for (var i = 0; i < mutation.addedNodes.length; i++) 
             {
-                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
+                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd);
             }
             // if a child is removed, loop through the removed nodes
             for(var i = 0; i < mutation.removedNodes.length; i++)
             {
-                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
+                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove);
             }
         } 
         else if (mutation.type == "attributes") 
@@ -154,13 +160,12 @@ var observer = new MutationObserver(function (mutations)
                     return;
                 }
                 // pass the element's old src to the handler
-                handleSRCRemove(mutation.oldValue)
+                handleSRCRemove(mutation.oldValue);
                 // pass the element's new src to the handler
-                handleSRCAdd(mutation.target.src, mutation.target)
+                handleSRCAdd(mutation.target.src, mutation.target);
             }
         }
-    }
-);
+    });
 });
 
 // start observing the body for changes
@@ -168,6 +173,7 @@ observer.observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
+    attributeFilter: ['src'],
     attributeOldValue: true,
 });
 

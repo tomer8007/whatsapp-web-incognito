@@ -8,6 +8,7 @@
     "core/parsing/node_reader_writer.js",
     "core/parsing/protobuf/WAProto.js",
     "core/parsing/protobuf/WhisperTextProtocol.js",
+    "core/status_download.js",
     "core/ui.js",
     "core/ui_class_names.js",
     "core/utils.js",
@@ -109,13 +110,23 @@
     {
       "id": "P2",
       "file": "core/ui.js",
-      "status": "planned",
-      "summary": "Scope the body-level MutationObserver, short-circuit non-element nodes, and gate the one-shot `getElementsByClassName('two')` probe behind a uiReady flag.",
+      "status": "applied",
+      "summary": "Scope the body-level MutationObserver, short-circuit non-element nodes, and gate the one-shot `getElementsByClassName('two')` probe behind an isMainUIInitialized flag.",
       "kind": "performance",
       "why": "ui.js:40 observes document.body with {childList, subtree} and onMutationsObserved calls getElementsByClassName('two') on EVERY added node, which walks that node's whole subtree. Cost is O(mutations x subtree size) and is the dominant steady-state CPU cost — and the dominant cost while the app sits hidden in the tray, because a backgrounded WhatsApp session still churns (other chats' presence, typing indicators, preview updates).",
       "risk": "medium",
       "gate": "MUST pass the full feature parity matrix (docs §10) before shipping. This is the only patch that changes WHEN UI work happens, so treat a regression as a release blocker.",
       "note": "ui.js is already in the patch set via P0b, so this adds no new merge-conflict domain."
+    },
+    {
+      "id": "P12",
+      "file": "core/utils.js, core/ui.js, core/multi_device.js, core/status_download.js",
+      "status": "applied",
+      "summary": "High-impact performance and memory leak optimizations across media conversion, event listeners, IndexedDB point queries, SVG caching, and DOM observation.",
+      "kind": "performance",
+      "why": "arrayBufferToBase64 used O(N) single-character string concatenation freezing V8 on video/photo media; ui.js registered permanent event listeners on document per message leaking detached DOM nodes; restoreViewOnceMessageIfNeeded ran full .getAll() scans on IndexedDB without connection reuse; generateSVGElement repeatedly fetched and parsed SVGs via DOMParser; status_download.js observed all body attributes without attributeFilter.",
+      "risk": "low",
+      "assertion": "A7"
     },
     {
       "id": "P8",

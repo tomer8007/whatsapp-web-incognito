@@ -51,23 +51,24 @@ injectOtherScripts();
 
 async function injectOtherScripts() 
 {
-	await injectScript('lib/pbf.3.0.5.min.js');
-	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
-	await injectScript('lib/pako.js');
+	var scripts = [
+		'lib/pbf.3.0.5.min.js',
+		'lib/libsignal-protocol-ee5b8ba.min.js',
+		'lib/pako.js',
+		'core/parsing/binary_reader.js',
+		'core/parsing/binary_writer.js',
+		'core/parsing/node_reader_writer.js',
+		'core/parsing/protobuf/WhisperTextProtocol.js',
+		'core/parsing/protobuf/WAProto.js',
+		'core/utils.js',
+		'core/ui_class_names.js',
+		'core/injected_ui.js',
+		'core/multi_device.js',
+		'core/node_handler.js',
+		'core/interception.js'
+	];
 
-	await injectScript('core/parsing/binary_reader.js');
-	await injectScript('core/parsing/binary_writer.js');
-	await injectScript('core/parsing/node_reader_writer.js');
-	await injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
-	await injectScript('core/parsing/protobuf/WAProto.js');
-
-	await injectScript('core/utils.js');
-	await injectScript('core/ui_class_names.js');
-	await injectScript('core/injected_ui.js');
-	
-	await injectScript('core/multi_device.js');
-	await injectScript('core/node_handler.js');
-	await injectScript('core/interception.js');
+	await Promise.all(scripts.map(injectScript));
 
 	setTimeout(
 		function() {
