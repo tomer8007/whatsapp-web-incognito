@@ -151,7 +151,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
-    if (jid == undefined) debugger;
+    if (jid == undefined) console.warn("WhatsIncognito: unexpected condition: jid == undefined");
     jid = normalizeJID(jid);
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
@@ -201,12 +201,13 @@ function normalizeJID(jid)
 
 const arrayBufferToBase64 = (buffer) =>
 {
-    var binary = '';
     var bytes = new Uint8Array(buffer);
     var len = bytes.byteLength;
-    for (var i = 0; i < len; i++)
+    var binary = '';
+    var CHUNK_SIZE = 8192;
+    for (var i = 0; i < len; i += CHUNK_SIZE)
     {
-        binary += String.fromCharCode(bytes[i]);
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, len)));
     }
     return btoa(binary);
 }
@@ -370,7 +371,6 @@ function FindReact(dom, traverseUp = 0)
 
     if (reactElement == null)
     {
-        debugger;
     }
 
     return reactElement;
@@ -467,3 +467,15 @@ function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
 }
+
+// Mobile and Waydroid viewport compatibility
+(function ensureMobileCompatibility() {
+    try {
+        if (typeof document !== 'undefined' && !document.querySelector('meta[name="viewport"]')) {
+            var meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes';
+            (document.head || document.documentElement).appendChild(meta);
+        }
+    } catch (e) {}
+})();

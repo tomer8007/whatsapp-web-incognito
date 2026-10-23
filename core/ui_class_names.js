@@ -1,4 +1,4 @@
-﻿// This file defines a list of GUI element types that the WhatsApp Web page uses.
+// This file defines a list of GUI element types that the WhatsApp Web page uses.
 // The list can change in major WhatsApp Web updates. TODO: identify these dynamically based on React elements
 
 

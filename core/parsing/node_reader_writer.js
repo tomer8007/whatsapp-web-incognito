@@ -2487,7 +2487,6 @@ findWACopiedMoudle = function(moduleID)
     }
     else
     {
-        debugger;
     }  
 }
 

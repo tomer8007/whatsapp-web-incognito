@@ -137,7 +137,6 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         {
             console.error("Could not decrypt Noise packet");
             console.error(exception);
-            debugger;
             throw exception;
         }
     }
@@ -194,12 +193,8 @@ MultiDevice.encryptPacket = async function(payload, isIncoming = true, counter =
 
 MultiDevice.sizeOfPacket = function(payload)
 {
-    var binaryReader = new BinaryReader();
-    binaryReader.writeBuffer(payload);
-    binaryReader._readIndex = 0;
-
-    var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
-    return size;
+    var bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+    return (bytes[0] << 16) | (bytes[1] << 8) | bytes[2];
 };
 
 
@@ -297,7 +292,6 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     if (sessionObject == null)
     {
         console.error("Can't get session for " + address.toString());
-        debugger;
     }
 
     var version = (new Uint8Array(whisperMessageBuffer))[0];
@@ -335,7 +329,6 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     catch (exception)
     {
         console.error("E2E plaintext decryption failed.")
-        debugger;
         throw exception;
     }
     
@@ -423,7 +416,6 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     {
         console.error("E2E plaintext decryption failed at signalDecryptPrekeyWhisperMessage. is new session: " + isNewSession);
         console.error("session address: " + lidAddress);
-        debugger;
         throw exception;
     }
     // plaintext makes sense? good.
@@ -514,7 +506,6 @@ MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, coun
     {
         console.warn("Possible duplicated message (counter < chain message counter)"); // look in messageKeys?
         throw "possbile duplicated message";
-        debugger;
     }
 
     var messageKey = null;

@@ -1,26 +1,74 @@
+// Ensure client-side checks see a desktop platform on mobile/Waydroid/GeckoView
+try {
+	var DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36";
+	var isMobileDevice = (
+		(navigator.userAgent && (/Android|Mobile|Phone|Tablet/i).test(navigator.userAgent)) ||
+		(navigator.platform && (/Android|arm|Linux\s+i686/i).test(navigator.platform)) ||
+		(navigator.userAgentData && navigator.userAgentData.mobile) ||
+		(typeof window !== "undefined" && window.screen && (window.screen.width < 800 || window.screen.height < 800))
+	);
+
+	if (isMobileDevice) {
+		Object.defineProperty(navigator, 'userAgent', { get: function() { return DESKTOP_UA; }, configurable: true });
+		Object.defineProperty(navigator, 'appVersion', { get: function() { return DESKTOP_UA.replace(/^Mozilla\//, ''); }, configurable: true });
+		Object.defineProperty(navigator, 'platform', { get: function() { return "Linux x86_64"; }, configurable: true });
+		if (navigator.userAgentData) {
+			Object.defineProperty(navigator, 'userAgentData', {
+				get: function() {
+					return {
+						mobile: false,
+						brands: [
+							{ brand: "Chromium", version: "144" },
+							{ brand: "Google Chrome", version: "144" },
+							{ brand: "Not-A.Brand", version: "24" }
+						],
+						platform: "Linux",
+						getHighEntropyValues: async function(hints) {
+							return {
+								architecture: "x86",
+								bitness: "64",
+								mobile: false,
+								model: "",
+								platform: "Linux",
+								platformVersion: "6.5.0",
+								uaFullVersion: "144.0.0.0"
+							};
+						}
+					};
+				},
+				configurable: true
+			});
+		}
+		if (typeof window !== "undefined" && window.screen && window.screen.width < 800) {
+			Object.defineProperty(screen, 'width', { get: function() { return 1024; }, configurable: true });
+			Object.defineProperty(screen, 'availWidth', { get: function() { return 1024; }, configurable: true });
+		}
+	}
+} catch (e) {}
 
 injectScript('core/ws_hook.js'); // important to inject as early as possible
 injectOtherScripts();
 
 async function injectOtherScripts() 
 {
-	await injectScript('lib/pbf.3.0.5.min.js');
-	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
-	await injectScript('lib/pako.js');
+	var scripts = [
+		'lib/pbf.3.0.5.min.js',
+		'lib/libsignal-protocol-ee5b8ba.min.js',
+		'lib/pako.js',
+		'core/parsing/binary_reader.js',
+		'core/parsing/binary_writer.js',
+		'core/parsing/node_reader_writer.js',
+		'core/parsing/protobuf/WhisperTextProtocol.js',
+		'core/parsing/protobuf/WAProto.js',
+		'core/utils.js',
+		'core/ui_class_names.js',
+		'core/injected_ui.js',
+		'core/multi_device.js',
+		'core/node_handler.js',
+		'core/interception.js'
+	];
 
-	await injectScript('core/parsing/binary_reader.js');
-	await injectScript('core/parsing/binary_writer.js');
-	await injectScript('core/parsing/node_reader_writer.js');
-	await injectScript('core/parsing/protobuf/WhisperTextProtocol.js');
-	await injectScript('core/parsing/protobuf/WAProto.js');
-
-	await injectScript('core/utils.js');
-	await injectScript('core/ui_class_names.js');
-	await injectScript('core/injected_ui.js');
-	
-	await injectScript('core/multi_device.js');
-	await injectScript('core/node_handler.js');
-	await injectScript('core/interception.js');
+	await Promise.all(scripts.map(injectScript));
 
 	setTimeout(
 		function() {

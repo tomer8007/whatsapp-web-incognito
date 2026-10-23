@@ -1,4 +1,4 @@
-﻿/*
+/*
 This is a content script responsible for some UI.
 */
 
@@ -9,15 +9,20 @@ var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var pseudoMsgsIDs = new Set();
+var isMainUIInitialized = false;
+// The options panel's Drop instance, kept so it can be opened from outside a click on its
+// own icon. The Electron shell asks for this when it has no native menu to offer (see
+// app/electron/settings-menu.js); the extension only ever opens it by clicking the icon.
+var incognitoOptionsDrop = null;
 
 if (chrome != undefined) 
 {
 	var browser = chrome;
 }
 
-initialize();
+initializeUI();
 
-function initialize()
+function initializeUI()
 {
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
@@ -36,9 +41,27 @@ function initialize()
     // initialize mutation observer
     var appElem = document.getElementsByTagName("body")[0];
     if (!appElem) return;
-    mutationObserver = new MutationObserver(onMutationsObserved);
 
+    if (document.getElementsByClassName("two").length > 0)
+    {
+        isMainUIInitialized = true;
+        addIconIfNeeded();
+        setTimeout(function () { onMainUIReady(); }, 100);
+    }
+
+    mutationObserver = new MutationObserver(onMutationsObserved);
     mutationObserver.observe(appElem, { childList: true, subtree: true });
+}
+
+function isMessageNode(node)
+{
+    var firstChild = node.firstElementChild || node.childNodes[0];
+    if (firstChild && firstChild.getAttribute)
+    {
+        var testId = firstChild.getAttribute("data-testid");
+        if (testId) return testId.startsWith("conv-msg");
+    }
+    return false;
 }
 
 function onMutationsObserved(mutations)
@@ -47,19 +70,19 @@ function onMutationsObserved(mutations)
     for (var i = 0; i < mutations.length; i++)
     {
         var mutation = mutations[i];
-        var mutationType = mutations[i].type;
-        var addedNodes = mutations[i].addedNodes;
-        var removedNodes = mutations[i].removedNodes;
+        var addedNodes = mutation.addedNodes;
+        var removedNodes = mutation.removedNodes;
 
         // Scan for added nodes
         for (var j = 0; j < addedNodes.length; j++)
         {
             var addedNode = addedNodes[j];
-            if (addedNode.classList == undefined) continue;
+            if (addedNode.nodeType !== 1) continue;
 
-            if (addedNode.getElementsByClassName("two").length > 0)
+            if (!isMainUIInitialized && (addedNode.classList.contains("two") || addedNode.getElementsByClassName("two").length > 0))
             {
                 // main app was added, UI is ready
+                isMainUIInitialized = true;
                 addIconIfNeeded();
                 setTimeout(function () { onMainUIReady(); }, 100);
 
@@ -77,26 +100,14 @@ function onMutationsObserved(mutations)
             }
 
             // Scan for added message nodes and modify if needed
-            function isMessageNode(node)
-            {
-                if (node.childNodes[0] && node.childNodes[0].getAttribute)
-                {
-                    if (node.childNodes[0].getAttribute("data-testid"))
-                        return node.childNodes[0].getAttribute("data-testid").startsWith("conv-msg")
-                }
-
-                return false;
-            }
-            var msgNodes = [];
             if (isMessageNode(addedNode)) {
-                msgNodes.push(addedNode);
+                onNewMessageNodeAdded(addedNode);
             }
-            msgNodes.push(...addedNode.querySelectorAll('[data-testid^="conv-msg"]'));
-
-            for (let i = 0; i < msgNodes.length; i++)
-            {
-                const currentNode = msgNodes[i];
-                onNewMessageNodeAdded(currentNode);
+            if (addedNode.querySelectorAll) {
+                var subMsgNodes = addedNode.querySelectorAll('[data-testid^="conv-msg"]');
+                for (var k = 0; k < subMsgNodes.length; k++) {
+                    onNewMessageNodeAdded(subMsgNodes[k]);
+                }
             }
         }
 
@@ -105,9 +116,10 @@ function onMutationsObserved(mutations)
         for (var j = 0; j < removedNodes.length; j++)
         {
             var removedNode = removedNodes[j];
-            if (removedNode.classList == undefined) continue;
-            if (removedNode.classList.contains("two"))
+            if (removedNode.nodeType !== 1) continue;
+            if (removedNode.classList && (removedNode.classList.contains("two") || removedNode.getElementsByClassName("two").length > 0))
             {
+                isMainUIInitialized = false;
                 // main app was removed, remove our artifacts
                 var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
                 var dropItem = document.getElementsByClassName("drop")[0];
@@ -166,6 +178,7 @@ async function addIconIfNeeded()
                 },
             });
             var originalCloseFunction = drop.close;
+            incognitoOptionsDrop = drop;
             drop.close = function ()
             {
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
@@ -387,6 +400,37 @@ function generateDropContent(options)
     return dropContent;
 }
 
+//
+//    Programmatic access to the options panel
+//
+
+/**
+ * Open the options panel without a click on its icon.
+ *
+ * The panel is anchored to an element injected into WhatsApp's own menu bar, so it exists
+ * only once that anchor was found AND the getOptions round-trip returned. Both can fail —
+ * that is precisely the "temporarily broken" case, where a WhatsApp release renames the menu
+ * item's class. So the honest answer is false, not a silent no-op: the shell uses it to say
+ * "no native menu and no panel either" rather than leaving the user with no way to change a
+ * setting. In the extension nothing calls this; the icon click is the only entry point.
+ *
+ * @returns {boolean} whether the panel is open afterwards
+ */
+function openIncognitoOptions()
+{
+    if (incognitoOptionsDrop == null || typeof incognitoOptionsDrop.open != "function") return false;
+    incognitoOptionsDrop.open();
+    return typeof incognitoOptionsDrop.isOpened == "function" ? incognitoOptionsDrop.isOpened() : true;
+}
+
+// The shim asks for the panel by dispatching this and reading the result straight after.
+// dispatchEvent runs listeners synchronously, so the answer is already there on return —
+// no callback, no polling, and no IPC round-trip to wait on.
+document.addEventListener('onOpenIncognitoOptions', function ()
+{
+    window.__WAI_PANEL_OPEN_RESULT__ = openIncognitoOptions();
+});
+
 document.addEventListener('onMarkAsReadClick', function (e)
 {
     var data = JSON.parse(e.detail);
@@ -435,22 +479,38 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
 
     // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
+    //
+    // Opened with the version OMITTED, not with a literal 1. IndexedDB treats the version
+    // as a minimum: opening an existing version-2 database as version 1 raises
+    // VersionError, onsuccess never fires, and the "this message was deleted" path
+    // silently finds nothing. Since core/interception.js owns the schema and opens it at
+    // version 2, hardcoding a number here guaranteed a mismatch as soon as the database
+    // was actually in use. Passing undefined opens the current version when it exists, and
+    // creates it at version 1 when it does not — which then gets upgraded by interception.
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs");
+    deletedDBOpenRequest.onsuccess = () =>
     {
         var deletedMsgsDB = deletedDBOpenRequest.result;
         var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => 
+            keys.result.forEach((value) =>
             {
                 pseudoMsgsIDs.add(value.originalID);
             });
-            document.addEventListener("pseudoMsgs", (e) => 
+            document.addEventListener("pseudoMsgs", (e) =>
             {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
         deletedMsgsDB.close();
+    };
+    // Was absent entirely, so a VersionError or a missing store looked exactly like
+    // "no deleted messages". On a fresh profile the database does not exist yet, so this
+    // is the expected path until interception.js creates it.
+    deletedDBOpenRequest.onerror = () =>
+    {
+        console.log("WhatsIncognito: could not read the deleted messages database; " +
+                    "restoring will be unavailable until it is created");
     };
 });
 
@@ -729,24 +789,29 @@ function onSafetyDelayEnabled()
 // Utils
 //
 
+var svgCache = {};
+
 async function generateSVGElement(svgImagePath, clazz="", title="", size=24, role="")
 {
-    var response = await fetch(svgImagePath);
-    var text = await response.text();
-    var viewBoxText = text.split('viewBox="')[1].split('"')[0];
-    var viewboxSize = parseInt(text.split('viewBox="')[1].split(' ')[2]);
+    var cached = svgCache[svgImagePath];
+    if (!cached)
+    {
+        var response = await fetch(svgImagePath);
+        var text = await response.text();
+        var viewBoxMatch = text.match(/viewBox="([^"]+)"/);
+        var viewBoxText = viewBoxMatch ? viewBoxMatch[1] : "0 0 24 24";
+        var dom = new DOMParser().parseFromString(text, 'text/html');
+        var svgHtml = dom.getElementsByTagName("svg")[0]?.innerHTML || "";
+        cached = svgCache[svgImagePath] = { viewBoxText: viewBoxText, svgHtml: svgHtml };
+    }
 
     var menuItemElem = document.createElement("div");
 
     menuItemElem.innerHTML = `<div aria-disabled="false" role="${role}" tabindex="0" class="${clazz}" title="${title}" \
-                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${viewBoxText}" \
+                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${cached.viewBoxText}" \
                             width="${size}" height="${size}" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>`;
-    var path = menuItemElem.getElementsByTagName("path")[0];
     var svg = menuItemElem.getElementsByTagName("svg")[0];
-
-    var dom = new DOMParser().parseFromString(text, 'text/html');
-    var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;
-    svg.innerHTML = svgHtml;
+    svg.innerHTML = cached.svgHtml;
 
     return menuItemElem;
 }
@@ -754,9 +819,9 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 function onNewMessageNodeAdded(messageNode)
 {
     var data_id = messageNode.getAttribute("data-id");
-    if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
-    if (data_id == null)
-        debugger;
+    if (!data_id && messageNode.parentElement && messageNode.parentElement.parentElement && messageNode.parentElement.parentElement.parentElement)
+        data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
+    if (data_id == null) return;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 
@@ -769,8 +834,15 @@ function onNewMessageNodeAdded(messageNode)
     markMessageNodeDeviceIfPossible(messageNode, msgID);
 }
 
-function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+var cachedViewOnceDB = null;
+
+function getViewOnceDB(callback)
 {
+    if (cachedViewOnceDB)
+    {
+        callback(cachedViewOnceDB);
+        return;
+    }
     var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
     viewOnceDBOpenRequest.onupgradeneeded = function (event) 
     {
@@ -782,96 +854,93 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 
     viewOnceDBOpenRequest.onsuccess = function () 
     {
-        var viewOnceDB = viewOnceDBOpenRequest.result;
-        var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                if (value.id == msgID) 
-                {
-                    // we found a view-once message for this message ID
-                    // mark the message node as view-once
-                    // get the place that we want to place the link
-                    // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
-                    var viewOnceExplanation = null;
-                    // find all div elements in the message node
-                    var aElements = messageNode.getElementsByTagName("a");
-                    // loop through
-                    for (var i = 0; i < aElements.length; i++) 
-                    {
-                        // if the innerHtml indicates it's the "Learn more" link
-                        if (aElements[i].innerHTML.includes("Learn more")) 
-                        {
-                            // set the viewOnceExplanation to the parent div
-                            viewOnceExplanation = aElements[i].parentElement;
-                        }
-                    }
-                    // set innerHTML to empty
-                    viewOnceExplanation.innerHTML = "";
-                    // if value.dataURI starts with "data:image"
-                    if (value.dataURI.startsWith("data:image")) 
-                    {
-                        // create an image elemnt
-                        var img = document.createElement("img");
-                        // set the source to the value.dataURI
-                        img.src = value.dataURI;
-                        // set the width to 100%
-                        img.style.cssText = "width: 100%;";
-                        // append the image to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(img);
-                    } 
-                    else if (value.dataURI.startsWith("data:video")) 
-                    {
-                        // create a video element
-                        var video = document.createElement("video");
-                        // set the controls to true
-                        video.controls = true;
-                        video.src = value.dataURI;
-                        // append the video to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(video);
-                    } else if (value.dataURI.startsWith("data:audio")) {
-                        // create an audio element
-                        var audio = document.createElement("audio");
-                        // set the controls to true
-                        audio.controls = true;
-                        audio.src = value.dataURI;
-                        // append the audio to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(audio);
-                    }
-
-                    // check if there is a caption stored and render it
-                    if(value.caption != null){
-                        var textSpan = document.createElement("span");
-                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
-                        textSpan.style.cssText = textSpanStyle;
-                        textSpan.className = "copyable-text selectable-text";
-                        textSpan.textContent = value.caption;
-                        viewOnceExplanation.appendChild(textSpan);
-                    }
-
-                    // add a learn more link below that opens a sweetalert
-                    var learnMore = document.createElement("a");
-                    // give it the class of incognito-view-once-learn-more so styles can be applied
-                    learnMore.className = "incognito-view-once-learn-more";
-                    learnMore.href = "#";
-                    learnMore.innerHTML = "Sent as view once: Learn more";
-                    learnMore.addEventListener("click", function () {
-                        Swal.fire({
-                            title: "View-once message",
-                            html: 'This message was sent as a view-once. \
-                            <br><br> Note that the recipient\'s device will show this as unopened \
-                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
-                            icon: "info",
-                            width: 600,
-                            confirmButtonColor: "#000",
-                            confirmButtonText: "Got it",
-                        });
-                    });
-                    viewOnceExplanation.appendChild(learnMore);
-                }
-            });
-        };
+        cachedViewOnceDB = viewOnceDBOpenRequest.result;
+        cachedViewOnceDB.onclose = function () { cachedViewOnceDB = null; };
+        callback(cachedViewOnceDB);
     };
+    viewOnceDBOpenRequest.onerror = function () {};
+}
+
+function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+{
+    getViewOnceDB(function (viewOnceDB) 
+    {
+        try
+        {
+            var tx = viewOnceDB.transaction('msgs', "readonly");
+            var req = tx.objectStore("msgs").get(msgID);
+            req.onsuccess = function () 
+            {
+                var value = req.result;
+                if (!value) return;
+
+                // we found a view-once message for this message ID
+                // mark the message node as view-once
+                // get the place that we want to place the link
+                var viewOnceExplanation = null;
+                var aElements = messageNode.getElementsByTagName("a");
+                for (var i = 0; i < aElements.length; i++) 
+                {
+                    if (aElements[i].innerHTML.includes("Learn more")) 
+                    {
+                        viewOnceExplanation = aElements[i].parentElement;
+                    }
+                }
+                if (!viewOnceExplanation) return;
+                viewOnceExplanation.innerHTML = "";
+                if (value.dataURI.startsWith("data:image")) 
+                {
+                    var img = document.createElement("img");
+                    img.src = value.dataURI;
+                    img.style.cssText = "width: 100%;";
+                    viewOnceExplanation.appendChild(img);
+                } 
+                else if (value.dataURI.startsWith("data:video")) 
+                {
+                    var video = document.createElement("video");
+                    video.controls = true;
+                    video.src = value.dataURI;
+                    viewOnceExplanation.appendChild(video);
+                } 
+                else if (value.dataURI.startsWith("data:audio")) 
+                {
+                    var audio = document.createElement("audio");
+                    audio.controls = true;
+                    audio.src = value.dataURI;
+                    viewOnceExplanation.appendChild(audio);
+                }
+
+                if (value.caption != null)
+                {
+                    var textSpan = document.createElement("span");
+                    var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+                    textSpan.style.cssText = textSpanStyle;
+                    textSpan.className = "copyable-text selectable-text";
+                    textSpan.textContent = value.caption;
+                    viewOnceExplanation.appendChild(textSpan);
+                }
+
+                var learnMore = document.createElement("a");
+                learnMore.className = "incognito-view-once-learn-more";
+                learnMore.href = "#";
+                learnMore.innerHTML = "Sent as view once: Learn more";
+                learnMore.addEventListener("click", function () {
+                    Swal.fire({
+                        title: "View-once message",
+                        html: 'This message was sent as a view-once. \
+                        <br><br> Note that the recipient\'s device will show this as unopened \
+                        <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+                        icon: "info",
+                        width: 600,
+                        confirmButtonColor: "#000",
+                        confirmButtonText: "Got it",
+                    });
+                });
+                viewOnceExplanation.appendChild(learnMore);
+            };
+        }
+        catch (e) {}
+    });
 }
 
 // This function gets called on every new message node that gets added to the screen,
@@ -880,13 +949,17 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeletedMessageReceived", function(e)
+    
+    function onDeletedMessageReceivedHandler(e)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
         var messageData = data.messageData;
 
         if (messageID != msgID) return;
+
+        clearTimeout(cleanupTimer);
+        document.removeEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
 
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
@@ -936,7 +1009,14 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 
         // Now try to synthesize the message from the DB (best effort)
         tryToSynthesizeMessage(messageSubElement, messageData);
-    });
+    }
+
+    var cleanupTimer = setTimeout(function ()
+    {
+        document.removeEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
+    }, 10000);
+
+    document.addEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1054,8 +1134,8 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 
 function markMessageNodeDeviceIfPossible(messageNode, msgID)
 {
-    var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
-    isOutgoingMessage = messageNode.innerHTML.includes("aria-label=\"You:\"");
+    var isOutgoingMessage = messageNode.classList.contains("message-out") ||
+                            (messageNode.querySelector && messageNode.querySelector('[aria-label="You:"]') !== null);
     if (isOutgoingMessage)
     {
         // we don't want to mark our own messages
@@ -1063,20 +1143,23 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
     }
 
     document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeviceTypeReceived", async function(e)
+
+    function onDeviceTypeReceivedHandler(e)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
-
         var deviceType = data.deviceType;
 
         if (messageID != msgID) return;
 
+        clearTimeout(cleanupTimer);
+        document.removeEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
+
         var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
-        if (possibleNodes.length > 0 )
+        if (possibleNodes.length > 0 && possibleNodes[0].childNodes.length > 0)
             messageNode = possibleNodes[0].childNodes[0];
 
-        if (messageNode.getElementsByClassName("device-type-image").length > 0) return;
+        if (!messageNode || messageNode.getElementsByClassName("device-type-image").length > 0) return;
         
         var imageURL = "";
         if (deviceType == "computer")
@@ -1086,20 +1169,29 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         else
             return;
 
-        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
-        imageElement.className = "device-type-image";
-
-        var topMessageNode = messageNode.parentNode.parentNode.parentNode;
-        var previousNode = topMessageNode.previousElementSibling;
-        var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
-
-        if (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details"))
+        generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19).then(function(imageElement)
         {
-            imageElement.className += " below-profile-picture";
-        }
+            imageElement.className = "device-type-image";
 
-        messageNode.insertBefore(imageElement, messageNode.firstChild);
-    });
+            var topMessageNode = messageNode.parentNode && messageNode.parentNode.parentNode && messageNode.parentNode.parentNode.parentNode;
+            var previousNode = topMessageNode ? topMessageNode.previousElementSibling : null;
+            var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
+
+            if (possibleAvatarElement && (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details")))
+            {
+                imageElement.className += " below-profile-picture";
+            }
+
+            messageNode.insertBefore(imageElement, messageNode.firstChild);
+        });
+    }
+
+    var cleanupTimer = setTimeout(function ()
+    {
+        document.removeEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
+    }, 5000);
+
+    document.addEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
 }
 
 function tickCheckbox(checkbox, checkmark)
