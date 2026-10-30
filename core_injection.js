@@ -35,9 +35,10 @@ function injectScript(scriptName)
 		var s = document.createElement('script');
 		s.src = chrome.runtime.getURL(scriptName);
 		s.async = false; // execute in insertion order, not in download order
-		s.onload = function() {
+		s.onload = async function() {
 			if (this.parentNode)
 				this.parentNode.removeChild(this);
+			//await sleep(0.5);
 			resolve(true);
 		};
 		(document.head||document.documentElement).appendChild(s);
@@ -76,6 +77,10 @@ async function injectFromDisk(scriptNames)
 	s.textContent = text;
 
 	(document.head||document.documentElement).appendChild(s);
+}
+
+async function sleep(seconds) {
+	return new Promise((resolve) =>setTimeout(resolve, seconds * 1000));
 }
 
 function webScoketInterception()
