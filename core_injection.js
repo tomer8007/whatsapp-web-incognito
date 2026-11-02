@@ -1,9 +1,10 @@
 
-injectScript('core/ws_hook.js'); // important to inject as early as possible
-injectOtherScripts();
+injectScripts();
 
-async function injectOtherScripts() 
+async function injectScripts() 
 {
+	await injectScript('core/ws_hook.js'); // important to inject as early as possible
+	await injectScript('core/comms_worker_fix.js');
 	await injectScript('lib/pbf.3.0.5.min.js');
 	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
 	await injectScript('lib/pako.js');
