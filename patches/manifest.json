@@ -12,7 +12,8 @@
     "core/ui.js",
     "core/ui_class_names.js",
     "core/utils.js",
-    "core/ws_hook.js"
+    "core/ws_hook.js",
+    "lib/pako.js"
   ],
   "patches": [
     {

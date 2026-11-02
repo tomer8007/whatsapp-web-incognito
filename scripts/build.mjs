@@ -52,9 +52,12 @@ function deriveDefaults() {
   // Defaults are the `var <key> = <literal>;` lines inside the handler.
   const defaults = {};
   for (const k of keys) {
-    const m = getOptions.match(new RegExp(`var\\s+${k}\\s*=\\s*(true|false|-?\\d+)\\s*;`));
+    const m = getOptions.match(new RegExp(`var\\s+${k}\\s*=\\s*(true|false|-?\\d+|"[^"]*")\\s*;`));
     if (!m) throw new Error(`background.js declares no literal default for "${k}"`);
-    defaults[k] = m[1] === 'true' ? true : m[1] === 'false' ? false : Number(m[1]);
+    if (m[1] === 'true') defaults[k] = true;
+    else if (m[1] === 'false') defaults[k] = false;
+    else if (m[1].startsWith('"')) defaults[k] = m[1].slice(1, -1);
+    else defaults[k] = Number(m[1]);
   }
   if (!keys.length) throw new Error('background.js yielded an empty option key list');
   return defaults;

@@ -57,6 +57,10 @@ const SETTINGS = Object.freeze([
   { key: 'allowStatusDownload', label: 'Allow status downloading', group: 'messages' },
   { key: 'showReadWarning', label: 'Warn before sending a receipt', group: 'messages' },
 
+  { key: 'privacyScreenLockEnabled', label: 'Privacy Screen Lock', group: 'privacy' },
+  { key: 'privacyScreenLockPIN', label: 'Privacy Screen Lock PIN', group: 'privacy' },
+  { key: 'privacyScreenLockIdleMinutes', label: 'Privacy Screen Lock Idle Minutes', group: 'privacy' },
+
   // Timing: safetyDelay holds a chat's receipts for N seconds
   // (core/injected_ui.js:129) so a reply can be composed first. Its UI was commented out
   // upstream, leaving a working feature with no way to reach it.

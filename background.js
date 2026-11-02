@@ -64,6 +64,9 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
         var allowStatusDownload = true;
+        var privacyScreenLockEnabled = false;
+        var privacyScreenLockPIN = "";
+        var privacyScreenLockIdleMinutes = 5;
 
         chrome.storage.local.get(['onlineUpdatesHook',
                                 'typingUpdatesHook',
@@ -73,7 +76,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'saveDeletedMsgs', 
                                 'showDeviceTypes',
                                 'autoReceiptOnReplay',
-                                'allowStatusDownload']).then(function(storage)
+                                'allowStatusDownload',
+                                'privacyScreenLockEnabled',
+                                'privacyScreenLockPIN',
+                                'privacyScreenLockIdleMinutes']).then(function(storage)
         {
             if (storage["onlineUpdatesHook"] != undefined)
             {
@@ -111,6 +117,18 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 allowStatusDownload = storage["allowStatusDownload"];
             }
+            if (storage["privacyScreenLockEnabled"] != undefined)
+            {
+                privacyScreenLockEnabled = storage["privacyScreenLockEnabled"];
+            }
+            if (storage["privacyScreenLockPIN"] != undefined)
+            {
+                privacyScreenLockPIN = storage["privacyScreenLockPIN"];
+            }
+            if (storage["privacyScreenLockIdleMinutes"] != undefined)
+            {
+                privacyScreenLockIdleMinutes = storage["privacyScreenLockIdleMinutes"];
+            }
             callback(
             {
                 onlineUpdatesHook: onlineUpdatesHook,
@@ -121,7 +139,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 saveDeletedMsgs: saveDeletedMsgs,
                 showDeviceTypes: showDeviceTypes,
                 autoReceiptOnReplay: autoReceiptOnReplay,
-                allowStatusDownload: allowStatusDownload
+                allowStatusDownload: allowStatusDownload,
+                privacyScreenLockEnabled: privacyScreenLockEnabled,
+                privacyScreenLockPIN: privacyScreenLockPIN,
+                privacyScreenLockIdleMinutes: privacyScreenLockIdleMinutes
             });
         });   
     }

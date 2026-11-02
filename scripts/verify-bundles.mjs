@@ -426,7 +426,7 @@ check('A-shim', 'the page shim has no unsubstituted build placeholders', () => {
 
 // A-prefs — the Electron app must agree with the extension about every default. The
 // values are derived from background.js at build time; this asserts the derivation
-// produced all 9 keys and that the emitted shim/meta actually carry them.
+// produced all 12 keys and that the emitted shim/meta actually carry them.
 check('A-prefs', 'option defaults are derived from background.js and reach the shim', () => {
   if (!haveBuild) return 'no build output';
   const src = readSrc(join(ROOT, 'background.js'));
@@ -436,11 +436,14 @@ check('A-prefs', 'option defaults are derived from background.js and reach the s
   const keys = listMatch[1].split(',').map((s) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
   const expected = {};
   for (const k of keys) {
-    const m = g.match(new RegExp(`var\\s+${k}\\s*=\\s*(true|false|-?\\d+)\\s*;`));
+    const m = g.match(new RegExp(`var\\s+${k}\\s*=\\s*(true|false|-?\\d+|"[^"]*")\\s*;`));
     if (!m) return `background.js has no literal default for "${k}"`;
-    expected[k] = m[1] === 'true' ? true : m[1] === 'false' ? false : Number(m[1]);
+    if (m[1] === 'true') expected[k] = true;
+    else if (m[1] === 'false') expected[k] = false;
+    else if (m[1].startsWith('"')) expected[k] = m[1].slice(1, -1);
+    else expected[k] = Number(m[1]);
   }
-  if (keys.length !== 9) return `expected 9 option keys, background.js yields ${keys.length}`;
+  if (keys.length !== 12) return `expected 12 option keys, background.js yields ${keys.length}`;
 
   const meta = readJSON(join(EBUILD, 'meta.json'));
   if (JSON.stringify(meta.prefs) !== JSON.stringify(expected)) {

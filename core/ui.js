@@ -10,6 +10,11 @@ var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var pseudoMsgsIDs = new Set();
 var isMainUIInitialized = false;
+var privacyScreenLockEnabled = false;
+var privacyScreenLockPIN = "";
+var privacyScreenLockIdleMinutes = 5;
+var privacyScreenIdleTimer = null;
+var isPrivacyScreenLocked = false;
 // The options panel's Drop instance, kept so it can be opened from outside a click on its
 // own icon. The Electron shell asks for this when it has no native menu to offer (see
 // app/electron/settings-menu.js); the extension only ever opens it by clicking the icon.
@@ -143,7 +148,140 @@ function onMainUIReady()
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
+    
+    // Privacy Screen Lock - initialize
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+        if (options.privacyScreenLockEnabled) {
+            privacyScreenLockEnabled = options.privacyScreenLockEnabled;
+            privacyScreenLockPIN = options.privacyScreenLockPIN;
+            privacyScreenLockIdleMinutes = options.privacyScreenLockIdleMinutes || 5;
+            resetPrivacyScreenIdleTimer();
+            setupPrivacyScreenActivityListeners();
+        }
+    });
+
+    // Listen for options update to dynamically toggle
+    document.addEventListener('onOptionsUpdate', function (e) {
+        var options = JSON.parse(e.detail);
+        if (options.privacyScreenLockEnabled !== undefined) {
+            privacyScreenLockEnabled = options.privacyScreenLockEnabled;
+            privacyScreenLockPIN = options.privacyScreenLockPIN;
+            privacyScreenLockIdleMinutes = options.privacyScreenLockIdleMinutes;
+            
+            if (privacyScreenLockEnabled) {
+                resetPrivacyScreenIdleTimer();
+                setupPrivacyScreenActivityListeners();
+            } else {
+                clearTimeout(privacyScreenIdleTimer);
+                removePrivacyScreenActivityListeners();
+                unlockPrivacyScreen();
+            }
+        }
+    });
 }
+
+function lockPrivacyScreen() {
+    if (isPrivacyScreenLocked || !privacyScreenLockEnabled) return;
+    isPrivacyScreenLocked = true;
+    
+    // Blur main app
+    var app = document.getElementById("app");
+    if (app) app.classList.add("privacy-locked-app");
+    
+    // Create overlay
+    var overlay = document.createElement("div");
+    overlay.id = "incognito-privacy-lock-overlay";
+    overlay.className = "privacy-blur-overlay";
+    
+    var container = document.createElement("div");
+    container.className = "privacy-lock-container";
+    
+    var title = document.createElement("div");
+    title.className = "privacy-lock-title";
+    title.textContent = "WhatsApp is Locked";
+    
+    var input = document.createElement("input");
+    input.type = "password";
+    input.className = "privacy-pin-input";
+    input.maxLength = 4;
+    input.placeholder = "****";
+    
+    var errorLabel = document.createElement("div");
+    errorLabel.className = "privacy-pin-error";
+    errorLabel.id = "incognito-privacy-unlock-error";
+    
+    container.appendChild(title);
+    container.appendChild(input);
+    container.appendChild(errorLabel);
+    overlay.appendChild(container);
+    
+    document.body.appendChild(overlay);
+    
+    // Focus input
+    setTimeout(() => {
+        input.focus();
+    }, 100);
+    
+    // Handle input
+    input.addEventListener("input", async function(e) {
+        var val = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = val;
+        
+        if (val.length === 4) {
+            var hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            if (hashHex === privacyScreenLockPIN || !privacyScreenLockPIN) {
+                unlockPrivacyScreen();
+            } else {
+                errorLabel.textContent = "Incorrect PIN";
+                e.target.value = "";
+                setTimeout(() => { errorLabel.textContent = ""; }, 2000);
+            }
+        }
+    });
+}
+
+function unlockPrivacyScreen() {
+    isPrivacyScreenLocked = false;
+    var overlay = document.getElementById("incognito-privacy-lock-overlay");
+    if (overlay) overlay.remove();
+    var app = document.getElementById("app");
+    if (app) app.classList.remove("privacy-locked-app");
+    resetPrivacyScreenIdleTimer();
+}
+
+function resetPrivacyScreenIdleTimer() {
+    if (!privacyScreenLockEnabled) return;
+    clearTimeout(privacyScreenIdleTimer);
+    if (!isPrivacyScreenLocked) {
+        privacyScreenIdleTimer = setTimeout(lockPrivacyScreen, privacyScreenLockIdleMinutes * 60 * 1000);
+    }
+}
+
+function handlePrivacyScreenActivity(e) {
+    if (e.type === "keydown" && e.altKey && (e.key === "l" || e.key === "L")) {
+        lockPrivacyScreen();
+        return;
+    }
+    resetPrivacyScreenIdleTimer();
+}
+
+function setupPrivacyScreenActivityListeners() {
+    window.addEventListener("mousemove", handlePrivacyScreenActivity);
+    window.addEventListener("keydown", handlePrivacyScreenActivity);
+    window.addEventListener("click", handlePrivacyScreenActivity);
+    window.addEventListener("scroll", handlePrivacyScreenActivity);
+}
+
+function removePrivacyScreenActivityListeners() {
+    window.removeEventListener("mousemove", handlePrivacyScreenActivity);
+    window.removeEventListener("keydown", handlePrivacyScreenActivity);
+    window.removeEventListener("click", handlePrivacyScreenActivity);
+    window.removeEventListener("scroll", handlePrivacyScreenActivity);
+}
+
 
 async function addIconIfNeeded()
 {
@@ -195,6 +333,56 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
                 document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+                document.getElementById("incognito-option-privacy-screen-lock").addEventListener("click", onPrivacyScreenLockTick);
+                
+                var privacyPinInput = document.getElementById("incognito-privacy-pin");
+                var privacyIdleInput = document.getElementById("incognito-privacy-idle");
+                
+                if (privacyPinInput) {
+                    privacyPinInput.addEventListener("input", function(e) {
+                        var val = e.target.value.replace(/[^0-9]/g, '');
+                        e.target.value = val;
+                        
+                        var errorLabel = document.getElementById("incognito-privacy-pin-error");
+                        if (val.length > 0 && val.length < 4) {
+                            errorLabel.style.display = "block";
+                        } else {
+                            errorLabel.style.display = "none";
+                            if (val.length === 4) {
+                                // Save hash
+                                async function setPin() {
+                                    var hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+                                    var hashArray = Array.from(new Uint8Array(hashBuffer));
+                                    var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                                    
+                                    browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockPIN: hashHex });
+                                    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {
+                                        detail: JSON.stringify({ privacyScreenLockPIN: hashHex })
+                                    }));
+                                    
+                                    // Change to dots immediately after saving for UX
+                                    e.target.value = '****';
+                                }
+                                setPin();
+                            }
+                        }
+                    });
+                }
+                
+                if (privacyIdleInput) {
+                    privacyIdleInput.addEventListener("change", function(e) {
+                        var val = parseInt(e.target.value);
+                        if (isNaN(val) || val < 1) val = 1;
+                        if (val > 60) val = 60;
+                        e.target.value = val;
+                        
+                        browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockIdleMinutes: val });
+                        document.dispatchEvent(new CustomEvent('onOptionsUpdate', {
+                            detail: JSON.stringify({ privacyScreenLockIdleMinutes: val })
+                        }));
+                    });
+                }
+
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
                     nextButton.addEventListener("click", onNextButtonClicked);
@@ -218,6 +406,7 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
                 document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
+                document.getElementById("incognito-option-privacy-screen-lock").removeEventListener("click", onPrivacyScreenLockTick);
 
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
@@ -272,6 +461,9 @@ function generateDropContent(options)
     var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
+    var privacyScreenLockTitle = "Privacy Screen Lock";
+    var privacyScreenLockCaption = "Blurs the screen when idle (or press Alt+L). Set PIN to unlock.";
+
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
@@ -291,6 +483,9 @@ function generateDropContent(options)
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var privacyScreenLockCheckbox = (options.privacyScreenLockEnabled ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
 
@@ -383,9 +578,25 @@ function generateDropContent(options)
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
                         </div>
-                        <div class='incognito-options-item' style='cursor: pointer;'>
-                            More options coming soon!
+                        <div id='incognito-option-privacy-screen-lock' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${privacyScreenLockCheckbox}
+                                </div>
+                            </div>
+                            ${privacyScreenLockTitle}
+                            <div class='incognito-options-description'>${privacyScreenLockCaption}</div>
                         </div>
+                        
+                        <div id='incognito-privacy-lock-settings' class='incognito-options-item' style='display: ${options.privacyScreenLockEnabled ? 'block' : 'none'}; cursor: default; padding-top: 0 !important; padding-bottom: 0 !important;'>
+                            <div style='margin-left: 28px; display: flex; align-items: center; gap: 10px; font-size: 12px;'>
+                                <span>PIN:</span>
+                                <input type='password' id='incognito-privacy-pin' value='${options.privacyScreenLockPIN ? '****' : ''}' placeholder='4-digit PIN' maxlength='4' style='width: 80px; padding: 2px 5px; border-radius: 3px; border: 1px solid #ccc; background: var(--WDS-surface-emphasized, #f0f0f0); color: inherit;' />
+                                <span>Idle (min):</span>
+                                <input type='number' id='incognito-privacy-idle' value='${options.privacyScreenLockIdleMinutes}' min='1' max='60' style='width: 45px; padding: 2px 5px; border-radius: 3px; border: 1px solid #ccc; background: var(--WDS-surface-emphasized, #f0f0f0); color: inherit;' />
+                            </div>
+                            <div style='margin-left: 28px; margin-top: 5px; font-size: 11px; opacity: 0.7; color: #ff0000; display: none;' id='incognito-privacy-pin-error'>PIN must be 4 digits.</div>
+                        </div>
+                        
                         <button class='incognito-back-button'>&lt Back</button>
                     </div>
                 </div>
@@ -683,6 +894,32 @@ function onAutoReceiptsTick()
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
     {
         detail: JSON.stringify({ autoReceiptOnReplay: autoReceipts })
+    }));
+}
+
+function onPrivacyScreenLockTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-privacy-screen-lock .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+    var settingsDiv = document.getElementById("incognito-privacy-lock-settings");
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+        if (settingsDiv) settingsDiv.style.display = "block";
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+        if (settingsDiv) settingsDiv.style.display = "none";
+    }
+    browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockEnabled: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ privacyScreenLockEnabled: enabled })
     }));
 }
 

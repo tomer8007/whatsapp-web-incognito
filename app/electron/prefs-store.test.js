@@ -20,11 +20,11 @@ function tmpdir() {
 }
 
 test('defaults come from background.js and are complete', () => {
-  assert.strictEqual(Object.keys(DEFAULTS).length, 9);
+  assert.strictEqual(Object.keys(DEFAULTS).length, 12);
   assert.strictEqual(DEFAULTS.readConfirmationsHook, true);
   assert.strictEqual(DEFAULTS.safetyDelay, 0);
   for (const [k, v] of Object.entries(DEFAULTS)) {
-    assert.ok(['boolean', 'number'].includes(typeof v), `${k} has unexpected type ${typeof v}`);
+    assert.ok(['boolean', 'number', 'string'].includes(typeof v), `${k} has unexpected type ${typeof v}`);
   }
 });
 

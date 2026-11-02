@@ -466,6 +466,73 @@ input[type=number]::-webkit-inner-spin-button {
 }
 
 /*
+  Privacy Screen Lock
+*/
+
+.privacy-blur-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 100000;
+  background-color: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.privacy-lock-container {
+  background-color: var(--dropdown-background, #fff);
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  color: var(--primary, #000);
+  font-family: Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.privacy-lock-title {
+  font-size: 20px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.privacy-pin-input {
+  font-size: 24px;
+  letter-spacing: 8px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  width: 120px;
+  text-align: center;
+  background-color: var(--WDS-surface-emphasized, #f0f0f0);
+  color: var(--primary, #000);
+}
+
+.privacy-pin-input:focus {
+  outline: 2px solid #008069;
+}
+
+.privacy-pin-error {
+  color: #ff0000;
+  font-size: 14px;
+  min-height: 20px;
+}
+
+.privacy-locked-app {
+  filter: blur(10px) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+/*
   Mobile & Compact Window (Waydroid / Phone) Overrides
 */
 @media screen and (max-width: 768px) {
