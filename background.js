@@ -155,3 +155,29 @@ browser.action.onClicked.addListener(function(activeTab)
     var newURL = "https://web.whatsapp.com";
     browser.tabs.create({ url: newURL });
 });
+
+// Scheduled message outbox (HAG-64)
+if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.create) {
+    try { chrome.alarms.create("scheduled-message-check", { periodInMinutes: 1 }); } catch (e) {}
+    chrome.alarms.onAlarm.addListener(function(alarm) {
+        if (!alarm || alarm.name !== "scheduled-message-check") return;
+        chrome.storage.local.get("scheduled_messages").then(function(res) {
+            var queue = res && res.scheduled_messages ? res.scheduled_messages : [];
+            var now = Date.now();
+            var changed = false;
+            queue.forEach(function(q) {
+                if (q && q.status === "pending" && q.scheduled_timestamp <= now) {
+                    chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, function(tabs) {
+                        (tabs || []).forEach(function(t) {
+                            try { chrome.tabs.sendMessage(t.id, { name: "sendScheduled", item: q }); } catch (e) {}
+                        });
+                    });
+                    q.status = "sent";
+                    q.sent_at = now;
+                    changed = true;
+                }
+            });
+            if (changed) chrome.storage.local.set({ scheduled_messages: queue });
+        });
+    });
+}
