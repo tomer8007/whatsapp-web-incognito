@@ -1,3 +1,4 @@
+var ephemeralNotes = {};
 // ---------------------
 // UI Event handlers
 // ---------------------
@@ -82,6 +83,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('contactWhitelistRules' in options) {
         contactWhitelistRules = options.contactWhitelistRules;
         updateActiveChatIncognitoChip();
+    updateActiveChatEphemeralControls();
     }
 
     // update graphics
@@ -160,6 +162,16 @@ document.addEventListener('onContactWhitelistUpdate', function (e)
     {
         contactWhitelistRules = JSON.parse(e.detail);
         updateActiveChatIncognitoChip();
+    }
+    catch (err) {}
+});
+
+document.addEventListener('onEphemeralNotesUpdate', function (e)
+{
+    try
+    {
+        ephemeralNotes = JSON.parse(e.detail);
+        updateActiveChatEphemeralControls();
     }
     catch (err) {}
 });
@@ -711,3 +723,84 @@ setTimeout(function() {
         originalOnError.call(window, message, source, lineno, colno, error);
     }
 }, 1000);
+
+
+function updateActiveChatEphemeralControls()
+{
+    var header = document.querySelector("#main header") ||
+                 document.querySelector("header._amid") ||
+                 document.querySelector("header");
+    if (!header) return;
+
+    var activeJid = null;
+    try
+    {
+        var chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+        activeJid = chat && typeof getJidOfChat === "function" ? getJidOfChat(chat) : null;
+    }
+    catch (e) {}
+
+    var container = document.getElementById("wai-ephemeral-controls");
+    if (!activeJid)
+    {
+        if (container) container.style.display = "none";
+        return;
+    }
+
+    if (!container)
+    {
+        container = document.createElement("div");
+        container.id = "wai-ephemeral-controls";
+        container.style.display = "inline-flex";
+        container.style.gap = "6px";
+        if (header.lastElementChild)
+        {
+            header.lastElementChild.appendChild(container);
+        }
+        else
+        {
+            header.appendChild(container);
+        }
+
+        var noteButton = document.createElement("button");
+        noteButton.type = "button";
+        noteButton.textContent = "Private Note";
+        noteButton.className = "wai-ephemeral-button";
+        noteButton.addEventListener("click", function (e)
+        {
+            e.stopPropagation();
+            e.preventDefault();
+            var curChat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+            var jid = curChat && typeof getJidOfChat === "function" ? getJidOfChat(curChat) : activeJid;
+            if (!jid) return;
+            var current = (ephemeralNotes && ephemeralNotes[jid]) || "";
+            var next = window.prompt("Private note for this chat (local only):", current);
+            if (next === null) return;
+            document.dispatchEvent(new CustomEvent("setEphemeralNote", {
+                detail: JSON.stringify({ jid: jid, note: next })
+            }));
+        });
+        container.appendChild(noteButton);
+
+        var exportButton = document.createElement("button");
+        exportButton.type = "button";
+        exportButton.textContent = "Export";
+        exportButton.className = "wai-ephemeral-button";
+        exportButton.addEventListener("click", function (e)
+        {
+            e.stopPropagation();
+            e.preventDefault();
+            var curChat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+            var jid = curChat && typeof getJidOfChat === "function" ? getJidOfChat(curChat) : activeJid;
+            if (!jid) return;
+            var note = (ephemeralNotes && ephemeralNotes[jid]) || "";
+            var payload = { contactJid: jid, contactName: jid, messages: [], notes: { [jid]: note } };
+            document.dispatchEvent(new CustomEvent("exportEphemeralChat", {
+                detail: JSON.stringify(payload)
+            }));
+        });
+        container.appendChild(exportButton);
+    }
+
+    container.style.display = "inline-flex";
+}

@@ -8,6 +8,7 @@ var mutationObserver = null;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
+var ephemeralNotes = {};
 var pseudoMsgsIDs = new Set();
 var isMainUIInitialized = false;
 var privacyScreenLockEnabled = false;
@@ -49,6 +50,49 @@ function initializeUI()
         {
             document.dispatchEvent(new CustomEvent('onContactWhitelistUpdate', { detail: JSON.stringify(rules) }));
         }
+    });
+
+    browser.runtime.sendMessage({ name: "getEphemeralNotes" }, function (notes)
+    {
+        if (notes)
+        {
+            ephemeralNotes = notes;
+            document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+        }
+    });
+
+    document.addEventListener('setEphemeralNote', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "setEphemeralNote", jid: data.jid, note: data.note }, function (notes)
+            {
+                if (notes)
+                {
+                    ephemeralNotes = notes;
+                    document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+                }
+            });
+        }
+        catch (err) {}
+    });
+
+    document.addEventListener('deleteEphemeralNote', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "deleteEphemeralNote", jid: data.jid }, function (notes)
+            {
+                if (notes)
+                {
+                    ephemeralNotes = notes;
+                    document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+                }
+            });
+        }
+        catch (err) {}
     });
 
     document.addEventListener('setContactWhitelistRule', function (e)

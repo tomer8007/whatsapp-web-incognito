@@ -194,9 +194,76 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         });
         return true;
     }
-    
+    else if (messageEvent.name == "getEphemeralNotes")
+    {
+        chrome.storage.local.get(['ephemeral_notes']).then(function (storage)
+        {
+            callback(storage && storage.ephemeral_notes ? storage.ephemeral_notes : {});
+        });
+        return true;
+    }
+    else if (messageEvent.name == "setEphemeralNote")
+    {
+        chrome.storage.local.get(['ephemeral_notes']).then(function (storage)
+        {
+            var notes = (storage && storage.ephemeral_notes) ? storage.ephemeral_notes : {};
+            var jid = normalizeEphemeralJid(messageEvent.jid);
+            if (jid)
+            {
+                if (messageEvent.note === null || messageEvent.note === undefined || messageEvent.note === '')
+                {
+                    delete notes[jid];
+                }
+                else
+                {
+                    notes[jid] = String(messageEvent.note);
+                }
+            }
+            chrome.storage.local.set({ "ephemeral_notes": notes }).then(function ()
+            {
+                callback(notes);
+            });
+        });
+        return true;
+    }
+    else if (messageEvent.name == "deleteEphemeralNote")
+    {
+        chrome.storage.local.get(['ephemeral_notes']).then(function (storage)
+        {
+            var notes = (storage && storage.ephemeral_notes) ? storage.ephemeral_notes : {};
+            var jid = normalizeEphemeralJid(messageEvent.jid);
+            if (jid) delete notes[jid];
+            chrome.storage.local.set({ "ephemeral_notes": notes }).then(function ()
+            {
+                callback(notes);
+            });
+        });
+        return true;
+    }
+    else if (messageEvent.name == "clearEphemeralNotes")
+    {
+        chrome.storage.local.set({ "ephemeral_notes": {} }).then(function ()
+        {
+            callback({});
+        });
+        return true;
+    }
+
     return true;
 });
+
+function normalizeEphemeralJid(jid)
+{
+    if (!jid || typeof jid !== 'string') return '';
+    var trimmed = jid.trim();
+    var atIndex = trimmed.indexOf('@');
+    var prefix = atIndex !== -1 ? trimmed.substring(0, atIndex) : trimmed;
+    var suffix = atIndex !== -1 ? trimmed.substring(atIndex + 1).toLowerCase() : 'c.us';
+    if (suffix === 's.whatsapp.net') suffix = 'c.us';
+    var colonIndex = prefix.indexOf(':');
+    if (colonIndex !== -1) prefix = prefix.substring(0, colonIndex);
+    return prefix ? prefix + '@' + suffix : '';
+}
 
 browser.action.onClicked.addListener(function(activeTab)
 {
