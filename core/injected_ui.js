@@ -77,6 +77,8 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    if ('stealthVoiceNotes' in options) stealthVoiceNotesEnabled = options.stealthVoiceNotes;
+    if ('mediaAutoDownloadGuard' in options) mediaAutoDownloadGuardEnabled = options.mediaAutoDownloadGuard;
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");

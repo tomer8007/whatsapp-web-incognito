@@ -8,6 +8,8 @@ var onlineUpdatesHookEnabled = false;
 var typingUpdatesHookEnabled = false;
 var saveDeletedMsgsHookEnabled = false;
 var showDeviceTypesEnabled = true;
+var stealthVoiceNotesEnabled = false;
+var mediaAutoDownloadGuardEnabled = false;
 var autoReceiptOnReplay = true;
 var safetyDelay = 0;
 

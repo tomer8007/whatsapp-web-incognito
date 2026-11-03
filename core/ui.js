@@ -333,6 +333,8 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
                 document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+    document.getElementById("incognito-option-stealth-voice-notes").addEventListener("click", onStealthVoiceNotesTick);
+    document.getElementById("incognito-option-media-auto-download-guard").addEventListener("click", onMediaAutoDownloadGuardTick);
                 document.getElementById("incognito-option-privacy-screen-lock").addEventListener("click", onPrivacyScreenLockTick);
                 
                 var privacyPinInput = document.getElementById("incognito-privacy-pin");
@@ -461,6 +463,12 @@ function generateDropContent(options)
     var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
+    var stealthVoiceNotesTitle = "Stealth voice notes";
+    var stealthVoiceNotesCaption = "Suppresses \"played\" receipts for voice notes.";
+
+    var mediaAutoDownloadGuardTitle = "Media auto-download guard";
+    var mediaAutoDownloadGuardCaption = "Prevents automatic media downloads; manual 1-click preview.";
+
     var privacyScreenLockTitle = "Privacy Screen Lock";
     var privacyScreenLockCaption = "Blurs the screen when idle (or press Alt+L). Set PIN to unlock.";
 
@@ -483,6 +491,12 @@ function generateDropContent(options)
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var stealthVoiceNotesCheckbox = (options.stealthVoiceNotes ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var mediaAutoDownloadGuardCheckbox = (options.mediaAutoDownloadGuard ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var privacyScreenLockCheckbox = (options.privacyScreenLockEnabled ? "checked incognito-checked'> \
@@ -577,6 +591,22 @@ function generateDropContent(options)
                             </div>
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
+                        </div>
+                        <div id='incognito-option-stealth-voice-notes' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${stealthVoiceNotesCheckbox}
+                                </div>
+                            </div>
+                            ${stealthVoiceNotesTitle}
+                            <div class='incognito-options-description'>${stealthVoiceNotesCaption}</div>
+                        </div>
+                        <div id='incognito-option-media-auto-download-guard' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${mediaAutoDownloadGuardCheckbox}
+                                </div>
+                            </div>
+                            ${mediaAutoDownloadGuardTitle}
+                            <div class='incognito-options-description'>${mediaAutoDownloadGuardCaption}</div>
                         </div>
                         <div id='incognito-option-privacy-screen-lock' class='incognito-options-item' style='cursor: pointer;'>
                             <div class='checkbox-container-incognito' style=''>
@@ -945,6 +975,52 @@ function onStatusDownloadingTick()
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
     {
         detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
+    }));
+}
+
+function onStealthVoiceNotesTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-stealth-voice-notes .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", stealthVoiceNotes: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ stealthVoiceNotes: enabled })
+    }));
+}
+
+function onMediaAutoDownloadGuardTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-media-auto-download-guard .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", mediaAutoDownloadGuard: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ mediaAutoDownloadGuard: enabled })
     }));
 }
 

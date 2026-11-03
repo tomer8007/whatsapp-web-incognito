@@ -39,6 +39,7 @@ NodeHandler.isSentNodeAllowed = function (node)
         (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
         (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
         (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (stealthVoiceNotesEnabled && action == "receipt" && data["type"] === "played") ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
         (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||

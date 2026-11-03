@@ -20,7 +20,7 @@ function tmpdir() {
 }
 
 test('defaults come from background.js and are complete', () => {
-  assert.strictEqual(Object.keys(DEFAULTS).length, 12);
+  assert.strictEqual(Object.keys(DEFAULTS).length, 14);
   assert.strictEqual(DEFAULTS.readConfirmationsHook, true);
   assert.strictEqual(DEFAULTS.safetyDelay, 0);
   for (const [k, v] of Object.entries(DEFAULTS)) {

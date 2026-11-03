@@ -55,6 +55,8 @@ const SETTINGS = Object.freeze([
   { key: 'showDeviceTypes', label: 'Show message device type', group: 'messages' },
   { key: 'autoReceiptOnReplay', label: 'Auto-send receipts on reply', group: 'messages' },
   { key: 'allowStatusDownload', label: 'Allow status downloading', group: 'messages' },
+  { key: 'stealthVoiceNotes', label: 'Stealth voice notes', group: 'messages' },
+  { key: 'mediaAutoDownloadGuard', label: 'Media auto-download guard', group: 'messages' },
   { key: 'showReadWarning', label: 'Warn before sending a receipt', group: 'messages' },
 
   { key: 'privacyScreenLockEnabled', label: 'Privacy Screen Lock', group: 'privacy' },

@@ -46,6 +46,14 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({"allowStatusDownload": messageEvent.allowStatusDownload});
         }
+        if ("stealthVoiceNotes" in messageEvent)
+        {
+            chrome.storage.local.set({"stealthVoiceNotes": messageEvent.stealthVoiceNotes});
+        }
+        if ("mediaAutoDownloadGuard" in messageEvent)
+        {
+            chrome.storage.local.set({"mediaAutoDownloadGuard": messageEvent.mediaAutoDownloadGuard});
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -64,6 +72,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
         var allowStatusDownload = true;
+        var stealthVoiceNotes = false;
+        var mediaAutoDownloadGuard = false;
         var privacyScreenLockEnabled = false;
         var privacyScreenLockPIN = "";
         var privacyScreenLockIdleMinutes = 5;
@@ -77,6 +87,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'showDeviceTypes',
                                 'autoReceiptOnReplay',
                                 'allowStatusDownload',
+                                'stealthVoiceNotes',
+                                'mediaAutoDownloadGuard',
                                 'privacyScreenLockEnabled',
                                 'privacyScreenLockPIN',
                                 'privacyScreenLockIdleMinutes']).then(function(storage)
@@ -117,6 +129,14 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 allowStatusDownload = storage["allowStatusDownload"];
             }
+            if (storage["stealthVoiceNotes"] != undefined)
+            {
+                stealthVoiceNotes = storage["stealthVoiceNotes"];
+            }
+            if (storage["mediaAutoDownloadGuard"] != undefined)
+            {
+                mediaAutoDownloadGuard = storage["mediaAutoDownloadGuard"];
+            }
             if (storage["privacyScreenLockEnabled"] != undefined)
             {
                 privacyScreenLockEnabled = storage["privacyScreenLockEnabled"];
@@ -140,6 +160,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 showDeviceTypes: showDeviceTypes,
                 autoReceiptOnReplay: autoReceiptOnReplay,
                 allowStatusDownload: allowStatusDownload,
+                stealthVoiceNotes: stealthVoiceNotes,
+                mediaAutoDownloadGuard: mediaAutoDownloadGuard
                 privacyScreenLockEnabled: privacyScreenLockEnabled,
                 privacyScreenLockPIN: privacyScreenLockPIN,
                 privacyScreenLockIdleMinutes: privacyScreenLockIdleMinutes
