@@ -575,3 +575,42 @@ input[type=number]::-webkit-inner-spin-button {
     touch-action: manipulation;
   }
 }
+
+/* Custom Contact Privacy Rules / Whitelist Override Chip (HAG-59) */
+.incognito-override-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 12px;
+  cursor: pointer;
+  outline: none;
+  background: transparent;
+  user-select: none;
+  margin-left: 8px;
+  transition: all 0.15s ease-in-out;
+}
+
+.incognito-override-chip:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+.incognito-chip-default {
+  color: var(--secondary, #8696a0);
+  border: 1px solid rgba(134, 150, 160, 0.4);
+}
+
+.incognito-chip-always {
+  color: #00a884;
+  border: 1px solid #00a884;
+  background-color: rgba(0, 168, 132, 0.1);
+}
+
+.incognito-chip-never {
+  color: #53bdeb;
+  border: 1px solid #53bdeb;
+  background-color: rgba(83, 189, 235, 0.1);
+}

@@ -43,6 +43,30 @@ function initializeUI()
         browser.runtime.sendMessage(optionsMessage);
     });
 
+    browser.runtime.sendMessage({ name: "getContactWhitelist" }, function (rules)
+    {
+        if (rules)
+        {
+            document.dispatchEvent(new CustomEvent('onContactWhitelistUpdate', { detail: JSON.stringify(rules) }));
+        }
+    });
+
+    document.addEventListener('setContactWhitelistRule', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "setContactWhitelistRule", jid: data.jid, rule: data.rule }, function (rules)
+            {
+                if (rules)
+                {
+                    document.dispatchEvent(new CustomEvent('onContactWhitelistUpdate', { detail: JSON.stringify(rules) }));
+                }
+            });
+        }
+        catch (err) {}
+    });
+
     // initialize mutation observer
     var appElem = document.getElementsByTagName("body")[0];
     if (!appElem) return;
@@ -108,6 +132,9 @@ function onMutationsObserved(mutations)
             // Scan for added message nodes and modify if needed
             if (isMessageNode(addedNode)) {
                 onNewMessageNodeAdded(addedNode);
+            }
+            if (addedNode.nodeName === "HEADER" || (addedNode.firstElementChild && addedNode.querySelector && addedNode.querySelector("header"))) {
+                document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
             }
             if (addedNode.firstElementChild && addedNode.querySelectorAll) {
                 var subMsgNodes = addedNode.querySelectorAll('[data-testid^="conv-msg"]');

@@ -34,11 +34,14 @@ NodeHandler.isSentNodeAllowed = function (node)
     var jid = data.jid ? data.jid : data.to;
     if (jid) jid = normalizeJID(jid.toString());
 
+    var contactRule = (typeof contactWhitelistRules !== "undefined" && contactWhitelistRules && jid) ? contactWhitelistRules[jid] : "default";
+    var shouldBlockRead = (contactRule === "always") ? false : (contactRule === "never" ? true : readConfirmationsHookEnabled);
+
     var shouldBlock = 
-        (readConfirmationsHookEnabled && action === "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (shouldBlockRead && action === "read") ||
+        (shouldBlockRead && action == "receipt" && data["type"] == "read") ||
+        (shouldBlockRead && action == "receipt" && data["type"] == "read-self") ||
+        (shouldBlockRead && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
         (stealthVoiceNotesEnabled && action == "receipt" && data["type"] === "played") ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
@@ -52,7 +55,7 @@ NodeHandler.isSentNodeAllowed = function (node)
             case "read":
             case "receipt":
 
-                var isReadReceiptAllowed = exceptionsList.includes(jid);
+                var isReadReceiptAllowed = exceptionsList.includes(jid) || contactRule === "always";
                 if (isReadReceiptAllowed)
                 {
                     // this is the user trying to send out a read receipt.

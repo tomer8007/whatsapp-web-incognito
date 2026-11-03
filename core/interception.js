@@ -12,6 +12,7 @@ var stealthVoiceNotesEnabled = false;
 var mediaAutoDownloadGuardEnabled = false;
 var autoReceiptOnReplay = true;
 var safetyDelay = 0;
+var contactWhitelistRules = {};
 
 var isInitializing = true;
 var exceptionsList = [];

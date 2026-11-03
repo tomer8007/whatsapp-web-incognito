@@ -161,12 +161,38 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 autoReceiptOnReplay: autoReceiptOnReplay,
                 allowStatusDownload: allowStatusDownload,
                 stealthVoiceNotes: stealthVoiceNotes,
-                mediaAutoDownloadGuard: mediaAutoDownloadGuard
+                mediaAutoDownloadGuard: mediaAutoDownloadGuard,
                 privacyScreenLockEnabled: privacyScreenLockEnabled,
                 privacyScreenLockPIN: privacyScreenLockPIN,
                 privacyScreenLockIdleMinutes: privacyScreenLockIdleMinutes
             });
         });   
+    }
+    else if (messageEvent.name == "getContactWhitelist")
+    {
+        chrome.storage.local.get(['contact_whitelist_rules']).then(function(storage)
+        {
+            callback(storage["contact_whitelist_rules"] || {});
+        });
+        return true;
+    }
+    else if (messageEvent.name == "setContactWhitelistRule")
+    {
+        chrome.storage.local.get(['contact_whitelist_rules']).then(function(storage)
+        {
+            var rules = storage["contact_whitelist_rules"] || {};
+            var jid = messageEvent.jid;
+            var rule = messageEvent.rule;
+            if (rule === "default") {
+                delete rules[jid];
+            } else {
+                rules[jid] = rule;
+            }
+            chrome.storage.local.set({"contact_whitelist_rules": rules}).then(function() {
+                callback(rules);
+            });
+        });
+        return true;
     }
     
     return true;
