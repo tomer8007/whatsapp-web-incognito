@@ -553,7 +553,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y rpm bsdtar
+          sudo apt-get install --no-install-recommends -y rpm libarchive-tools
 
       - name: Build electron target
         run: pnpm run build:electron
