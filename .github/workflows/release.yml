@@ -547,6 +547,12 @@ jobs:
           echo "NOTARIZED=true" >> "$GITHUB_ENV"
           echo "::notice::notarisation enabled for team $TEAM"
 
+      - name: Install system dependencies for Linux packaging
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y rpm bsdtar
+
       - name: Build electron target
         run: pnpm run build:electron
 
@@ -589,7 +595,7 @@ jobs:
           mkdir -p "artifacts/$MATRIX_NAME"
           find release -maxdepth 1 -type f \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.dmg' -o -name '*.zip' \
-               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.blockmap' -o -name '*.yml' \) \
+               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.pacman' -o -name '*.pkg.tar.zst' -o -name '*.blockmap' -o -name '*.yml' \) \
             -exec cp {} "artifacts/$MATRIX_NAME/" \;
           if [ -z "$(ls -A "artifacts/$MATRIX_NAME")" ]; then
             echo "::error::electron-builder produced no installers for $MATRIX_NAME."
@@ -717,22 +723,27 @@ jobs:
             artifacts/**/*.blockmap
           fail_on_unmatched_files: false
 
-      - name: Update APT repository on GitHub Pages
+      - name: Update APT, RPM (DNF), and Arch Linux repositories on GitHub Pages
         if: needs.resolve.outputs.dry_run == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          RPM_GPG_PRIVATE_KEY: ${{ secrets.RPM_GPG_PRIVATE_KEY || secrets.APT_GPG_PRIVATE_KEY }}
+          ARCH_GPG_PRIVATE_KEY: ${{ secrets.ARCH_GPG_PRIVATE_KEY || secrets.APT_GPG_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
           DEB_COUNT=$(find artifacts -name '*.deb' | wc -l)
-          if [ "$DEB_COUNT" -eq 0 ]; then
-            echo "No .deb packages in this release; skipping APT repository update."
+          RPM_COUNT=$(find artifacts -name '*.rpm' | wc -l)
+          ARCH_COUNT=$(find artifacts \( -name '*.pacman' -o -name '*.pkg.tar.zst' \) | wc -l)
+
+          if [ "$DEB_COUNT" -eq 0 ] && [ "$RPM_COUNT" -eq 0 ] && [ "$ARCH_COUNT" -eq 0 ]; then
+            echo "No Linux packages in this release; skipping repository updates."
             exit 0
           fi
 
-          echo "Installing dpkg-dev for dpkg-scanpackages..."
-          sudo apt-get update && sudo apt-get install -y dpkg-dev
+          echo "Installing repository tools (dpkg-dev, createrepo-c)..."
+          sudo apt-get update && sudo apt-get install -y dpkg-dev createrepo-c || true
 
           REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           TARGET_DIR="${{ github.workspace }}/../gh-pages-repo"
@@ -752,23 +763,80 @@ jobs:
           fi
 
           # Update the APT repository layout
-          node scripts/update-apt-repo.mjs --artifacts=artifacts --out="$TARGET_DIR/apt"
-
-          # Redirect root index.html to apt/ if no root index.html exists
-          if [ ! -f "$TARGET_DIR/index.html" ]; then
-            echo '<meta http-equiv="refresh" content="0; url=apt/">' > "$TARGET_DIR/index.html"
+          if [ "$DEB_COUNT" -gt 0 ]; then
+            echo "Updating Debian/Ubuntu APT repository..."
+            node scripts/update-apt-repo.mjs --artifacts=artifacts --out="$TARGET_DIR/apt"
           fi
+
+          # Update the RPM (DNF/YUM) repository layout
+          if [ "$RPM_COUNT" -gt 0 ]; then
+            echo "Updating Fedora/RHEL DNF repository..."
+            node scripts/update-rpm-repo.mjs --artifacts=artifacts --out="$TARGET_DIR/rpm"
+          fi
+
+          # Update the Arch Linux pacman repository layout
+          if [ "$ARCH_COUNT" -gt 0 ]; then
+            echo "Updating Arch Linux repository..."
+            node scripts/update-arch-repo.mjs --artifacts=artifacts --out="$TARGET_DIR/arch"
+          fi
+
+          # Create a unified root landing page linking to APT, RPM, and Arch repositories
+          cat << 'EOF' > "$TARGET_DIR/index.html"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WAIncognito Linux Repositories</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+    h1 { color: #38bdf8; }
+    code { background: #1e293b; color: #38bdf8; padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
+    pre { background: #1e293b; padding: 1rem; border-radius: 8px; overflow-x: auto; border: 1px solid #334155; }
+    pre code { background: none; padding: 0; color: #a5f3fc; }
+    .card { background: #1e293b80; border: 1px solid #334155; border-radius: 8px; padding: 1.5rem; margin-top: 1.5rem; }
+    .btn { display: inline-block; padding: 0.6rem 1.2rem; background: #0284c7; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 0.5rem; }
+    .btn:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+  <h1>WAIncognito Linux Repositories</h1>
+  <p>Official Linux package repositories for <strong>WAIncognito</strong> (WhatsApp Incognito Desktop).</p>
+
+  <div class="card">
+    <h3>Ubuntu & Debian (APT)</h3>
+    <pre><code>curl -fsSL https://moodynooby.github.io/whatsapp-web-incognito/apt/setup.sh | sudo bash
+sudo apt install waincognito</code></pre>
+    <a href="apt/" class="btn">View APT Instructions</a>
+  </div>
+
+  <div class="card">
+    <h3>Fedora, RHEL & openSUSE (DNF / RPM)</h3>
+    <pre><code>curl -fsSL https://moodynooby.github.io/whatsapp-web-incognito/rpm/setup.sh | sudo bash
+sudo dnf install waincognito</code></pre>
+    <a href="rpm/" class="btn">View DNF / RPM Instructions</a>
+  </div>
+
+  <div class="card">
+    <h3>Arch Linux & Manjaro (pacman)</h3>
+    <pre><code>curl -fsSL https://moodynooby.github.io/whatsapp-web-incognito/arch/setup.sh | sudo bash
+sudo pacman -S waincognito</code></pre>
+    <a href="arch/" class="btn">View Arch Linux Instructions</a>
+  </div>
+</body>
+</html>
+EOF
 
           cd "$TARGET_DIR"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           if git diff --staged --quiet; then
-            echo "No changes to APT repository."
+            echo "No changes to repositories."
           else
-            git commit -m "chore(apt): update repository for ${{ needs.resolve.outputs.tag }}"
+            git commit -m "chore(repo): update repositories for ${{ needs.resolve.outputs.tag }}"
             git push origin gh-pages
-            echo "Successfully updated and published APT repository on gh-pages!"
+            echo "Successfully updated and published APT, RPM, and Arch repositories on gh-pages!"
           fi
 
       - name: Release summary

@@ -165,7 +165,7 @@ other. `bump_manifest` only works from `master`.
 ### What you get
 
 - `WAIncognito-<version>-chrome.zip` and `-firefox.zip` — the loadable extensions
-- AppImage + deb (Linux), NSIS installer (Windows), `.dmg` x64 and arm64 (macOS)
+- AppImage + deb + rpm + pacman (Linux), NSIS installer (Windows), `.dmg` x64 and arm64 (macOS)
 
 The zips are reproducible: the same commit always produces the same bytes, so you can
 tell a real change from noise by comparing checksums. `scripts/package-ext.mjs` reproduces
