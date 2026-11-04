@@ -33,7 +33,7 @@ The desktop app is the only build where the safety delay and the login item exis
 extension has no such concepts.
 
 ## Installing from GitHub directly
-To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/tomer8007/whats-incognito/releases) page, or better, just clone the source code
+To install the extension off-store, download the latest release as a zip file from the [Releases](https://github.com/moodynooby/whatsapp-web-incognito/releases) page, or better, just clone the source code
 **to a directory** and add it to Chrome using the 'Load unpacked extension' option when developer mode is turned on.
 
 ## How it works

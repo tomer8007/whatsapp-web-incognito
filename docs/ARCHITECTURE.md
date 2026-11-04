@@ -270,9 +270,9 @@ document, so it is constant while healthy; testing "unchanged" would report
 
 | | |
 |---|---|
-| `pnpm one` | kill stale → env → build → 27 assertions → 112 tests → **real app** → verdict |
+| `pnpm one` | kill stale → env → build → 27 assertions → 177 tests → **real app** → verdict |
 | `pnpm check` | same without the real-window check — this is what CI runs |
-| `pnpm kill` | stop stale instances (`--dry`, `--all` also stops watchers) |
+| `pnpm kill` | stop stale instances (`--dry` lists only, `--all` also stops watchers) |
 | `pnpm doctor` | bare-window probe: is WhatsApp reachable, and which engine is installed |
 | `pnpm dev` | the whole loop: build → verify → watch → launch the app pointed at the dev server |
 | `pnpm start` | bring the app back after quitting it; the watcher keeps running |

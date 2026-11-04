@@ -426,7 +426,10 @@ check('A-shim', 'the page shim has no unsubstituted build placeholders', () => {
 
 // A-prefs — the Electron app must agree with the extension about every default. The
 // values are derived from background.js at build time; this asserts the derivation
-// produced all 12 keys and that the emitted shim/meta actually carry them.
+// produced the recorded key count and that the emitted shim/meta actually carry them.
+// The expected count mirrors background.js's getOptions list (12 upstream + 2 fork
+// privacy-screen-lock keys added by the fork's stealth-chat-archiver feature); if a
+// new pref is added, update this count in the same commit or A-prefs fails.
 check('A-prefs', 'option defaults are derived from background.js and reach the shim', () => {
   if (!haveBuild) return 'no build output';
   const src = readSrc(join(ROOT, 'background.js'));
@@ -443,7 +446,8 @@ check('A-prefs', 'option defaults are derived from background.js and reach the s
     else if (m[1].startsWith('"')) expected[k] = m[1].slice(1, -1);
     else expected[k] = Number(m[1]);
   }
-  if (keys.length !== 12) return `expected 12 option keys, background.js yields ${keys.length}`;
+  // 14 = 12 upstream keys + fork's privacyScreenLockPIN + privacyScreenLockIdleMinutes.
+  if (keys.length !== 14) return `expected 14 option keys, background.js yields ${keys.length}`;
 
   const meta = readJSON(join(EBUILD, 'meta.json'));
   if (JSON.stringify(meta.prefs) !== JSON.stringify(expected)) {

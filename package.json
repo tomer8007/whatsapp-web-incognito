@@ -33,6 +33,7 @@
     "watch": "node scripts/dev.mjs --no-launch",
     "start": "electron . --no-sandbox",
     "doctor": "electron --no-sandbox scripts/doctor.cjs",
+    "kill": "node scripts/kill.mjs",
     "one": "node scripts/one.mjs"
   },
   "devDependencies": {

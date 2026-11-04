@@ -2,8 +2,10 @@
   "$comment": "The patch-set record. This is the budget for local divergence from upstream: docs/ELECTRON_APP_PLAN.md §1. A7 in scripts/verify-bundles.mjs diffs core/ and lib/ against upstreamRef and fails the build if the changed file set differs from patchedFiles. Deliberate new patches must be added here; accidental edits must not be.",
   "upstreamRef": "upstream/master",
   "patchedFiles": [
+    "core/injected_ui.js",
     "core/interception.js",
     "core/multi_device.js",
+    "core/node_handler.js",
     "core/parsing/binary_reader.js",
     "core/parsing/node_reader_writer.js",
     "core/parsing/protobuf/WAProto.js",
@@ -13,7 +15,8 @@
     "core/ui_class_names.js",
     "core/utils.js",
     "core/ws_hook.js",
-    "lib/pako.js"
+    "lib/pako.js",
+    "lib/pbf.3.0.5.min.js"
   ],
   "patches": [
     {
@@ -175,6 +178,26 @@
       "why": "CRIT-01: When an unhandled error occurs during decompression or stanza decoding, wsHook.before previously caught it and invoked _send.apply with the raw unblocked frame, causing silent read receipt and presence leaks. Now fails closed by dropping the frame and emitting wai:interception_failure.",
       "risk": "low",
       "assertion": "A7"
+    },
+    {
+      "id": "P13",
+      "file": "core/injected_ui.js, core/node_handler.js",
+      "status": "applied",
+      "summary": "Fork features: ephemeral local chat notes (export), contact privacy whitelist manager, stealth voice notes and media auto-download guard, chat archiver with PIN screen lock.",
+      "kind": "feature",
+      "why": "The fork (moodynooby/whatsapp-web-incognito) adds these features on top of upstream; injected_ui.js gains ephemeral-notes state, whitelist listeners and chip UI, node_handler.js gains per-contact whitelist gating and stealth-voice-note receipt blocking. These are deliberate fork divergence, recorded here so A7's diff budget matches reality.",
+      "risk": "low",
+      "assertion": "A7"
+    },
+    {
+      "id": "P14",
+      "file": "lib/pako.js, lib/pbf.3.0.5.min.js",
+      "status": "applied",
+      "summary": "Restore UMD wrappers on lib/pako.js and lib/pbf.3.0.5.min.js after the upstream merge (e269ce6) clobbered them.",
+      "kind": "single-world-fix",
+      "why": "Upstream ships pako as bare source (no UMD wrapper, exports commented out) and pbf with dead `!1` branch conditions. Without the UMD wrapper, scripts/build.mjs isUmdBundle() does not match either file, so wrapUmd() is skipped and the emitted electron bundle has no global-branch guard — A-umd/A-umd2 fail and (pre-fix) the page's AMD define would make pako/Pbf publish nothing. Restoring the pre-merge UMD forms makes isUmdBundle() match again and keeps the guard in the emitted bundle.",
+      "risk": "low",
+      "assertion": "A-umd, A-umd2, A7"
     }
   ],
   "encoding": {
