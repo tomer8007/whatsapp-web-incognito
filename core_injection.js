@@ -46,27 +46,15 @@ try {
 	}
 } catch (e) {}
 
-injectScript('core/ws_hook.js'); // important to inject as early as possible
-injectOtherScripts();
+injectScripts();
 
-async function injectOtherScripts() 
+async function injectScripts() 
 {
-	var scripts = [
-		'lib/pbf.3.0.5.min.js',
-		'lib/libsignal-protocol-ee5b8ba.min.js',
-		'lib/pako.js',
-		'core/parsing/binary_reader.js',
-		'core/parsing/binary_writer.js',
-		'core/parsing/node_reader_writer.js',
-		'core/parsing/protobuf/WhisperTextProtocol.js',
-		'core/parsing/protobuf/WAProto.js',
-		'core/utils.js',
-		'core/ui_class_names.js',
-		'core/injected_ui.js',
-		'core/multi_device.js',
-		'core/node_handler.js',
-		'core/interception.js'
-	];
+	await injectScript('core/ws_hook.js'); // important to inject as early as possible
+	await injectScript('core/comms_worker_fix.js');
+	await injectScript('lib/pbf.3.0.5.min.js');
+	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
+	await injectScript('lib/pako.js');
 
 	await Promise.all(scripts.map(injectScript));
 
@@ -83,9 +71,10 @@ function injectScript(scriptName)
 		var s = document.createElement('script');
 		s.src = chrome.runtime.getURL(scriptName);
 		s.async = false; // execute in insertion order, not in download order
-		s.onload = function() {
+		s.onload = async function() {
 			if (this.parentNode)
 				this.parentNode.removeChild(this);
+			//await sleep(0.5);
 			resolve(true);
 		};
 		(document.head||document.documentElement).appendChild(s);
@@ -124,6 +113,10 @@ async function injectFromDisk(scriptNames)
 	s.textContent = text;
 
 	(document.head||document.documentElement).appendChild(s);
+}
+
+async function sleep(seconds) {
+	return new Promise((resolve) =>setTimeout(resolve, seconds * 1000));
 }
 
 function webScoketInterception()
