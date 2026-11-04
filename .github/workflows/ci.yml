@@ -167,6 +167,12 @@ jobs:
       - name: Build
         run: pnpm run build:electron
 
+      - name: Install system dependencies for Linux packaging
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y rpm bsdtar
+
       - name: Package
         env:
           # No signing identity is available on a runner. Without this,
@@ -188,6 +194,8 @@ jobs:
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/*.pacman
+            release/*.pkg.tar.zst
             release/*.blockmap
             release/*.yml
           retention-days: 3

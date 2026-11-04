@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+
+# Automatically configure the WAIncognito Arch repository in /etc/pacman.conf if needed
+CONF="/etc/pacman.conf"
+REPO_NAME="waincognito"
+
+if [ -f "$CONF" ]; then
+    if ! grep -q "^\[$REPO_NAME\]" "$CONF"; then
+        cat << 'EOF' >> "$CONF"
+
+[waincognito]
+SigLevel = Optional TrustAll
+Server = https://moodynooby.github.io/whatsapp-web-incognito/arch/$arch
+EOF
+    fi
+fi
+
+# Fix Chromium SUID sandbox helper permissions for Arch Linux
+for _dir in "/opt/Whatsapp Incognito" "/opt/waincognito"; do
+    _sandbox="$_dir/chrome-sandbox"
+    if [ -f "$_sandbox" ]; then
+        chown root:root "$_sandbox"
+        chmod 4755 "$_sandbox"
+    fi
+done

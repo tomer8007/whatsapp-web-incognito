@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Clean up WAIncognito repository section from /etc/pacman.conf if removing
+CONF="/etc/pacman.conf"
+REPO_NAME="waincognito"
+
+if [ -f "$CONF" ]; then
+    # Remove [waincognito] section and following lines until empty line or next section
+    sed -i '/^\[waincognito\]/,/^[[:space:]]*$/d' "$CONF" 2>/dev/null || true
+fi
