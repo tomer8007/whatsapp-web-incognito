@@ -58,7 +58,6 @@
         catch (exception)
         {
             console.error(exception);
-            debugger;
         }
 
         return binaryReader;

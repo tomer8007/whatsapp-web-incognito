@@ -1,3 +1,4 @@
+var ephemeralNotes = {};
 // ---------------------
 // UI Event handlers
 // ---------------------
@@ -77,6 +78,13 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    if ('stealthVoiceNotes' in options) stealthVoiceNotesEnabled = options.stealthVoiceNotes;
+    if ('mediaAutoDownloadGuard' in options) mediaAutoDownloadGuardEnabled = options.mediaAutoDownloadGuard;
+    if ('contactWhitelistRules' in options) {
+        contactWhitelistRules = options.contactWhitelistRules;
+        updateActiveChatIncognitoChip();
+    updateActiveChatEphemeralControls();
+    }
 
     // update graphics
     var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
@@ -148,10 +156,138 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
 
 });
 
+document.addEventListener('onContactWhitelistUpdate', function (e)
+{
+    try
+    {
+        contactWhitelistRules = JSON.parse(e.detail);
+        updateActiveChatIncognitoChip();
+    }
+    catch (err) {}
+});
+
+document.addEventListener('onEphemeralNotesUpdate', function (e)
+{
+    try
+    {
+        ephemeralNotes = JSON.parse(e.detail);
+        updateActiveChatEphemeralControls();
+    }
+    catch (err) {}
+});
+
+function renderChipState(chip, rule)
+{
+    if (!chip) return;
+    chip.className = "incognito-override-chip";
+    if (rule === "always")
+    {
+        chip.classList.add("incognito-chip-always");
+        chip.textContent = "👁️ Always Send";
+        chip.title = "Incognito Override: Always Send Receipts (Whitelisted for this chat)";
+    }
+    else if (rule === "never")
+    {
+        chip.classList.add("incognito-chip-never");
+        chip.textContent = "🛡️ Never Send";
+        chip.title = "Incognito Override: Never Send Receipts (Strict Incognito for this chat)";
+    }
+    else
+    {
+        chip.classList.add("incognito-chip-default");
+        chip.textContent = "🕵️ Incognito: Default";
+        chip.title = "Incognito Override: Follow Global Incognito Setting";
+    }
+}
+
+function updateActiveChatIncognitoChip()
+{
+    var chat = null;
+    try
+    {
+        if (typeof getCurrentChat === "function") chat = getCurrentChat();
+    }
+    catch (e) {}
+
+    var header = document.querySelector("#main header") ||
+                 document.querySelector("header._amid") ||
+                 document.querySelector("header");
+    if (!header) return;
+
+    var activeJid = (chat && typeof getJidOfChat === "function") ? getJidOfChat(chat) : null;
+    var chip = document.getElementById("incognito-override-chip");
+
+    if (!activeJid)
+    {
+        if (chip) chip.style.display = "none";
+        return;
+    }
+
+    if (!chip)
+    {
+        chip = document.createElement("button");
+        chip.id = "incognito-override-chip";
+        chip.type = "button";
+        chip.className = "incognito-override-chip";
+
+        var titlesDiv = header.querySelector("div[class*='titles']") ||
+                        header.querySelector("div[role='button']") ||
+                        header.firstElementChild;
+        if (titlesDiv && titlesDiv.parentElement)
+        {
+            titlesDiv.parentElement.appendChild(chip);
+        }
+        else
+        {
+            header.appendChild(chip);
+        }
+
+        chip.addEventListener("click", function (e)
+        {
+            e.stopPropagation();
+            e.preventDefault();
+            var curChat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+            if (!curChat) return;
+            var jid = getJidOfChat(curChat);
+            if (!jid) return;
+
+            var curRule = (typeof contactWhitelistRules !== "undefined" && contactWhitelistRules && contactWhitelistRules[jid]) || "default";
+            var nextRule = "default";
+            if (curRule === "default") nextRule = "always";
+            else if (curRule === "always") nextRule = "never";
+            else nextRule = "default";
+
+            if (typeof contactWhitelistRules === "undefined" || !contactWhitelistRules)
+            {
+                contactWhitelistRules = {};
+            }
+            if (nextRule === "default")
+            {
+                delete contactWhitelistRules[jid];
+            }
+            else
+            {
+                contactWhitelistRules[jid] = nextRule;
+            }
+
+            renderChipState(chip, nextRule);
+
+            document.dispatchEvent(new CustomEvent("setContactWhitelistRule", {
+                detail: JSON.stringify({ jid: jid, rule: nextRule })
+            }));
+        });
+    }
+
+    chip.style.display = "inline-flex";
+    var rule = (typeof contactWhitelistRules !== "undefined" && contactWhitelistRules && contactWhitelistRules[activeJid]) || "default";
+    renderChipState(chip, rule);
+}
+
 document.addEventListener('onPaneChatOpened', function (e)
 {
     var chat = getCurrentChat();
-    chats[chat.id] = chat;
+    if (chat && chat.id) chats[chat.id] = chat;
+    updateActiveChatIncognitoChip();
 });
 
 document.addEventListener('onDropdownOpened', function (e)
@@ -587,3 +723,84 @@ setTimeout(function() {
         originalOnError.call(window, message, source, lineno, colno, error);
     }
 }, 1000);
+
+
+function updateActiveChatEphemeralControls()
+{
+    var header = document.querySelector("#main header") ||
+                 document.querySelector("header._amid") ||
+                 document.querySelector("header");
+    if (!header) return;
+
+    var activeJid = null;
+    try
+    {
+        var chat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+        activeJid = chat && typeof getJidOfChat === "function" ? getJidOfChat(chat) : null;
+    }
+    catch (e) {}
+
+    var container = document.getElementById("wai-ephemeral-controls");
+    if (!activeJid)
+    {
+        if (container) container.style.display = "none";
+        return;
+    }
+
+    if (!container)
+    {
+        container = document.createElement("div");
+        container.id = "wai-ephemeral-controls";
+        container.style.display = "inline-flex";
+        container.style.gap = "6px";
+        if (header.lastElementChild)
+        {
+            header.lastElementChild.appendChild(container);
+        }
+        else
+        {
+            header.appendChild(container);
+        }
+
+        var noteButton = document.createElement("button");
+        noteButton.type = "button";
+        noteButton.textContent = "Private Note";
+        noteButton.className = "wai-ephemeral-button";
+        noteButton.addEventListener("click", function (e)
+        {
+            e.stopPropagation();
+            e.preventDefault();
+            var curChat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+            var jid = curChat && typeof getJidOfChat === "function" ? getJidOfChat(curChat) : activeJid;
+            if (!jid) return;
+            var current = (ephemeralNotes && ephemeralNotes[jid]) || "";
+            var next = window.prompt("Private note for this chat (local only):", current);
+            if (next === null) return;
+            document.dispatchEvent(new CustomEvent("setEphemeralNote", {
+                detail: JSON.stringify({ jid: jid, note: next })
+            }));
+        });
+        container.appendChild(noteButton);
+
+        var exportButton = document.createElement("button");
+        exportButton.type = "button";
+        exportButton.textContent = "Export";
+        exportButton.className = "wai-ephemeral-button";
+        exportButton.addEventListener("click", function (e)
+        {
+            e.stopPropagation();
+            e.preventDefault();
+            var curChat = (typeof getCurrentChat === "function") ? getCurrentChat() : null;
+            var jid = curChat && typeof getJidOfChat === "function" ? getJidOfChat(curChat) : activeJid;
+            if (!jid) return;
+            var note = (ephemeralNotes && ephemeralNotes[jid]) || "";
+            var payload = { contactJid: jid, contactName: jid, messages: [], notes: { [jid]: note } };
+            document.dispatchEvent(new CustomEvent("exportEphemeralChat", {
+                detail: JSON.stringify(payload)
+            }));
+        });
+        container.appendChild(exportButton);
+    }
+
+    container.style.display = "inline-flex";
+}

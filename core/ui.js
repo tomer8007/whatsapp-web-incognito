@@ -1,4 +1,4 @@
-﻿/*
+/*
 This is a content script responsible for some UI.
 */
 
@@ -8,16 +8,27 @@ var mutationObserver = null;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
+var ephemeralNotes = {};
 var pseudoMsgsIDs = new Set();
+var isMainUIInitialized = false;
+var privacyScreenLockEnabled = false;
+var privacyScreenLockPIN = "";
+var privacyScreenLockIdleMinutes = 5;
+var privacyScreenIdleTimer = null;
+var isPrivacyScreenLocked = false;
+// The options panel's Drop instance, kept so it can be opened from outside a click on its
+// own icon. The Electron shell asks for this when it has no native menu to offer (see
+// app/electron/settings-menu.js); the extension only ever opens it by clicking the icon.
+var incognitoOptionsDrop = null;
 
 if (chrome != undefined) 
 {
 	var browser = chrome;
 }
 
-initialize();
+initializeUI();
 
-function initialize()
+function initializeUI()
 {
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
@@ -33,12 +44,97 @@ function initialize()
         browser.runtime.sendMessage(optionsMessage);
     });
 
+    browser.runtime.sendMessage({ name: "getContactWhitelist" }, function (rules)
+    {
+        if (rules)
+        {
+            document.dispatchEvent(new CustomEvent('onContactWhitelistUpdate', { detail: JSON.stringify(rules) }));
+        }
+    });
+
+    browser.runtime.sendMessage({ name: "getEphemeralNotes" }, function (notes)
+    {
+        if (notes)
+        {
+            ephemeralNotes = notes;
+            document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+        }
+    });
+
+    document.addEventListener('setEphemeralNote', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "setEphemeralNote", jid: data.jid, note: data.note }, function (notes)
+            {
+                if (notes)
+                {
+                    ephemeralNotes = notes;
+                    document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+                }
+            });
+        }
+        catch (err) {}
+    });
+
+    document.addEventListener('deleteEphemeralNote', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "deleteEphemeralNote", jid: data.jid }, function (notes)
+            {
+                if (notes)
+                {
+                    ephemeralNotes = notes;
+                    document.dispatchEvent(new CustomEvent('onEphemeralNotesUpdate', { detail: JSON.stringify(notes) }));
+                }
+            });
+        }
+        catch (err) {}
+    });
+
+    document.addEventListener('setContactWhitelistRule', function (e)
+    {
+        try
+        {
+            var data = JSON.parse(e.detail);
+            browser.runtime.sendMessage({ name: "setContactWhitelistRule", jid: data.jid, rule: data.rule }, function (rules)
+            {
+                if (rules)
+                {
+                    document.dispatchEvent(new CustomEvent('onContactWhitelistUpdate', { detail: JSON.stringify(rules) }));
+                }
+            });
+        }
+        catch (err) {}
+    });
+
     // initialize mutation observer
     var appElem = document.getElementsByTagName("body")[0];
     if (!appElem) return;
-    mutationObserver = new MutationObserver(onMutationsObserved);
 
+    if (document.getElementsByClassName("two").length > 0)
+    {
+        isMainUIInitialized = true;
+        addIconIfNeeded();
+        setTimeout(function () { onMainUIReady(); }, 100);
+    }
+
+    mutationObserver = new MutationObserver(onMutationsObserved);
     mutationObserver.observe(appElem, { childList: true, subtree: true });
+}
+
+function isMessageNode(node)
+{
+    var firstChild = node.firstElementChild || node.childNodes[0];
+    if (firstChild && firstChild.getAttribute)
+    {
+        var testId = firstChild.getAttribute("data-testid");
+        if (testId) return testId.startsWith("conv-msg");
+    }
+    return false;
 }
 
 function onMutationsObserved(mutations)
@@ -47,19 +143,20 @@ function onMutationsObserved(mutations)
     for (var i = 0; i < mutations.length; i++)
     {
         var mutation = mutations[i];
-        var mutationType = mutations[i].type;
-        var addedNodes = mutations[i].addedNodes;
-        var removedNodes = mutations[i].removedNodes;
+        var addedNodes = mutation.addedNodes;
+        var removedNodes = mutation.removedNodes;
 
         // Scan for added nodes
         for (var j = 0; j < addedNodes.length; j++)
         {
             var addedNode = addedNodes[j];
-            if (addedNode.classList == undefined) continue;
+            if (addedNode.nodeType !== 1) continue;
 
-            if (addedNode.getElementsByClassName("two").length > 0)
+            // Bolt: Added `addedNode.firstElementChild` check to short-circuit non-element nodes and avoid unnecessary DOM queries.
+            if (!isMainUIInitialized && (addedNode.classList.contains("two") || (addedNode.firstElementChild && addedNode.getElementsByClassName("two").length > 0)))
             {
                 // main app was added, UI is ready
+                isMainUIInitialized = true;
                 addIconIfNeeded();
                 setTimeout(function () { onMainUIReady(); }, 100);
 
@@ -77,51 +174,40 @@ function onMutationsObserved(mutations)
             }
 
             // Scan for added message nodes and modify if needed
-            function isMessageNode(node)
-            {
-                if (node.childNodes[0] && node.childNodes[0].getAttribute)
-                {
-                    if (node.childNodes[0].getAttribute("data-testid"))
-                        return node.childNodes[0].getAttribute("data-testid").startsWith("conv-msg")
-                }
-
-                return false;
-            }
-            var msgNodes = [];
             if (isMessageNode(addedNode)) {
-                msgNodes.push(addedNode);
+                onNewMessageNodeAdded(addedNode);
             }
-            msgNodes.push(...addedNode.querySelectorAll('[data-testid^="conv-msg"]'));
-
-            for (let i = 0; i < msgNodes.length; i++)
-            {
-                const currentNode = msgNodes[i];
-                onNewMessageNodeAdded(currentNode);
+            if (addedNode.nodeName === "HEADER" || (addedNode.firstElementChild && addedNode.querySelector && addedNode.querySelector("header"))) {
+                document.dispatchEvent(new CustomEvent('onPaneChatOpened', {}));
+            }
+            if (addedNode.firstElementChild && addedNode.querySelectorAll) {
+                var subMsgNodes = addedNode.querySelectorAll('[data-testid^="conv-msg"]');
+                for (var k = 0; k < subMsgNodes.length; k++) {
+                    onNewMessageNodeAdded(subMsgNodes[k]);
+                }
             }
         }
 
         
-        // Remove the menu item when the app is removed
-        for (var j = 0; j < removedNodes.length; j++)
-        {
-            var removedNode = removedNodes[j];
-            if (removedNode.classList == undefined) continue;
-            if (removedNode.classList.contains("two"))
-            {
-                // main app was removed, remove our artifacts
-                var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
-                var dropItem = document.getElementsByClassName("drop")[0];
-                if (menuItem != undefined) menuItem.remove();
-                if (dropItem != undefined) dropItem.remove();
-
-                found = true;
-                break;
-            }
-
-        }
         if (found) break;
     }
 
+    // ⚡ Bolt: Moved unmount check outside of the mutations loop
+    // What: Evaluate live DOM state once per microtask batch instead of per mutation.
+    // Why: Repeatedly querying `getElementsByClassName` on the entire document inside a
+    //      MutationObserver creates an O(N * DOM Size) bottleneck in highly dynamic apps.
+    // Impact: Reduces DOM queries from O(mutations) to O(1) per microtask.
+    // Measurement: App runs measurably faster when handling large batches of added/removed nodes.
+    // Remove the menu item when the app is removed
+    if (isMainUIInitialized && document.getElementsByClassName("two").length === 0)
+    {
+        isMainUIInitialized = false;
+        // main app was removed, remove our artifacts
+        var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
+        var dropItem = document.getElementsByClassName("drop")[0];
+        if (menuItem != undefined) menuItem.remove();
+        if (dropItem != undefined) dropItem.remove();
+    }
 }
 
 function onMainUIReady()
@@ -133,7 +219,140 @@ function onMainUIReady()
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
     // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
+    
+    // Privacy Screen Lock - initialize
+    browser.runtime.sendMessage({ name: "getOptions" }, function (options) {
+        if (options.privacyScreenLockEnabled) {
+            privacyScreenLockEnabled = options.privacyScreenLockEnabled;
+            privacyScreenLockPIN = options.privacyScreenLockPIN;
+            privacyScreenLockIdleMinutes = options.privacyScreenLockIdleMinutes || 5;
+            resetPrivacyScreenIdleTimer();
+            setupPrivacyScreenActivityListeners();
+        }
+    });
+
+    // Listen for options update to dynamically toggle
+    document.addEventListener('onOptionsUpdate', function (e) {
+        var options = JSON.parse(e.detail);
+        if (options.privacyScreenLockEnabled !== undefined) {
+            privacyScreenLockEnabled = options.privacyScreenLockEnabled;
+            privacyScreenLockPIN = options.privacyScreenLockPIN;
+            privacyScreenLockIdleMinutes = options.privacyScreenLockIdleMinutes;
+            
+            if (privacyScreenLockEnabled) {
+                resetPrivacyScreenIdleTimer();
+                setupPrivacyScreenActivityListeners();
+            } else {
+                clearTimeout(privacyScreenIdleTimer);
+                removePrivacyScreenActivityListeners();
+                unlockPrivacyScreen();
+            }
+        }
+    });
 }
+
+function lockPrivacyScreen() {
+    if (isPrivacyScreenLocked || !privacyScreenLockEnabled) return;
+    isPrivacyScreenLocked = true;
+    
+    // Blur main app
+    var app = document.getElementById("app");
+    if (app) app.classList.add("privacy-locked-app");
+    
+    // Create overlay
+    var overlay = document.createElement("div");
+    overlay.id = "incognito-privacy-lock-overlay";
+    overlay.className = "privacy-blur-overlay";
+    
+    var container = document.createElement("div");
+    container.className = "privacy-lock-container";
+    
+    var title = document.createElement("div");
+    title.className = "privacy-lock-title";
+    title.textContent = "WhatsApp is Locked";
+    
+    var input = document.createElement("input");
+    input.type = "password";
+    input.className = "privacy-pin-input";
+    input.maxLength = 4;
+    input.placeholder = "****";
+    
+    var errorLabel = document.createElement("div");
+    errorLabel.className = "privacy-pin-error";
+    errorLabel.id = "incognito-privacy-unlock-error";
+    
+    container.appendChild(title);
+    container.appendChild(input);
+    container.appendChild(errorLabel);
+    overlay.appendChild(container);
+    
+    document.body.appendChild(overlay);
+    
+    // Focus input
+    setTimeout(() => {
+        input.focus();
+    }, 100);
+    
+    // Handle input
+    input.addEventListener("input", async function(e) {
+        var val = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = val;
+        
+        if (val.length === 4) {
+            var hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+            var hashArray = Array.from(new Uint8Array(hashBuffer));
+            var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            if (hashHex === privacyScreenLockPIN || !privacyScreenLockPIN) {
+                unlockPrivacyScreen();
+            } else {
+                errorLabel.textContent = "Incorrect PIN";
+                e.target.value = "";
+                setTimeout(() => { errorLabel.textContent = ""; }, 2000);
+            }
+        }
+    });
+}
+
+function unlockPrivacyScreen() {
+    isPrivacyScreenLocked = false;
+    var overlay = document.getElementById("incognito-privacy-lock-overlay");
+    if (overlay) overlay.remove();
+    var app = document.getElementById("app");
+    if (app) app.classList.remove("privacy-locked-app");
+    resetPrivacyScreenIdleTimer();
+}
+
+function resetPrivacyScreenIdleTimer() {
+    if (!privacyScreenLockEnabled) return;
+    clearTimeout(privacyScreenIdleTimer);
+    if (!isPrivacyScreenLocked) {
+        privacyScreenIdleTimer = setTimeout(lockPrivacyScreen, privacyScreenLockIdleMinutes * 60 * 1000);
+    }
+}
+
+function handlePrivacyScreenActivity(e) {
+    if (e.type === "keydown" && e.altKey && (e.key === "l" || e.key === "L")) {
+        lockPrivacyScreen();
+        return;
+    }
+    resetPrivacyScreenIdleTimer();
+}
+
+function setupPrivacyScreenActivityListeners() {
+    window.addEventListener("mousemove", handlePrivacyScreenActivity);
+    window.addEventListener("keydown", handlePrivacyScreenActivity);
+    window.addEventListener("click", handlePrivacyScreenActivity);
+    window.addEventListener("scroll", handlePrivacyScreenActivity);
+}
+
+function removePrivacyScreenActivityListeners() {
+    window.removeEventListener("mousemove", handlePrivacyScreenActivity);
+    window.removeEventListener("keydown", handlePrivacyScreenActivity);
+    window.removeEventListener("click", handlePrivacyScreenActivity);
+    window.removeEventListener("scroll", handlePrivacyScreenActivity);
+}
+
 
 async function addIconIfNeeded()
 {
@@ -166,6 +385,7 @@ async function addIconIfNeeded()
                 },
             });
             var originalCloseFunction = drop.close;
+            incognitoOptionsDrop = drop;
             drop.close = function ()
             {
                 document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
@@ -184,6 +404,58 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
                 document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
                 document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
+    document.getElementById("incognito-option-stealth-voice-notes").addEventListener("click", onStealthVoiceNotesTick);
+    document.getElementById("incognito-option-media-auto-download-guard").addEventListener("click", onMediaAutoDownloadGuardTick);
+                document.getElementById("incognito-option-privacy-screen-lock").addEventListener("click", onPrivacyScreenLockTick);
+                
+                var privacyPinInput = document.getElementById("incognito-privacy-pin");
+                var privacyIdleInput = document.getElementById("incognito-privacy-idle");
+                
+                if (privacyPinInput) {
+                    privacyPinInput.addEventListener("input", function(e) {
+                        var val = e.target.value.replace(/[^0-9]/g, '');
+                        e.target.value = val;
+                        
+                        var errorLabel = document.getElementById("incognito-privacy-pin-error");
+                        if (val.length > 0 && val.length < 4) {
+                            errorLabel.style.display = "block";
+                        } else {
+                            errorLabel.style.display = "none";
+                            if (val.length === 4) {
+                                // Save hash
+                                async function setPin() {
+                                    var hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+                                    var hashArray = Array.from(new Uint8Array(hashBuffer));
+                                    var hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                                    
+                                    browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockPIN: hashHex });
+                                    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {
+                                        detail: JSON.stringify({ privacyScreenLockPIN: hashHex })
+                                    }));
+                                    
+                                    // Change to dots immediately after saving for UX
+                                    e.target.value = '****';
+                                }
+                                setPin();
+                            }
+                        }
+                    });
+                }
+                
+                if (privacyIdleInput) {
+                    privacyIdleInput.addEventListener("change", function(e) {
+                        var val = parseInt(e.target.value);
+                        if (isNaN(val) || val < 1) val = 1;
+                        if (val > 60) val = 60;
+                        e.target.value = val;
+                        
+                        browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockIdleMinutes: val });
+                        document.dispatchEvent(new CustomEvent('onOptionsUpdate', {
+                            detail: JSON.stringify({ privacyScreenLockIdleMinutes: val })
+                        }));
+                    });
+                }
+
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
                     nextButton.addEventListener("click", onNextButtonClicked);
@@ -207,6 +479,7 @@ async function addIconIfNeeded()
                 document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
                 document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
                 document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
+                document.getElementById("incognito-option-privacy-screen-lock").removeEventListener("click", onPrivacyScreenLockTick);
 
                 for (var nextButton of document.getElementsByClassName('incognito-next-button'))
                 {
@@ -261,6 +534,15 @@ function generateDropContent(options)
     var allowStatusDownloadTitle = "Allow status downloading";
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
+    var stealthVoiceNotesTitle = "Stealth voice notes";
+    var stealthVoiceNotesCaption = "Suppresses \"played\" receipts for voice notes.";
+
+    var mediaAutoDownloadGuardTitle = "Media auto-download guard";
+    var mediaAutoDownloadGuardCaption = "Prevents automatic media downloads; manual 1-click preview.";
+
+    var privacyScreenLockTitle = "Privacy Screen Lock";
+    var privacyScreenLockCaption = "Blurs the screen when idle (or press Alt+L). Set PIN to unlock.";
+
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
@@ -280,6 +562,15 @@ function generateDropContent(options)
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
     var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var stealthVoiceNotesCheckbox = (options.stealthVoiceNotes ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var mediaAutoDownloadGuardCheckbox = (options.mediaAutoDownloadGuard ? "checked incognito-checked'> \
+        <div class='checkmark incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+    var privacyScreenLockCheckbox = (options.privacyScreenLockEnabled ? "checked incognito-checked'> \
         <div class='checkmark incognito-mark incognito-marked'> </div>" :
         "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
 
@@ -372,9 +663,41 @@ function generateDropContent(options)
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
                         </div>
-                        <div class='incognito-options-item' style='cursor: pointer;'>
-                            More options coming soon!
+                        <div id='incognito-option-stealth-voice-notes' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${stealthVoiceNotesCheckbox}
+                                </div>
+                            </div>
+                            ${stealthVoiceNotesTitle}
+                            <div class='incognito-options-description'>${stealthVoiceNotesCaption}</div>
                         </div>
+                        <div id='incognito-option-media-auto-download-guard' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${mediaAutoDownloadGuardCheckbox}
+                                </div>
+                            </div>
+                            ${mediaAutoDownloadGuardTitle}
+                            <div class='incognito-options-description'>${mediaAutoDownloadGuardCaption}</div>
+                        </div>
+                        <div id='incognito-option-privacy-screen-lock' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito' style=''>
+                                <div class='checkbox checkbox checkbox-incognito ${privacyScreenLockCheckbox}
+                                </div>
+                            </div>
+                            ${privacyScreenLockTitle}
+                            <div class='incognito-options-description'>${privacyScreenLockCaption}</div>
+                        </div>
+                        
+                        <div id='incognito-privacy-lock-settings' class='incognito-options-item' style='display: ${options.privacyScreenLockEnabled ? 'block' : 'none'}; cursor: default; padding-top: 0 !important; padding-bottom: 0 !important;'>
+                            <div style='margin-left: 28px; display: flex; align-items: center; gap: 10px; font-size: 12px;'>
+                                <span>PIN:</span>
+                                <input type='password' id='incognito-privacy-pin' value='${options.privacyScreenLockPIN ? '****' : ''}' placeholder='4-digit PIN' maxlength='4' style='width: 80px; padding: 2px 5px; border-radius: 3px; border: 1px solid #ccc; background: var(--WDS-surface-emphasized, #f0f0f0); color: inherit;' />
+                                <span>Idle (min):</span>
+                                <input type='number' id='incognito-privacy-idle' value='${options.privacyScreenLockIdleMinutes}' min='1' max='60' style='width: 45px; padding: 2px 5px; border-radius: 3px; border: 1px solid #ccc; background: var(--WDS-surface-emphasized, #f0f0f0); color: inherit;' />
+                            </div>
+                            <div style='margin-left: 28px; margin-top: 5px; font-size: 11px; opacity: 0.7; color: #ff0000; display: none;' id='incognito-privacy-pin-error'>PIN must be 4 digits.</div>
+                        </div>
+                        
                         <button class='incognito-back-button'>&lt Back</button>
                     </div>
                 </div>
@@ -386,6 +709,37 @@ function generateDropContent(options)
 
     return dropContent;
 }
+
+//
+//    Programmatic access to the options panel
+//
+
+/**
+ * Open the options panel without a click on its icon.
+ *
+ * The panel is anchored to an element injected into WhatsApp's own menu bar, so it exists
+ * only once that anchor was found AND the getOptions round-trip returned. Both can fail —
+ * that is precisely the "temporarily broken" case, where a WhatsApp release renames the menu
+ * item's class. So the honest answer is false, not a silent no-op: the shell uses it to say
+ * "no native menu and no panel either" rather than leaving the user with no way to change a
+ * setting. In the extension nothing calls this; the icon click is the only entry point.
+ *
+ * @returns {boolean} whether the panel is open afterwards
+ */
+function openIncognitoOptions()
+{
+    if (incognitoOptionsDrop == null || typeof incognitoOptionsDrop.open != "function") return false;
+    incognitoOptionsDrop.open();
+    return typeof incognitoOptionsDrop.isOpened == "function" ? incognitoOptionsDrop.isOpened() : true;
+}
+
+// The shim asks for the panel by dispatching this and reading the result straight after.
+// dispatchEvent runs listeners synchronously, so the answer is already there on return —
+// no callback, no polling, and no IPC round-trip to wait on.
+document.addEventListener('onOpenIncognitoOptions', function ()
+{
+    window.__WAI_PANEL_OPEN_RESULT__ = openIncognitoOptions();
+});
 
 document.addEventListener('onMarkAsReadClick', function (e)
 {
@@ -435,22 +789,38 @@ document.addEventListener('onInterceptionWorking', function (e)
     isInterceptionWorking = data.isInterceptionWorking;
 
     // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
+    //
+    // Opened with the version OMITTED, not with a literal 1. IndexedDB treats the version
+    // as a minimum: opening an existing version-2 database as version 1 raises
+    // VersionError, onsuccess never fires, and the "this message was deleted" path
+    // silently finds nothing. Since core/interception.js owns the schema and opens it at
+    // version 2, hardcoding a number here guaranteed a mismatch as soon as the database
+    // was actually in use. Passing undefined opens the current version when it exists, and
+    // creates it at version 1 when it does not — which then gets upgraded by interception.
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs");
+    deletedDBOpenRequest.onsuccess = () =>
     {
         var deletedMsgsDB = deletedDBOpenRequest.result;
         var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
         keys.onsuccess = () => {
-            keys.result.forEach((value) => 
+            keys.result.forEach((value) =>
             {
                 pseudoMsgsIDs.add(value.originalID);
             });
-            document.addEventListener("pseudoMsgs", (e) => 
+            document.addEventListener("pseudoMsgs", (e) =>
             {
                 pseudoMsgsIDs.add(e.detail);
             });
         };
         deletedMsgsDB.close();
+    };
+    // Was absent entirely, so a VersionError or a missing store looked exactly like
+    // "no deleted messages". On a fresh profile the database does not exist yet, so this
+    // is the expected path until interception.js creates it.
+    deletedDBOpenRequest.onerror = () =>
+    {
+        console.log("WhatsIncognito: could not read the deleted messages database; " +
+                    "restoring will be unavailable until it is created");
     };
 });
 
@@ -628,6 +998,32 @@ function onAutoReceiptsTick()
     }));
 }
 
+function onPrivacyScreenLockTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-privacy-screen-lock .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+    var settingsDiv = document.getElementById("incognito-privacy-lock-settings");
+    
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+        if (settingsDiv) settingsDiv.style.display = "block";
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+        if (settingsDiv) settingsDiv.style.display = "none";
+    }
+    browser.runtime.sendMessage({ name: "setOptions", privacyScreenLockEnabled: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ privacyScreenLockEnabled: enabled })
+    }));
+}
+
 function onStatusDownloadingTick()
 {
     var allowStatusDownload = false;
@@ -650,6 +1046,52 @@ function onStatusDownloadingTick()
     document.dispatchEvent(new CustomEvent('onOptionsUpdate',
     {
         detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
+    }));
+}
+
+function onStealthVoiceNotesTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-stealth-voice-notes .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", stealthVoiceNotes: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ stealthVoiceNotes: enabled })
+    }));
+}
+
+function onMediaAutoDownloadGuardTick()
+{
+    var enabled = false;
+    var checkbox = document.querySelector("#incognito-option-media-auto-download-guard .checkbox-incognito");
+    var checkmark = checkbox.firstElementChild;
+
+    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
+    {
+        tickCheckbox(checkbox, checkmark);
+        enabled = true;
+    }
+    else
+    {
+        untickCheckbox(checkbox, checkmark);
+        enabled = false;
+    }
+    browser.runtime.sendMessage({ name: "setOptions", mediaAutoDownloadGuard: enabled });
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
+    {
+        detail: JSON.stringify({ mediaAutoDownloadGuard: enabled })
     }));
 }
 
@@ -729,24 +1171,29 @@ function onSafetyDelayEnabled()
 // Utils
 //
 
+var svgCache = {};
+
 async function generateSVGElement(svgImagePath, clazz="", title="", size=24, role="")
 {
-    var response = await fetch(svgImagePath);
-    var text = await response.text();
-    var viewBoxText = text.split('viewBox="')[1].split('"')[0];
-    var viewboxSize = parseInt(text.split('viewBox="')[1].split(' ')[2]);
+    var cached = svgCache[svgImagePath];
+    if (!cached)
+    {
+        var response = await fetch(svgImagePath);
+        var text = await response.text();
+        var viewBoxMatch = text.match(/viewBox="([^"]+)"/);
+        var viewBoxText = viewBoxMatch ? viewBoxMatch[1] : "0 0 24 24";
+        var dom = new DOMParser().parseFromString(text, 'text/html');
+        var svgHtml = dom.getElementsByTagName("svg")[0]?.innerHTML || "";
+        cached = svgCache[svgImagePath] = { viewBoxText: viewBoxText, svgHtml: svgHtml };
+    }
 
     var menuItemElem = document.createElement("div");
 
     menuItemElem.innerHTML = `<div aria-disabled="false" role="${role}" tabindex="0" class="${clazz}" title="${title}" \
-                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${viewBoxText}" \
+                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${cached.viewBoxText}" \
                             width="${size}" height="${size}" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>`;
-    var path = menuItemElem.getElementsByTagName("path")[0];
     var svg = menuItemElem.getElementsByTagName("svg")[0];
-
-    var dom = new DOMParser().parseFromString(text, 'text/html');
-    var svgHtml = dom.getElementsByTagName("svg")[0].innerHTML;
-    svg.innerHTML = svgHtml;
+    svg.innerHTML = cached.svgHtml;
 
     return menuItemElem;
 }
@@ -754,9 +1201,9 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 function onNewMessageNodeAdded(messageNode)
 {
     var data_id = messageNode.getAttribute("data-id");
-    if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
-    if (data_id == null)
-        debugger;
+    if (!data_id && messageNode.parentElement && messageNode.parentElement.parentElement && messageNode.parentElement.parentElement.parentElement)
+        data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
+    if (data_id == null) return;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 
@@ -769,8 +1216,15 @@ function onNewMessageNodeAdded(messageNode)
     markMessageNodeDeviceIfPossible(messageNode, msgID);
 }
 
-function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+var cachedViewOnceDB = null;
+
+function getViewOnceDB(callback)
 {
+    if (cachedViewOnceDB)
+    {
+        callback(cachedViewOnceDB);
+        return;
+    }
     var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
     viewOnceDBOpenRequest.onupgradeneeded = function (event) 
     {
@@ -782,96 +1236,93 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 
     viewOnceDBOpenRequest.onsuccess = function () 
     {
-        var viewOnceDB = viewOnceDBOpenRequest.result;
-        var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                if (value.id == msgID) 
-                {
-                    // we found a view-once message for this message ID
-                    // mark the message node as view-once
-                    // get the place that we want to place the link
-                    // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
-                    var viewOnceExplanation = null;
-                    // find all div elements in the message node
-                    var aElements = messageNode.getElementsByTagName("a");
-                    // loop through
-                    for (var i = 0; i < aElements.length; i++) 
-                    {
-                        // if the innerHtml indicates it's the "Learn more" link
-                        if (aElements[i].innerHTML.includes("Learn more")) 
-                        {
-                            // set the viewOnceExplanation to the parent div
-                            viewOnceExplanation = aElements[i].parentElement;
-                        }
-                    }
-                    // set innerHTML to empty
-                    viewOnceExplanation.innerHTML = "";
-                    // if value.dataURI starts with "data:image"
-                    if (value.dataURI.startsWith("data:image")) 
-                    {
-                        // create an image elemnt
-                        var img = document.createElement("img");
-                        // set the source to the value.dataURI
-                        img.src = value.dataURI;
-                        // set the width to 100%
-                        img.style.cssText = "width: 100%;";
-                        // append the image to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(img);
-                    } 
-                    else if (value.dataURI.startsWith("data:video")) 
-                    {
-                        // create a video element
-                        var video = document.createElement("video");
-                        // set the controls to true
-                        video.controls = true;
-                        video.src = value.dataURI;
-                        // append the video to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(video);
-                    } else if (value.dataURI.startsWith("data:audio")) {
-                        // create an audio element
-                        var audio = document.createElement("audio");
-                        // set the controls to true
-                        audio.controls = true;
-                        audio.src = value.dataURI;
-                        // append the audio to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(audio);
-                    }
-
-                    // check if there is a caption stored and render it
-                    if(value.caption != null){
-                        var textSpan = document.createElement("span");
-                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
-                        textSpan.style.cssText = textSpanStyle;
-                        textSpan.className = "copyable-text selectable-text";
-                        textSpan.textContent = value.caption;
-                        viewOnceExplanation.appendChild(textSpan);
-                    }
-
-                    // add a learn more link below that opens a sweetalert
-                    var learnMore = document.createElement("a");
-                    // give it the class of incognito-view-once-learn-more so styles can be applied
-                    learnMore.className = "incognito-view-once-learn-more";
-                    learnMore.href = "#";
-                    learnMore.innerHTML = "Sent as view once: Learn more";
-                    learnMore.addEventListener("click", function () {
-                        Swal.fire({
-                            title: "View-once message",
-                            html: 'This message was sent as a view-once. \
-                            <br><br> Note that the recipient\'s device will show this as unopened \
-                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
-                            icon: "info",
-                            width: 600,
-                            confirmButtonColor: "#000",
-                            confirmButtonText: "Got it",
-                        });
-                    });
-                    viewOnceExplanation.appendChild(learnMore);
-                }
-            });
-        };
+        cachedViewOnceDB = viewOnceDBOpenRequest.result;
+        cachedViewOnceDB.onclose = function () { cachedViewOnceDB = null; };
+        callback(cachedViewOnceDB);
     };
+    viewOnceDBOpenRequest.onerror = function () {};
+}
+
+function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+{
+    getViewOnceDB(function (viewOnceDB) 
+    {
+        try
+        {
+            var tx = viewOnceDB.transaction('msgs', "readonly");
+            var req = tx.objectStore("msgs").get(msgID);
+            req.onsuccess = function () 
+            {
+                var value = req.result;
+                if (!value) return;
+
+                // we found a view-once message for this message ID
+                // mark the message node as view-once
+                // get the place that we want to place the link
+                var viewOnceExplanation = null;
+                var aElements = messageNode.getElementsByTagName("a");
+                for (var i = 0; i < aElements.length; i++) 
+                {
+                    if (aElements[i].innerHTML.includes("Learn more")) 
+                    {
+                        viewOnceExplanation = aElements[i].parentElement;
+                    }
+                }
+                if (!viewOnceExplanation) return;
+                viewOnceExplanation.innerHTML = "";
+                if (value.dataURI.startsWith("data:image")) 
+                {
+                    var img = document.createElement("img");
+                    img.src = value.dataURI;
+                    img.style.cssText = "width: 100%;";
+                    viewOnceExplanation.appendChild(img);
+                } 
+                else if (value.dataURI.startsWith("data:video")) 
+                {
+                    var video = document.createElement("video");
+                    video.controls = true;
+                    video.src = value.dataURI;
+                    viewOnceExplanation.appendChild(video);
+                } 
+                else if (value.dataURI.startsWith("data:audio")) 
+                {
+                    var audio = document.createElement("audio");
+                    audio.controls = true;
+                    audio.src = value.dataURI;
+                    viewOnceExplanation.appendChild(audio);
+                }
+
+                if (value.caption != null)
+                {
+                    var textSpan = document.createElement("span");
+                    var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+                    textSpan.style.cssText = textSpanStyle;
+                    textSpan.className = "copyable-text selectable-text";
+                    textSpan.textContent = value.caption;
+                    viewOnceExplanation.appendChild(textSpan);
+                }
+
+                var learnMore = document.createElement("a");
+                learnMore.className = "incognito-view-once-learn-more";
+                learnMore.href = "#";
+                learnMore.innerHTML = "Sent as view once: Learn more";
+                learnMore.addEventListener("click", function () {
+                    Swal.fire({
+                        title: "View-once message",
+                        html: 'This message was sent as a view-once. \
+                        <br><br> Note that the recipient\'s device will show this as unopened \
+                        <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+                        icon: "info",
+                        width: 600,
+                        confirmButtonColor: "#000",
+                        confirmButtonText: "Got it",
+                    });
+                });
+                viewOnceExplanation.appendChild(learnMore);
+            };
+        }
+        catch (e) {}
+    });
 }
 
 // This function gets called on every new message node that gets added to the screen,
@@ -880,13 +1331,17 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
     document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeletedMessageReceived", function(e)
+    
+    function onDeletedMessageReceivedHandler(e)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
         var messageData = data.messageData;
 
         if (messageID != msgID) return;
+
+        clearTimeout(cleanupTimer);
+        document.removeEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
 
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
@@ -936,7 +1391,14 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 
         // Now try to synthesize the message from the DB (best effort)
         tryToSynthesizeMessage(messageSubElement, messageData);
-    });
+    }
+
+    var cleanupTimer = setTimeout(function ()
+    {
+        document.removeEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
+    }, 10000);
+
+    document.addEventListener("onDeletedMessageReceived", onDeletedMessageReceivedHandler);
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1054,8 +1516,8 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 
 function markMessageNodeDeviceIfPossible(messageNode, msgID)
 {
-    var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
-    isOutgoingMessage = messageNode.innerHTML.includes("aria-label=\"You:\"");
+    var isOutgoingMessage = messageNode.classList.contains("message-out") ||
+                            (messageNode.querySelector && messageNode.querySelector('[aria-label="You:"]') !== null);
     if (isOutgoingMessage)
     {
         // we don't want to mark our own messages
@@ -1063,20 +1525,23 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
     }
 
     document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeviceTypeReceived", async function(e)
+
+    function onDeviceTypeReceivedHandler(e)
     {
         var data = JSON.parse(e.detail);
         var messageID = data.messageID;
-
         var deviceType = data.deviceType;
 
         if (messageID != msgID) return;
 
+        clearTimeout(cleanupTimer);
+        document.removeEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
+
         var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
-        if (possibleNodes.length > 0 )
+        if (possibleNodes.length > 0 && possibleNodes[0].childNodes.length > 0)
             messageNode = possibleNodes[0].childNodes[0];
 
-        if (messageNode.getElementsByClassName("device-type-image").length > 0) return;
+        if (!messageNode || messageNode.getElementsByClassName("device-type-image").length > 0) return;
         
         var imageURL = "";
         if (deviceType == "computer")
@@ -1086,20 +1551,29 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         else
             return;
 
-        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
-        imageElement.className = "device-type-image";
-
-        var topMessageNode = messageNode.parentNode.parentNode.parentNode;
-        var previousNode = topMessageNode.previousElementSibling;
-        var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
-
-        if (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details"))
+        generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19).then(function(imageElement)
         {
-            imageElement.className += " below-profile-picture";
-        }
+            imageElement.className = "device-type-image";
 
-        messageNode.insertBefore(imageElement, messageNode.firstChild);
-    });
+            var topMessageNode = messageNode.parentNode && messageNode.parentNode.parentNode && messageNode.parentNode.parentNode.parentNode;
+            var previousNode = topMessageNode ? topMessageNode.previousElementSibling : null;
+            var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
+
+            if (possibleAvatarElement && (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details")))
+            {
+                imageElement.className += " below-profile-picture";
+            }
+
+            messageNode.insertBefore(imageElement, messageNode.firstChild);
+        });
+    }
+
+    var cleanupTimer = setTimeout(function ()
+    {
+        document.removeEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
+    }, 5000);
+
+    document.addEventListener("onDeviceTypeReceived", onDeviceTypeReceivedHandler);
 }
 
 function tickCheckbox(checkbox, checkmark)

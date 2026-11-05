@@ -135,14 +135,23 @@ function getCurrentChatPanel()
     return elements[0];
 }
 
+function getPrefixFromJID(jid)
+{
+    if (!jid) return "";
+    var atIndex = jid.indexOf("@");
+    var prefix = atIndex !== -1 ? jid.substring(0, atIndex) : jid;
+    var colonIndex = prefix.indexOf(":");
+    return colonIndex !== -1 ? prefix.substring(0, colonIndex) : prefix;
+}
+
 function isChatBlocked(jid)
 {
-    var user = jid.split("@")[0].split(":")[0];
+    var user = getPrefixFromJID(jid);
 
-    for (jid in blockedChats)
+    for (var blockedJid in blockedChats)
     {
-        var possibleLid = blockedChats[jid].accountLid ? blockedChats[jid].accountLid.toString() : "";
-        if (jid.split("@")[0].split(":")[0] == user || possibleLid.split("@")[0].split(":")[0] == user)
+        var possibleLid = blockedChats[blockedJid].accountLid ? blockedChats[blockedJid].accountLid.toString() : "";
+        if (getPrefixFromJID(blockedJid) == user || (possibleLid && getPrefixFromJID(possibleLid) == user))
             return true;
     }
 
@@ -151,7 +160,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
-    if (jid == undefined) debugger;
+    if (jid == undefined) console.warn("WhatsIncognito: unexpected condition: jid == undefined");
     jid = normalizeJID(jid);
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
@@ -192,21 +201,29 @@ function getJidOfChat(chat)
 
 function normalizeJID(jid)
 {
-    if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
-    var suffix = jid.split("@")[1];
-    var prefix = jid.split("@")[0].split(":")[0];
+    var atIndex = jid.indexOf("@");
+    var prefix = atIndex !== -1 ? jid.substring(0, atIndex) : jid;
+    var suffix = atIndex !== -1 ? jid.substring(atIndex + 1) : undefined;
+
+    if (suffix === "s.whatsapp.net") suffix = "c.us";
+
+    var colonIndex = prefix.indexOf(":");
+    if (colonIndex !== -1) {
+        prefix = prefix.substring(0, colonIndex);
+    }
 
     return prefix + "@" + suffix;
 }
 
 const arrayBufferToBase64 = (buffer) =>
 {
-    var binary = '';
     var bytes = new Uint8Array(buffer);
     var len = bytes.byteLength;
-    for (var i = 0; i < len; i++)
+    var binary = '';
+    var CHUNK_SIZE = 8192;
+    for (var i = 0; i < len; i += CHUNK_SIZE)
     {
-        binary += String.fromCharCode(bytes[i]);
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, len)));
     }
     return btoa(binary);
 }
@@ -370,7 +387,6 @@ function FindReact(dom, traverseUp = 0)
 
     if (reactElement == null)
     {
-        debugger;
     }
 
     return reactElement;
@@ -467,3 +483,15 @@ function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
 }
+
+// Mobile and Waydroid viewport compatibility
+(function ensureMobileCompatibility() {
+    try {
+        if (typeof document !== 'undefined' && !document.querySelector('meta[name="viewport"]')) {
+            var meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes';
+            (document.head || document.documentElement).appendChild(meta);
+        }
+    } catch (e) {}
+})();

@@ -1,0 +1,81 @@
+#!/bin/sh
+set -e
+
+# Automatically configure the WAIncognito APT repository for updates using modern deb822
+SOURCES_DIR="/etc/apt/sources.list.d"
+SOURCES_FILE="$SOURCES_DIR/waincognito.sources"
+LEGACY_FILE="$SOURCES_DIR/waincognito.list"
+KEYRINGS_DIR="/etc/apt/keyrings"
+TARGET_KEYRING="$KEYRINGS_DIR/waincognito.gpg"
+
+if [ -d "$SOURCES_DIR" ]; then
+    # 1. Clean up legacy one-line entry to prevent duplicate target warnings
+    rm -f "$LEGACY_FILE"
+
+    # 2. Check if a bundled or pre-installed keyring exists
+    KEYRING_FOUND=0
+    for _candidate in \
+        "/opt/waincognito/waincognito.gpg" \
+        "/opt/waincognito/resources/waincognito.gpg" \
+        "/opt/Whatsapp Incognito/waincognito.gpg" \
+        "/opt/Whatsapp Incognito/resources/waincognito.gpg" \
+        "$TARGET_KEYRING"; do
+        if [ -f "$_candidate" ]; then
+            mkdir -p "$KEYRINGS_DIR"
+            if [ "$_candidate" != "$TARGET_KEYRING" ]; then
+                cp "$_candidate" "$TARGET_KEYRING"
+            fi
+            chmod 644 "$TARGET_KEYRING"
+            KEYRING_FOUND=1
+            break
+        fi
+    done
+
+    # 3. Write deb822 stanza with explicit architecture restrictions
+    if [ "$KEYRING_FOUND" -eq 1 ]; then
+        cat << 'EOF' > "$SOURCES_FILE"
+Types: deb
+URIs: https://moodynooby.github.io/whatsapp-web-incognito/apt/
+Suites: stable
+Components: main
+Architectures: amd64 arm64
+Signed-By: /etc/apt/keyrings/waincognito.gpg
+EOF
+    else
+        cat << 'EOF' > "$SOURCES_FILE"
+Types: deb
+URIs: https://moodynooby.github.io/whatsapp-web-incognito/apt/
+Suites: stable
+Components: main
+Architectures: amd64 arm64
+Trusted: yes
+EOF
+    fi
+
+    chmod 644 "$SOURCES_FILE"
+fi
+
+# Fix the Chromium SUID sandbox helper permissions.
+#
+# Why this exists: dpkg installs chrome-sandbox as root:root with mode 755
+# (the permission bits are preserved from the build machine, where the file
+# is unpacked by an unprivileged user and can never be setuid). Chromium
+# requires it to be root-owned with mode 4755; anything else aborts the whole
+# app before its first window — and before its own code runs, so no in-app
+# workaround can save a launch that reaches this state:
+#
+#   [FATAL:sandbox/.../setuid_sandbox_host.cc] The SUID sandbox helper binary
+#   was found, but is not configured correctly. Rather than run without
+#   sandboxing I'm aborting now.
+#
+# That abort is exactly the "clicking the icon does nothing" report: the menu
+# and autostart entries launch the binary with no terminal and no extra flags,
+# so the crash is silent. postinst runs as root on install AND on upgrade, so
+# this repairs already-installed systems as well as fresh ones.
+for _dir in "/opt/Whatsapp Incognito" "/opt/waincognito"; do
+    _sandbox="$_dir/chrome-sandbox"
+    if [ -f "$_sandbox" ]; then
+        chown root:root "$_sandbox"
+        chmod 4755 "$_sandbox"
+    fi
+done

@@ -45,8 +45,15 @@ var wsHook = {};
 				
 			}).catch(function(e)
 			{
-				console.error(e);
-				_send.apply(WSObject, [data]);  
+				console.error("[WAIncognito] wsHook.before failed to process outgoing frame:", e);
+				try
+				{
+					if (typeof window !== "undefined" && window.dispatchEvent)
+					{
+						window.dispatchEvent(new CustomEvent('wai:interception_failure', { detail: { error: String(e && e.message || e), direction: 'outgoing' } }));
+					}
+				}
+				catch (_) {}
 			});
 		}
 
