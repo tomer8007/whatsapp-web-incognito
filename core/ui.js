@@ -15,7 +15,9 @@ var diagnosticsResponses = createResponseRouter(document, "waIncognitoDiagnostic
 // Buttons at the top of the fourth menu page. Features add their entries below their own code.
 var incognitoMenuActions = [
     { id: "diagnostics", label: "🩺 Diagnostik", run: function() { openDiagnosticsModal(); } },
+    { id: "vault", label: "🔒 Vault…", run: function() { openVaultModal(); } },
 ];
+var vaultResponses = createResponseRouter(document, "waIncognitoVaultResult", 120000);
 
 registerUIDiagnostics();
 
@@ -785,6 +787,93 @@ async function openDiagnosticsModal()
     }
 }
 
+//
+// Vault (core/vault.js lives in the page world; the passphrase is sent there through waIncognitoVaultCommand)
+//
+function sendVaultCommand(cmd, passphrase)
+{
+    return new Promise(function(resolve)
+    {
+        var requestId = "vault-" + Date.now() + "-" + Math.random();
+        vaultResponses.waitFor(requestId, resolve);
+        document.dispatchEvent(new CustomEvent("waIncognitoVaultCommand", { detail: JSON.stringify({cmd: cmd, passphrase: passphrase, messageID: requestId}) }));
+    });
+}
+
+var VAULT_THREAT_MODEL_TEXT = "Vault mengenkripsi arsip (pesan terhapus, versi asli pesan yang diedit, pesan sementara, status yang dihapus) " +
+    "yang tersimpan di disk/profil browser. Vault <b>tidak</b> melindungi dari WhatsApp Web sendiri, yang memang memegang isi pesan.";
+
+async function openVaultModal()
+{
+    var result = await sendVaultCommand("status");
+    if (!result.ok || !result.status)
+    {
+        Swal.fire({ title: "Vault tidak tersedia", text: result.error || "Halaman belum siap.", icon: "error" });
+        return;
+    }
+    var status = result.status;
+
+    if (!status.isSetUp)
+    {
+        var setup = await Swal.fire({
+            title: "Buat vault",
+            html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
+                  "<b style='color: #d33'>Lupa passphrase berarti data hilang permanen.</b> Tidak ada pemulihan.<br><br>" +
+                  "Arsip lama yang belum terenkripsi akan dipindahkan ke vault.</div>" +
+                  "<input type='password' id='incognito-vault-pass1' class='swal2-input' placeholder='Passphrase (min. 8 karakter)'>" +
+                  "<input type='password' id='incognito-vault-pass2' class='swal2-input' placeholder='Ulangi passphrase'>",
+            showCancelButton: true,
+            confirmButtonText: "Buat vault",
+            cancelButtonText: "Batal",
+            preConfirm: function()
+            {
+                var pass1 = document.getElementById("incognito-vault-pass1").value;
+                var pass2 = document.getElementById("incognito-vault-pass2").value;
+                if (pass1.length < 8) { Swal.showValidationMessage("Passphrase minimal 8 karakter"); return false; }
+                if (pass1 !== pass2) { Swal.showValidationMessage("Passphrase tidak sama"); return false; }
+                return pass1;
+            },
+        });
+        if (!setup.isConfirmed) return;
+        var setupResult = await sendVaultCommand("setup", setup.value);
+        if (setupResult.ok)
+            Swal.fire({ title: "Vault dibuat", text: setupResult.migrated + " arsip lama dipindahkan ke vault.", icon: "success" });
+        else
+            Swal.fire({ title: "Gagal membuat vault", text: setupResult.error || "", icon: "error" });
+        return;
+    }
+
+    if (!status.isUnlocked)
+    {
+        var unlock = await Swal.fire({
+            title: "Buka vault",
+            html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "</div>",
+            input: "password",
+            inputPlaceholder: "Passphrase",
+            showCancelButton: true,
+            confirmButtonText: "Buka",
+            cancelButtonText: "Batal",
+        });
+        if (!unlock.isConfirmed) return;
+        var unlockResult = await sendVaultCommand("unlock", unlock.value);
+        if (unlockResult.ok)
+            Swal.fire({ title: "Vault terbuka", text: "Buka ulang chat untuk melihat pesan yang tadi terkunci.", icon: "success", timer: 2500 });
+        else
+            Swal.fire({ title: "Passphrase salah", icon: "error" });
+        return;
+    }
+
+    var info = await Swal.fire({
+        title: "Vault terbuka",
+        html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
+              "Isi: " + status.count + " arsip, " + (status.bytes / (1024 * 1024)).toFixed(2) + " MB.</div>",
+        showCancelButton: true,
+        confirmButtonText: "Kunci vault",
+        cancelButtonText: "Tutup",
+    });
+    if (info.isConfirmed) await sendVaultCommand("lock");
+}
+
 function setOptionFromMenu(key, value)
 {
     var message = { name: "setOptions" };
@@ -1024,6 +1113,24 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
     deletedMessageResponses.waitFor(msgID, function(data)
     {
         var messageData = data.messageData;
+
+        if (data.locked)
+        {
+            // archived in the vault, but the vault is locked: show that instead of the content
+            var lockedBubble = messageNode.querySelector(':scope [data-testid] > div');
+            if (lockedBubble) lockedBubble.setAttribute("deleted-message", "true");
+            if (!messageNode.textContent.includes("message was deleted")) return;
+
+            var lockedSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0];
+            if (!lockedSubElement) return;
+            lockedSubElement.textContent = "🔒 Pesan dihapus. Buka vault untuk melihat. ";
+            var unlockButton = document.createElement("button");
+            unlockButton.className = "incognito-vault-unlock-button";
+            unlockButton.textContent = "Buka vault";
+            unlockButton.addEventListener("click", function(e) { e.stopPropagation(); openVaultModal(); });
+            lockedSubElement.appendChild(unlockButton);
+            return;
+        }
 
         var span = document.createElement("span");
         var textSpan = document.createElement("span");

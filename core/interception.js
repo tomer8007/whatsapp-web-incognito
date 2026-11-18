@@ -302,7 +302,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
     }, 1000);
 }
 
-async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID)
+async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID, kind = "deleted")
 {
     // Determine author data
     var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
@@ -353,7 +353,20 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     deletedMsgRecord.lng = deletedMessage.lng;
     deletedMsgRecord.lat = deletedMessage.lat;
 
-    if ("id" in deletedMsgRecord)
+    if ("id" in deletedMsgRecord && await isVaultSetUp())
+    {
+        try
+        {
+            await Vault.put(Object.assign({ kind: kind, ts: Date.now(), chatJid: deletedMsgRecord.Jid }, deletedMsgRecord));
+            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " to the vault.");
+        }
+        catch (e)
+        {
+            console.error("WhatsIncognito: Could not save deleted message to the vault");
+            console.error(e);
+        }
+    }
+    else if ("id" in deletedMsgRecord)
     {
         const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
         let request = transcation.objectStore("msgs").add(deletedMsgRecord);
@@ -548,6 +561,76 @@ function initialize()
     if (WALogs)
         hookLogs();
     initializeDeletedMessagesDB();
+    initializeVault();
+}
+
+//
+// Vault (core/vault.js)
+//
+
+var VAULT_RETENTION_INTERVAL_MS = 60 * 60 * 1000;
+
+function initializeVault()
+{
+    if (typeof Vault == "undefined" || typeof indexedDB == "undefined") return;
+
+    Vault.init({ storage: createIndexedDBVaultStorage(), legacy: createLegacyDeletedMsgsAdapter() });
+    if (typeof Diagnostics != "undefined")
+        Diagnostics.register("vault", "db", "waIncognitoVault", function() { return createIndexedDBVaultStorage.isOpen === true; });
+
+    // on load (once the options arrived) and then every hour
+    setTimeout(runVaultRetention, 30 * 1000);
+}
+
+async function runVaultRetention()
+{
+    try
+    {
+        if (await isVaultSetUp())
+        {
+            var options = window.WAIncognitoOptions || defaultOptions();
+            var removed = await Vault.enforceRetention({ maxDays: options.vaultRetentionDays,
+                                                         maxBytes: options.vaultMaxMB * 1024 * 1024, now: Date.now() });
+            if (removed > 0) console.log("WAIncognito: vault retention removed " + removed + " records");
+        }
+    }
+    catch (e)
+    {
+        console.warn("WAIncognito: vault retention failed");
+        console.warn(e);
+    }
+    setTimeout(runVaultRetention, VAULT_RETENTION_INTERVAL_MS);
+}
+
+async function isVaultSetUp()
+{
+    if (typeof Vault == "undefined") return false;
+    try { return await Vault.isSetUp(); }
+    catch (e) { return false; }
+}
+
+// Saves an archive record (deleted / edit / ephemeral / status) to the vault when it is set up,
+// otherwise to the given plaintext store of the deletedMsgs DB (the old behavior).
+async function saveArchiveRecord(record, legacyStoreName)
+{
+    if (await isVaultSetUp())
+    {
+        await Vault.put(record);
+        return "vault";
+    }
+
+    if (window.deletedMessagesDB == null || !window.deletedMessagesDB.objectStoreNames.contains(legacyStoreName))
+    {
+        console.warn("WAIncognito: archive database is not open, record not saved");
+        return null;
+    }
+
+    return new Promise(function(resolve)
+    {
+        var request = window.deletedMessagesDB.transaction(legacyStoreName, "readwrite").objectStore(legacyStoreName).put(record);
+        request.onsuccess = function() { resolve("legacy"); };
+        request.onerror = function() { console.warn("WAIncognito: could not save archive record"); resolve(null); };
+    });
 }
 
 // the WhatsApp internals the core features depend on (see core/diagnostics.js)

@@ -560,3 +560,14 @@ input[type=number]::-webkit-inner-spin-button {
   opacity: 0.85;
   word-break: break-word;
 }
+
+.incognito-vault-unlock-button
+{
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}

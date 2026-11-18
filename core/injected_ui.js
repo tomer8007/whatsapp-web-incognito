@@ -269,6 +269,25 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
 
+    // the vault (core/vault.js) holds the archive once it is set up
+    if (await isVaultSetUp())
+    {
+        try
+        {
+            if (await Vault.has(msgID))
+            {
+                var reply = Vault.isUnlocked() ? {messageData: await Vault.get(msgID), messageID: msgID} : {locked: true, messageID: msgID};
+                document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify(reply)}));
+                return;
+            }
+        }
+        catch (exception)
+        {
+            console.warn("WAIncognito: vault lookup failed");
+            console.warn(exception);
+        }
+    }
+
     if (window.deletedMessagesDB == null) return;
 
     var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
@@ -299,7 +318,48 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     
 });
 
-document.addEventListener("getDeviceTypeForMessage", async function(e) 
+// Vault commands from the "Vault…" menu (isolated world). The passphrase only travels through this event.
+document.addEventListener("waIncognitoVaultCommand", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = {messageID: data.messageID, ok: false, error: null};
+    try
+    {
+        if (typeof Vault == "undefined") throw new Error("vault not loaded");
+        if (data.cmd == "setup")
+        {
+            await Vault.setup(data.passphrase);
+            reply.migrated = await Vault.migrateFromPlaintextDB();
+            reply.ok = true;
+        }
+        else if (data.cmd == "unlock")
+        {
+            reply.ok = await Vault.unlock(data.passphrase);
+            if (!reply.ok) reply.error = "Passphrase salah";
+        }
+        else if (data.cmd == "lock")
+        {
+            Vault.lock();
+            reply.ok = true;
+        }
+        else if (data.cmd == "status")
+        {
+            reply.ok = true;
+        }
+
+        var isSetUp = await Vault.isSetUp();
+        var stats = isSetUp ? await Vault.stats() : {count: 0, bytes: 0};
+        reply.status = {isSetUp: isSetUp, isUnlocked: Vault.isUnlocked(), count: stats.count, bytes: stats.bytes};
+    }
+    catch (exception)
+    {
+        reply.ok = false;
+        reply.error = String(exception && exception.message ? exception.message : exception);
+    }
+    document.dispatchEvent(new CustomEvent("waIncognitoVaultResult", {detail: JSON.stringify(reply)}));
+});
+
+document.addEventListener("getDeviceTypeForMessage", async function(e)
 {
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
