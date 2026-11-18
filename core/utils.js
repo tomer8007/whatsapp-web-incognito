@@ -476,3 +476,50 @@ function waDebugBreak()
         debugger;
     }
 }
+
+// Returns the first loaded module export named `exportName` (optionally only in modules whose name matches `nameHint`), or null.
+// Uses the Meta module system map (require("__debug").modulesMap). Modules that are not initialized yet are only
+// required when their name matches `nameHint`. Hits are cached; all errors are swallowed.
+var findExportCache = new Map();
+function findExport(exportName, nameHint)
+{
+    var cacheKey = exportName + "|" + (nameHint ? String(nameHint) : "");
+    if (findExportCache.has(cacheKey)) return findExportCache.get(cacheKey);
+
+    var modulesMap = null;
+    try
+    {
+        modulesMap = require("__debug").modulesMap;
+    }
+    catch (e)
+    {
+        return null;
+    }
+    if (!modulesMap) return null;
+
+    var names = Object.keys(modulesMap);
+    for (var i = 0; i < names.length; i++)
+    {
+        var name = names[i];
+        try
+        {
+            var record = modulesMap[name];
+            var exports = record ? record.exports : null;
+            if ((exports == null || typeof exports != "object") && nameHint && nameHint.test(name))
+            {
+                exports = require(name);
+            }
+            if (exports != null && (typeof exports == "object" || typeof exports == "function") && exports[exportName] != null)
+            {
+                findExportCache.set(cacheKey, exports[exportName]);
+                return exports[exportName];
+            }
+        }
+        catch (e)
+        {
+            // module failed to load: skip it
+        }
+    }
+
+    return null;
+}
