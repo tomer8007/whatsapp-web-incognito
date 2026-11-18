@@ -384,7 +384,7 @@ input[type=number]::-webkit-inner-spin-button {
 */
 
 .incognito-blur-chatlist #pane-side [data-testid="cell-frame-title"],
-.incognito-blur-chatlist #pane-side [data-testid="cell-frame-primary-detail"],
+.incognito-blur-chatlist #pane-side [data-testid="last-msg-status"],
 .incognito-blur-messages #main [data-pre-plain-text],
 .incognito-blur-messages #main [role="row"] span.selectable-text,
 .incognito-blur-media #main [role="row"] img[src^="blob:"],
@@ -398,7 +398,7 @@ input[type=number]::-webkit-inner-spin-button {
 }
 
 .incognito-blur-chatlist #pane-side [data-testid="cell-frame-title"]:hover,
-.incognito-blur-chatlist #pane-side [data-testid="cell-frame-primary-detail"]:hover,
+.incognito-blur-chatlist #pane-side [data-testid="last-msg-status"]:hover,
 .incognito-blur-messages #main [data-pre-plain-text]:hover,
 .incognito-blur-messages #main [role="row"] span.selectable-text:hover,
 .incognito-blur-media #main [role="row"] img[src^="blob:"]:hover,

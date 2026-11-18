@@ -10,7 +10,7 @@ var PRIVACY_LOCK_DISCLAIMER = "Kunci ini layar privasi, bukan pengaman data. Unt
 // Verified against the live DOM (2.3000.x): data-testid / role hooks only, no atomic class names.
 var PRIVACY_BLUR_TARGETS = {
     blurChatList: { cls: "incognito-blur-chatlist", selector: '#pane-side [data-testid="cell-frame-title"]',
-        selectors: ['#pane-side [data-testid="cell-frame-title"]', '#pane-side [data-testid="cell-frame-primary-detail"]'] },
+        selectors: ['#pane-side [data-testid="cell-frame-title"]', '#pane-side [data-testid="last-msg-status"]'] },
     blurMessages: { cls: "incognito-blur-messages", selector: '#main [data-pre-plain-text]',
         selectors: ['#main [data-pre-plain-text]', '#main [role="row"] span.selectable-text'] },
     blurMedia:    { cls: "incognito-blur-media",    selector: '#main [role="row"] img[src^="blob:"]',
