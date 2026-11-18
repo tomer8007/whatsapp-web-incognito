@@ -16,6 +16,7 @@ var diagnosticsResponses = createResponseRouter(document, "waIncognitoDiagnostic
 var incognitoMenuActions = [
     { id: "diagnostics", label: "🩺 Diagnostik", run: function() { openDiagnosticsModal(); } },
     { id: "vault", label: "🔒 Vault…", run: function() { openVaultModal(); } },
+    { id: "lock", label: "🔐 Kunci layar…", run: function() { openLockSetupModal(); } },
 ];
 var vaultResponses = createResponseRouter(document, "waIncognitoVaultResult", 120000);
 
@@ -1228,6 +1229,50 @@ async function openScheduleReceiptModal(context)
 
     if (result.isDenied) await receiptScheduler.cancel(jid);
     else if (result.isConfirmed) await receiptScheduler.schedule(jid, result.value);
+}
+
+//
+// Screen lock passcode (core/privacy_screen.js). Only {salt, hash} is stored, in chrome.storage.local["lockPasscode"].
+//
+async function openLockSetupModal()
+{
+    var stored = await chrome.storage.local.get(["lockPasscode"]);
+    var hasPasscode = !!stored.lockPasscode;
+
+    var result = await Swal.fire({
+        title: hasPasscode ? "Kunci layar" : "Buat passcode",
+        html: "<div style='text-align: left; font-size: 14px'>" + escapeHTML(PRIVACY_LOCK_DISCLAIMER) + "<br><br>" +
+              "Aktifkan opsi \"" + escapeHTML(getOptionSchemaEntry("lockEnabled").label) + "\" di menu ini supaya kunci dipakai." +
+              (hasPasscode ? "<br><br>Passcode sudah dibuat. Isi di bawah untuk menggantinya." : "") + "</div>" +
+              "<input type='password' id='incognito-lock-pass1' class='swal2-input' placeholder='Passcode baru (min. 4 karakter)'>" +
+              "<input type='password' id='incognito-lock-pass2' class='swal2-input' placeholder='Ulangi passcode'>",
+        showCancelButton: true,
+        showDenyButton: hasPasscode,
+        denyButtonText: "Kunci sekarang",
+        confirmButtonText: "Simpan passcode",
+        cancelButtonText: "Tutup",
+        preConfirm: function()
+        {
+            var pass1 = document.getElementById("incognito-lock-pass1").value;
+            var pass2 = document.getElementById("incognito-lock-pass2").value;
+            if (pass1.length < 4) { Swal.showValidationMessage("Passcode minimal 4 karakter"); return false; }
+            if (pass1 !== pass2) { Swal.showValidationMessage("Passcode tidak sama"); return false; }
+            return pass1;
+        },
+    });
+
+    if (result.isDenied)
+    {
+        if (window.WAIncognitoLock) window.WAIncognitoLock.lockNow();
+    }
+    else if (result.isConfirmed)
+    {
+        var saltBytes = crypto.getRandomValues(new Uint8Array(16));
+        var salt = btoa(String.fromCharCode.apply(null, saltBytes));
+        var hash = await hashPasscode(result.value, salt);
+        await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
+        Swal.fire({ title: "Passcode disimpan", icon: "success", timer: 2000 });
+    }
 }
 
 function setOptionFromMenu(key, value)
