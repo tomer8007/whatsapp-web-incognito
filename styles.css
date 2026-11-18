@@ -495,3 +495,28 @@ input[type=number]::-webkit-inner-spin-button {
   color: inherit;
   background: transparent;
 }
+
+.incognito-menu-action
+{
+  margin: 6px 0 0 25px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.incognito-diagnostics-table
+{
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.incognito-diagnostics-table td, .incognito-diagnostics-table th
+{
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  padding: 3px 6px;
+  text-align: left;
+}

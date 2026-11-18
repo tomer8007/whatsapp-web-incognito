@@ -10,6 +10,14 @@ var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var deletedMessageResponses = createResponseRouter(document, "onDeletedMessageReceived", 10000);
 var deviceTypeResponses = createResponseRouter(document, "onDeviceTypeReceived", 10000);
+var diagnosticsResponses = createResponseRouter(document, "waIncognitoDiagnosticsResult", 5000);
+
+// Buttons at the top of the fourth menu page. Features add their entries below their own code.
+var incognitoMenuActions = [
+    { id: "diagnostics", label: "🩺 Diagnostik", run: function() { openDiagnosticsModal(); } },
+];
+
+registerUIDiagnostics();
 
 if (chrome != undefined) 
 {
@@ -385,7 +393,7 @@ function generateDropContent(options)
                     <!---- Fourth Page (rendered from core/options_schema.js) ---!>
                     <div class='incognito-options-view' id='incognito-options-view-internal4'>
                         <div class='incognito-options-scroll'>
-                            <div id='incognito-options-actions'></div>
+                            <div id='incognito-options-actions'>${renderMenuActionsHTML()}</div>
                             ${renderSchemaOptionsHTML(options)}
                         </div>
                         <button class='incognito-back-button'>&lt Back</button>
@@ -656,6 +664,14 @@ function bindSchemaOptionsOnce()
 
     page.addEventListener("click", function(e)
     {
+        var actionButton = e.target.closest ? e.target.closest("[data-incognito-action]") : null;
+        if (actionButton)
+        {
+            var action = incognitoMenuActions.find(function(a) { return a.id == actionButton.dataset.incognitoAction; });
+            if (action) action.run();
+            return;
+        }
+
         var item = e.target.closest ? e.target.closest(".incognito-schema-option") : null;
         if (!item) return;
         var checkbox = item.querySelector(".checkbox-incognito");
@@ -674,6 +690,99 @@ function bindSchemaOptionsOnce()
         e.target.value = value;
         setOptionFromMenu(key, value);
     });
+}
+
+function renderMenuActionsHTML()
+{
+    return incognitoMenuActions.map(function(action)
+    {
+        return "<button class='incognito-menu-action' data-incognito-action='" + action.id + "'>" + action.label + "</button>";
+    }).join("");
+}
+
+//
+// Diagnostics (see core/diagnostics.js): this world owns the DOM, so it checks the selectors
+//
+function classSelector(classNames)
+{
+    return "." + classNames.trim().split(/\s+/).join(".");
+}
+
+function registerSelectorDiagnostic(feature, id, selector)
+{
+    Diagnostics.register(feature, "selector", id, function() { return document.querySelectorAll(selector).length; });
+}
+
+function registerUIDiagnostics()
+{
+    var mainClasses = ["MENU_ITEM_CLASS", "CHAT_ENTRY_CLASS", "INNER_CHAT_PANEL_CLASS", "UNREAD_COUNTER_CLASS",
+                       "OUTER_DROPDOWN_CLASS", "DROPDOWN_CLASS", "DROPDOWN_ENTRY_CLASS", "CHAT_MESSAGE_INNER_TEXT_DIV"];
+    mainClasses.forEach(function(name)
+    {
+        if (UIClassNames[name]) registerSelectorDiagnostic("ui", "UIClassNames." + name, classSelector(UIClassNames[name]));
+    });
+    registerSelectorDiagnostic("ui", "message-node", '[data-testid^="conv-msg"]');
+    Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
+}
+
+function requestPageDiagnostics()
+{
+    return new Promise(function(resolve)
+    {
+        var requestId = "diag-" + Date.now() + "-" + Math.random();
+        var done = false;
+        diagnosticsResponses.waitFor(requestId, function(data) { done = true; resolve(data.results || []); });
+        setTimeout(function()
+        {
+            if (!done) resolve([{feature: "core", kind: "hook", id: "page-world", status: "missing", detail: "page world tidak merespons"}]);
+        }, 1500);
+        document.dispatchEvent(new CustomEvent("waIncognitoDiagnosticsRequest", { detail: JSON.stringify({messageID: requestId}) }));
+    });
+}
+
+function escapeHTML(text)
+{
+    return String(text == null ? "" : text).replace(/[&<>"']/g, function(c)
+    {
+        return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c];
+    });
+}
+
+async function openDiagnosticsModal()
+{
+    var results = (await requestPageDiagnostics()).concat(Diagnostics.run());
+    var icons = {ok: "✅", missing: "❌", unseen: "⚪"};
+    var rows = results.map(function(r)
+    {
+        return "<tr><td>" + (icons[r.status] || "") + " " + escapeHTML(r.status) + "</td><td>" + escapeHTML(r.feature) +
+               "</td><td>" + escapeHTML(r.kind) + "</td><td style='word-break: break-all'>" + escapeHTML(r.id) + "</td></tr>";
+    }).join("");
+
+    var result = await Swal.fire({
+        title: "Diagnostik",
+        html: "<div style='text-align: left; font-size: 12px'>" +
+              "⚪ <i>unseen</i> berarti elemen/aksi itu belum muncul di layar, belum tentu rusak.<br><br>" +
+              "<div style='max-height: 50vh; overflow-y: auto'><table class='incognito-diagnostics-table'>" +
+              "<tr><th>Status</th><th>Fitur</th><th>Jenis</th><th>Dependensi</th></tr>" + rows + "</table></div></div>",
+        width: 760,
+        showCancelButton: true,
+        confirmButtonText: "Salin laporan",
+        cancelButtonText: "Tutup",
+    });
+
+    if (result.isConfirmed)
+    {
+        var report = Diagnostics.report(results);
+        try
+        {
+            await navigator.clipboard.writeText(report);
+            Swal.fire({ title: "Laporan disalin", text: "Laporan tidak memuat isi pesan atau JID.", icon: "success", timer: 2000 });
+        }
+        catch (e)
+        {
+            Swal.fire({ title: "Salin manual", html: "<textarea style='width: 100%; height: 200px'>" + escapeHTML(report) + "</textarea>" });
+        }
+    }
 }
 
 function setOptionFromMenu(key, value)

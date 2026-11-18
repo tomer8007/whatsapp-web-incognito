@@ -26,7 +26,8 @@ var WAPassthrough = false;
 var WAPassthroughWithDebug = false;
 
 initialize();
- 
+registerCoreDiagnostics();
+
 //
 // a WebSocket frame is about to be sent out.
 //
@@ -506,6 +507,23 @@ function initialize()
     if (WALogs)
         hookLogs();
     initializeDeletedMessagesDB();
+}
+
+// the WhatsApp internals the core features depend on (see core/diagnostics.js)
+function registerCoreDiagnostics()
+{
+    if (typeof Diagnostics == "undefined") return;
+
+    // every require() in exposeWhatsAppAPI, plus the logger hooks
+    var modules = ["WAWebDownloadManager", "WAWebChatCollection", "WAWebUpdateUnreadChatAction", "WAComms",
+        "WAWebChatLoadMessages", "WASendPresenceStatusProtocol", "WAWebSignalProtocolStore", "WAWebSignalCommonUtils",
+        "WAWebWidFactory", "WAWebWidToJid", "WALogger", "WALoggerUtils"];
+    modules.forEach(function(name)
+    {
+        Diagnostics.register("core", "module", name, function() { return require(name) != null; });
+    });
+    Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
+    Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
 }
 
 function hookLogs()

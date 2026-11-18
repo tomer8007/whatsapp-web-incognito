@@ -9,6 +9,15 @@ document.addEventListener('onMainUIReady', function (e)
     setTimeout(exposeWhatsAppAPI, 100);
 });
 
+// the isolated world (ui.js) asks for the page-world half of the diagnostics
+document.addEventListener('waIncognitoDiagnosticsRequest', function (e)
+{
+    var data = JSON.parse(e.detail);
+    var results = [];
+    try { results = Diagnostics.run(); } catch (exception) { console.error(exception); }
+    document.dispatchEvent(new CustomEvent('waIncognitoDiagnosticsResult', { detail: JSON.stringify({messageID: data.messageID, results: results}) }));
+});
+
 document.addEventListener('onPresenceOptionTicked', function (e)
 {
     WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"unavailable"})
