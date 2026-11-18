@@ -27,6 +27,9 @@ var chatMenuEntriesShown = 0;
 var ephemeralResponses = createResponseRouter(document, "onEphemeralForChatReceived", 10000);
 var ephemeralMediaResponses = createResponseRouter(document, "onEphemeralMediaReceived", 60000);
 
+var contactRulesCache = {};
+
+chatMenuEntries.push({ id: "contact-privacy", label: "Privasi kontak ini…", run: function(context) { openContactPrivacyModal(context); } });
 chatMenuEntries.push({ id: "ephemeral", label: "Pesan sementara tersimpan", run: function(context) { openEphemeralModal(context); } });
 var editHistoryResponses = createResponseRouter(document, "onEditHistoryReceived", 10000);
 
@@ -54,6 +57,8 @@ function initialize()
         optionsMessage.name = "setOptions";
         browser.runtime.sendMessage(optionsMessage);
     });
+
+    loadAndPushContactRules();
 
     // initialize mutation observer
     var appElem = document.getElementsByTagName("body")[0];
@@ -151,6 +156,7 @@ function onMutationsObserved(mutations)
 function onMainUIReady()
 {
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
+    loadAndPushContactRules(); // the page world may not have been listening yet at startup
 
     setTimeout(checkInterception, 1000);
 
@@ -1095,6 +1101,68 @@ async function openEphemeralModal(context)
             });
         },
     });
+}
+
+//
+// Per-contact privacy (core/contact_rules.js). Rules live in chrome.storage.local["contactRules"] (background.js)
+// and are pushed to the page world with onContactRulesUpdate.
+//
+function pushContactRules(rules)
+{
+    contactRulesCache = rules || {};
+    document.dispatchEvent(new CustomEvent("onContactRulesUpdate", { detail: JSON.stringify(contactRulesCache) }));
+}
+
+function loadAndPushContactRules()
+{
+    browser.runtime.sendMessage({ name: "getContactRules" }, function(rules) { pushContactRules(rules); });
+}
+
+function sendBackgroundMessage(message)
+{
+    return new Promise(function(resolve) { browser.runtime.sendMessage(message, resolve); });
+}
+
+function contactRuleOptionsHTML(selected)
+{
+    var labels = { "default": "Default (ikut pengaturan global)", "block": "Blokir", "allow": "Izinkan" };
+    return ["default", "block", "allow"].map(function(value)
+    {
+        return "<option value='" + value + "'" + (value == selected ? " selected" : "") + ">" + labels[value] + "</option>";
+    }).join("");
+}
+
+async function openContactPrivacyModal(context)
+{
+    var current = {};
+    context.jids.forEach(function(jid) { current = Object.assign(current, contactRulesCache[jid] || {}); });
+
+    var result = await Swal.fire({
+        title: "Privasi kontak ini",
+        html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
+              "Centang biru<br><select id='incognito-contact-read' class='swal2-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
+              "Status mengetik<br><select id='incognito-contact-typing' class='swal2-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
+              "<span style='font-size: 12px; opacity: 0.8'>Status online tidak bisa diatur per kontak: WhatsApp tidak punya status online per kontak, jadi tetap mengikuti pengaturan global.</span></div>",
+        showCancelButton: true,
+        confirmButtonText: "Simpan",
+        cancelButtonText: "Batal",
+        preConfirm: function()
+        {
+            return { readReceipts: document.getElementById("incognito-contact-read").value, typing: document.getElementById("incognito-contact-typing").value };
+        },
+    });
+    if (!result.isConfirmed) return;
+
+    // stored under every known form of the contact's JID (pn and lid)
+    var rules = contactRulesCache;
+    for (var i = 0; i < context.jids.length; i++)
+    {
+        for (var field of ["readReceipts", "typing"])
+        {
+            rules = await sendBackgroundMessage({ name: "setContactRule", jid: context.jids[i], field: field, value: result.value[field] });
+        }
+    }
+    pushContactRules(rules);
 }
 
 function setOptionFromMenu(key, value)

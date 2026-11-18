@@ -26,6 +26,20 @@ NodeHandler.interceptOutgoingNode = async function (node)
     return [true, node];
 }
 
+// The global setting, unless a rule for this contact (pn or lid form) says otherwise.
+NodeHandler.isBlockedForContact = function (jid, field, globalBlocked)
+{
+    if (!jid || typeof resolveRule != "function") return globalBlocked;
+    try
+    {
+        return resolveRule(contactRules, jidCandidates(jid, lidPnMap), field, globalBlocked);
+    }
+    catch (exception)
+    {
+        return globalBlocked;
+    }
+}
+
 NodeHandler.isSentNodeAllowed = function (node)
 {
     var action = node.tag;
@@ -34,15 +48,20 @@ NodeHandler.isSentNodeAllowed = function (node)
     var jid = data.jid ? data.jid : data.to;
     if (jid) jid = normalizeJID(jid.toString());
 
+    // read receipts and typing can be overridden per contact (core/contact_rules.js). Online presence stays global.
+    var readBlocked = NodeHandler.isBlockedForContact(jid, "readReceipts", readConfirmationsHookEnabled);
+    var typingBlocked = NodeHandler.isBlockedForContact(jid, "typing", typingUpdatesHookEnabled);
+    var explicitReadBlock = NodeHandler.isBlockedForContact(jid, "readReceipts", false);
+
     var shouldBlock = 
-        (readConfirmationsHookEnabled && action === "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (readBlocked && action === "read") ||
+        (readBlocked && action == "receipt" && data["type"] == "read") ||
+        (readBlocked && action == "receipt" && data["type"] == "read-self") ||
+        (readBlocked && action == "receipt" && data["type"] === "played" && (isChatBlocked(jid) || explicitReadBlock)) ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-        (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-        (typingUpdatesHookEnabled && action == "chatstate" && node.content[0].tag == "composing");
+        (typingBlocked && action == "presence" && data["type"] == "composing") ||
+        (typingBlocked && action == "chatstate" && node.content[0].tag == "composing");
 
     if (shouldBlock)
     {
@@ -213,6 +232,14 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
     var participant = messageNode.attrs["participant"];
     participant = participant ? participant : remoteJid;
     participant = participant.toString();
+
+    // remember which lid belongs to which phone number (per-contact rules can be stored under either)
+    try
+    {
+        if (messageNode.attrs["sender_pn"] != null && typeof rememberLidPair == "function")
+            rememberLidPair(lidPnMap, remoteJid.toString(), messageNode.attrs["sender_pn"].toString());
+    }
+    catch (exception) { /* best effort */ }
 
     // check for device type
     var looksLikePhone = participant.includes(":0@") || !participant.includes(":");

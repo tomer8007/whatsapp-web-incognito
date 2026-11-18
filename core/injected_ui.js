@@ -145,7 +145,7 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     {
         markChatAsPendingReciptsSending(chat);
     }
-    else if (readConfirmationsHookEnabled && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
+    else if ((readConfirmationsHookEnabled || NodeHandler.isBlockedForContact(blockedJid, "readReceipts", false)) && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
     {
         markChatAsBlocked(chat);
     }

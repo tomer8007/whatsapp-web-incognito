@@ -1,0 +1,160 @@
+const test = require("node:test");
+const assert = require("node:assert");
+const { createSandbox, loadScripts } = require("./helpers/sandbox");
+
+function loadRules() {
+    return loadScripts(createSandbox(), ["core/utils.js", "core/contact_rules.js"]);
+}
+
+test("resolveRule: default follows the global setting", () => {
+    const { resolveRule } = loadRules();
+    assert.strictEqual(resolveRule({}, ["1@c.us"], "readReceipts", true), true);
+    assert.strictEqual(resolveRule({}, ["1@c.us"], "readReceipts", false), false);
+    assert.strictEqual(resolveRule({ "1@c.us": { readReceipts: "default" } }, ["1@c.us"], "readReceipts", true), true);
+});
+
+test("resolveRule: block and allow override the global setting", () => {
+    const { resolveRule } = loadRules();
+    const rules = { "1@c.us": { readReceipts: "block", typing: "allow" } };
+    assert.strictEqual(resolveRule(rules, ["1@c.us"], "readReceipts", false), true, "block beats global off");
+    assert.strictEqual(resolveRule(rules, ["1@c.us"], "typing", true), false, "allow beats global on");
+    assert.strictEqual(resolveRule(rules, ["2@c.us"], "readReceipts", false), false, "other contacts follow global");
+});
+
+test("resolveRule: the field is independent, and any candidate (pn or lid) can match", () => {
+    const { resolveRule } = loadRules();
+    const rules = { "99@lid": { typing: "block" } };
+    assert.strictEqual(resolveRule(rules, ["1@c.us", "99@lid"], "typing", false), true);
+    assert.strictEqual(resolveRule(rules, ["1@c.us", "99@lid"], "readReceipts", false), false);
+    assert.strictEqual(resolveRule(null, ["1@c.us"], "typing", true), true, "no rules at all");
+});
+
+test("jidCandidates normalizes and adds the counterpart from the lid/pn map", () => {
+    const sandbox = loadRules();
+    const map = new Map();
+    map.set("99@lid", "628@c.us");
+    map.set("628@c.us", "99@lid");
+    assert.deepStrictEqual([...sandbox.jidCandidates("99:5@lid", map)], ["99@lid", "628@c.us"]);
+    assert.deepStrictEqual([...sandbox.jidCandidates("628@s.whatsapp.net", map)], ["628@c.us", "99@lid"]);
+    assert.deepStrictEqual([...sandbox.jidCandidates("777@c.us", map)], ["777@c.us"]);
+    assert.deepStrictEqual([...sandbox.jidCandidates(null, map)], []);
+});
+
+test("rememberLidPair stores both directions", () => {
+    const sandbox = loadRules();
+    const map = new Map();
+    sandbox.rememberLidPair(map, "99:2@lid", "628@s.whatsapp.net");
+    assert.strictEqual(map.get("99@lid"), "628@c.us");
+    assert.strictEqual(map.get("628@c.us"), "99@lid");
+    sandbox.rememberLidPair(map, null, "628@s.whatsapp.net"); // nothing to pair
+    assert.strictEqual(map.size, 2);
+});
+
+test("applyContactRule sets a field, drops default fields and empty contacts", () => {
+    const { applyContactRule } = loadRules();
+    let rules = applyContactRule({}, "1@c.us", "typing", "block");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { typing: "block" } });
+    rules = applyContactRule(rules, "1@c.us", "readReceipts", "allow");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { typing: "block", readReceipts: "allow" } });
+    rules = applyContactRule(rules, "1@c.us", "typing", "default");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { readReceipts: "allow" } });
+    rules = applyContactRule(rules, "1@c.us", "readReceipts", "default");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), {});
+});
+
+test("applyContactRule ignores invalid fields and values", () => {
+    const { applyContactRule } = loadRules();
+    const rules = { "1@c.us": { typing: "block" } };
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "online", "block"))), rules);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "typing", "maybe"))), rules);
+});
+
+// ---- NodeHandler.isSentNodeAllowed with contact rules ----
+
+function loadHandlerWithRules(rules, globals = {}) {
+    const sandbox = createSandbox({ deepClone: (o) => JSON.parse(JSON.stringify(o)), Message: { ProtocolMessage: { Type: { REVOKE: { value: 0 } } } } });
+    loadScripts(sandbox, ["core/utils.js", "core/contact_rules.js", "core/node_handler.js", "core/interception.js"]);
+    sandbox.__timers.length = 0;
+    sandbox.WhatsAppAPI = {};
+    Object.assign(sandbox, globals);
+    sandbox.contactRules = rules;
+    return sandbox;
+}
+
+const readNode = (jid) => ({ tag: "receipt", attrs: { type: "read", to: jid }, content: [] });
+const typingNode = (jid) => ({ tag: "chatstate", attrs: { to: jid }, content: [{ tag: "composing" }] });
+const playedNode = (jid) => ({ tag: "receipt", attrs: { type: "played", to: jid }, content: [] });
+
+test("isSentNodeAllowed: a contact set to allow gets read receipts even when blocking globally", () => {
+    const s = loadHandlerWithRules({ "111@c.us": { readReceipts: "allow" } });
+    s.readConfirmationsHookEnabled = true;
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(readNode("111@s.whatsapp.net")), true);
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(readNode("222@s.whatsapp.net")), false, "others stay blocked");
+});
+
+test("isSentNodeAllowed: a contact set to block gets no receipts even when globally allowed", () => {
+    const s = loadHandlerWithRules({ "111@c.us": { readReceipts: "block" } });
+    s.readConfirmationsHookEnabled = false;
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(readNode("111@s.whatsapp.net")), false);
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(readNode("222@s.whatsapp.net")), true);
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(playedNode("111@s.whatsapp.net")), false, "played is blocked for an explicit block");
+});
+
+test("isSentNodeAllowed: typing follows the contact rule", () => {
+    const s = loadHandlerWithRules({ "111@c.us": { typing: "block" }, "222@c.us": { typing: "allow" } });
+    s.typingUpdatesHookEnabled = false;
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(typingNode("111@s.whatsapp.net")), false);
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(typingNode("333@s.whatsapp.net")), true);
+    s.typingUpdatesHookEnabled = true;
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(typingNode("222@s.whatsapp.net")), true);
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(typingNode("333@s.whatsapp.net")), false);
+});
+
+test("isSentNodeAllowed: the online presence stays global", () => {
+    const s = loadHandlerWithRules({ "111@c.us": { readReceipts: "allow", typing: "allow" } });
+    s.onlineUpdatesHookEnabled = true;
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed({ tag: "presence", attrs: { type: "available", to: "111@s.whatsapp.net" }, content: [] }), false);
+});
+
+test("isSentNodeAllowed: a rule stored under the lid matches through the lid/pn map", () => {
+    const s = loadHandlerWithRules({ "99@lid": { readReceipts: "allow" } });
+    s.readConfirmationsHookEnabled = true;
+    s.rememberLidPair(s.lidPnMap, "99@lid", "111@s.whatsapp.net");
+    assert.strictEqual(s.NodeHandler.isSentNodeAllowed(readNode("111@s.whatsapp.net")), true);
+});
+
+test("onReceivedMessageNode remembers the lid/pn pair of the sender", async () => {
+    const s = loadHandlerWithRules({});
+    s.MultiDevice = { decryptE2EMessagesFromMessageNode: async () => [] };
+    await s.NodeHandler.onReceivedMessageNode({ tag: "message", attrs: { id: "M", from: "99@lid", sender_pn: "628@s.whatsapp.net" }, content: [] });
+    assert.strictEqual(s.lidPnMap.get("99@lid"), "628@c.us");
+});
+
+// ---- background messages ----
+
+function loadBackground(stored = {}) {
+    const store = { ...stored };
+    let listener = null;
+    const chrome = {
+        storage: { local: {
+            set: async (items) => { Object.assign(store, items); },
+            get: async (keys) => Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]])),
+        } },
+        runtime: { onMessage: { addListener: (fn) => { listener = fn; } } },
+        action: { onClicked: { addListener() {} } },
+        tabs: { create() {} },
+    };
+    const sandbox = createSandbox({ chrome });
+    sandbox.importScripts = (...paths) => loadScripts(sandbox, paths);
+    loadScripts(sandbox, ["background.js"]);
+    return { store, send: (message) => new Promise((resolve) => listener(message, {}, resolve)) };
+}
+
+test("background: getContactRules returns {} by default and setContactRule persists", async () => {
+    const bg = loadBackground();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(await bg.send({ name: "getContactRules" }))), {});
+    const rules = await bg.send({ name: "setContactRule", jid: "1@c.us", field: "typing", value: "block" });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { typing: "block" } });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(bg.store.contactRules)), { "1@c.us": { typing: "block" } });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(await bg.send({ name: "getContactRules" }))), { "1@c.us": { typing: "block" } });
+});

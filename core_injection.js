@@ -19,6 +19,7 @@ async function injectScripts()
 	await injectScript('core/options_schema.js');
 	await injectScript('core/diagnostics.js');
 	await injectScript('core/vault.js');
+	await injectScript('core/contact_rules.js');
 	await injectScript('core/edit_tracker.js');
 	await injectScript('core/ephemeral_keeper.js');
 	await injectScript('core/chat_menu_context.js');
