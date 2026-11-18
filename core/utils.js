@@ -151,7 +151,7 @@ function isChatBlocked(jid)
 
 async function getChatByJID(jid)
 {
-    if (jid == undefined) debugger;
+    if (jid == undefined) waDebugBreak();
     jid = normalizeJID(jid);
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
@@ -370,7 +370,7 @@ function FindReact(dom, traverseUp = 0)
 
     if (reactElement == null)
     {
-        debugger;
+        waDebugBreak();
     }
 
     return reactElement;
@@ -466,4 +466,13 @@ function base64ToArrayBuffer(base64)
 function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
+}
+
+// Pauses in the debugger only in debug mode (type `WAdebugMode = true` in the console).
+function waDebugBreak()
+{
+    if (window.WAdebugMode)
+    {
+        debugger;
+    }
 }

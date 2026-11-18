@@ -71,7 +71,7 @@ wsHook.before = function (originalData, url)
         var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
         if (!looksEqual && isAllowed)
         {
-            debugger;
+            waDebugBreak();
         }
 
         if (isInitializing)
@@ -454,7 +454,7 @@ async function decryptE2EMessagesFromNode(node)
     {
         console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
         console.error(exception);
-        debugger;
+        waDebugBreak();
     }
 }
 
@@ -631,7 +631,6 @@ function initializeDeletedMessagesDB()
     {
         // triggers if the client had no database
         // ...perform initialization...
-        debugger;
 
         // Get a reference to the request related to this event
         // @type IDBOpenRequest (a specialized type of IDBRequest)
@@ -689,7 +688,7 @@ async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
     var looksGood = isEqualArray(new Uint8Array(decryptedFrameOpened), encodedNodeData.slice(1));
     if (!looksGood && !isIncoming)
     {
-        debugger;
+        waDebugBreak();
     }
     if (!looksGood && isIncoming)
     {

@@ -755,8 +755,7 @@ function onNewMessageNodeAdded(messageNode)
 {
     var data_id = messageNode.getAttribute("data-id");
     if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
-    if (data_id == null)
-        debugger;
+    if (data_id == null) return;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
 
