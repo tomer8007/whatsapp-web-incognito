@@ -846,20 +846,28 @@ async function isMessageArchived(messageId)
 }
 
 // Sends a text message through WhatsApp's own send function (found with findExport). -> {ok, error?}. Never throws.
-// Unverified without a live WhatsApp Web: sendTextMsgToChat(chat, text), or addAndSendMsgToChat(chat, message) as a fallback.
+// In the live build (2.3000.x) the exports sit in lazily loaded modules, so the lookup needs a name hint to force the require:
+//   WAWebSendTextMsgChatAction.sendTextMsgToChat(chat, text, options)   (arity 3, preferred)
+//   WAWebSendMsgChatAction.addAndSendMsgToChat(chat, message, options)  (fallback)
+// The call itself was never exercised against a real chat (signature only inspected).
+var SEND_TEXT_MODULE_HINT = /SendTextMsgChatAction/;
+var SEND_MSG_MODULE_HINT = /SendMsgChatAction/;
+function findSendTextFunction() { return findExport("sendTextMsgToChat", SEND_TEXT_MODULE_HINT); }
+function findAddAndSendFunction() { return findExport("addAndSendMsgToChat", SEND_MSG_MODULE_HINT); }
+
 async function sendTextToChat(jid, text)
 {
     try
     {
-        var sendText = findExport("sendTextMsgToChat");
-        var addAndSend = sendText ? null : findExport("addAndSendMsgToChat");
+        var sendText = findSendTextFunction();
+        var addAndSend = sendText ? null : findAddAndSendFunction();
         if (!sendText && !addAndSend) return { ok: false, error: "send function not found" };
 
         var chat = await getChatByJID(jid);
         if (!chat) return { ok: false, error: "chat not found" };
 
-        if (sendText) await sendText(chat, text);
-        else await addAndSend(chat, { type: "chat", body: text, t: Math.floor(Date.now() / 1000), local: true, isNewMsg: true });
+        if (sendText) await sendText(chat, text, {});
+        else await addAndSend(chat, { type: "chat", body: text, t: Math.floor(Date.now() / 1000), local: true, isNewMsg: true }, {});
         return { ok: true };
     }
     catch (e)
@@ -884,8 +892,8 @@ function registerCoreDiagnostics()
     Diagnostics.register("status", "module", "WAWebStatusCollection", function() { return getStatusCollection() != null; });
     Diagnostics.register("status", "module", "downloadManager (bulk status)", function() { return window.WhatsAppAPI != null && WhatsAppAPI.downloadManager != null; });
     Diagnostics.register("status", "hook", "status-viewer-id", function() { return statusViewerIdResolutions; });
-    Diagnostics.register("send", "export", "sendTextMsgToChat", function() { return findExport("sendTextMsgToChat") != null; });
-    Diagnostics.register("send", "export", "addAndSendMsgToChat", function() { return findExport("addAndSendMsgToChat") != null; });
+    Diagnostics.register("send", "export", "sendTextMsgToChat", function() { return findSendTextFunction() != null; });
+    Diagnostics.register("send", "export", "addAndSendMsgToChat", function() { return findAddAndSendFunction() != null; });
     Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
     Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
     Diagnostics.register("archive", "db", "deletedMsgs v3 stores", function()
