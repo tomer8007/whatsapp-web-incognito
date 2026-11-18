@@ -845,6 +845,29 @@ async function isMessageArchived(messageId)
     }
 }
 
+// Sends a text message through WhatsApp's own send function (found with findExport). -> {ok, error?}. Never throws.
+// Unverified without a live WhatsApp Web: sendTextMsgToChat(chat, text), or addAndSendMsgToChat(chat, message) as a fallback.
+async function sendTextToChat(jid, text)
+{
+    try
+    {
+        var sendText = findExport("sendTextMsgToChat");
+        var addAndSend = sendText ? null : findExport("addAndSendMsgToChat");
+        if (!sendText && !addAndSend) return { ok: false, error: "send function not found" };
+
+        var chat = await getChatByJID(jid);
+        if (!chat) return { ok: false, error: "chat not found" };
+
+        if (sendText) await sendText(chat, text);
+        else await addAndSend(chat, { type: "chat", body: text, t: Math.floor(Date.now() / 1000), local: true, isNewMsg: true });
+        return { ok: true };
+    }
+    catch (e)
+    {
+        return { ok: false, error: String(e && e.message ? e.message : e) };
+    }
+}
+
 // the WhatsApp internals the core features depend on (see core/diagnostics.js)
 function registerCoreDiagnostics()
 {
@@ -861,6 +884,8 @@ function registerCoreDiagnostics()
     Diagnostics.register("status", "module", "WAWebStatusCollection", function() { return getStatusCollection() != null; });
     Diagnostics.register("status", "module", "downloadManager (bulk status)", function() { return window.WhatsAppAPI != null && WhatsAppAPI.downloadManager != null; });
     Diagnostics.register("status", "hook", "status-viewer-id", function() { return statusViewerIdResolutions; });
+    Diagnostics.register("send", "export", "sendTextMsgToChat", function() { return findExport("sendTextMsgToChat") != null; });
+    Diagnostics.register("send", "export", "addAndSendMsgToChat", function() { return findExport("addAndSendMsgToChat") != null; });
     Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
     Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
     Diagnostics.register("archive", "db", "deletedMsgs v3 stores", function()

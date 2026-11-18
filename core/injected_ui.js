@@ -397,6 +397,14 @@ document.addEventListener("downloadEphemeralMedia", async function(e)
     document.dispatchEvent(new CustomEvent("onEphemeralMediaReceived", { detail: JSON.stringify(reply) }));
 });
 
+// A scheduled message is due (core/send_scheduler.js, isolated world)
+document.addEventListener("waIncognitoSendText", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var result = await sendTextToChat(data.jid, data.text);
+    document.dispatchEvent(new CustomEvent("onSendTextResult", { detail: JSON.stringify({ id: data.id, messageID: data.id, ok: result.ok, error: result.error || null }) }));
+});
+
 // The original versions of an edited message (core/edit_tracker.js), asked for by the "↺ asli" button
 document.addEventListener("getEditHistory", async function(e)
 {

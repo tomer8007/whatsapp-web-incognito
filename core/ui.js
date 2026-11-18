@@ -37,6 +37,17 @@ var receiptScheduler = createReceiptScheduler({
     send: function(jid) { document.dispatchEvent(new CustomEvent("sendReadConfirmationForJid", { detail: JSON.stringify({ jid: jid }) })); },
 });
 var receiptSchedulerRestored = false;
+var sendTextResponses = createResponseRouter(document, "onSendTextResult", 35000);
+var sendScheduler = createSendScheduler({
+    now: function() { return Date.now(); },
+    setTimer: function(fn, ms) { return setTimeout(fn, ms); },
+    clearTimer: function(handle) { clearTimeout(handle); },
+    store: createChromeListStore("scheduledMessages"),
+    send: function(message) { return sendTextViaPageWorld(message); },
+    onOverdue: function(items) { askAboutOverdueMessages(items); },
+});
+
+chatMenuEntries.push({ id: "schedule-message", label: "Jadwalkan pesan…", run: function(context) { openScheduleMessageModal(context); } });
 
 chatMenuEntries.push({ id: "schedule-receipt", label: "Kirim centang biru nanti…", run: function(context) { openScheduleReceiptModal(context); } });
 
@@ -173,6 +184,7 @@ function onMainUIReady()
         receiptSchedulerRestored = true;
         // give the page world time to load its chats before overdue receipts are sent
         setTimeout(function() { receiptScheduler.restore().catch(function() { console.warn("WAIncognito: could not restore scheduled read receipts"); }); }, 4000);
+        setTimeout(function() { sendScheduler.restore().catch(function() { console.warn("WAIncognito: could not restore scheduled messages"); }); }, 4500);
     }
 
     setTimeout(checkInterception, 1000);
@@ -1272,6 +1284,115 @@ async function openLockSetupModal()
         var hash = await hashPasscode(result.value, salt);
         await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
         Swal.fire({ title: "Passcode disimpan", icon: "success", timer: 2000 });
+    }
+}
+
+//
+// Scheduled messages (core/send_scheduler.js). The page world sends through WhatsApp's own function.
+//
+function showScheduleToast(title, icon)
+{
+    Swal.fire({ toast: true, position: "bottom-end", icon: icon, title: title, showConfirmButton: false, timer: 7000 });
+}
+
+function sendTextViaPageWorld(message)
+{
+    return new Promise(function(resolve)
+    {
+        var requestId = "send-" + Date.now() + "-" + Math.random();
+        var finished = false;
+        function finish(result)
+        {
+            if (finished) return;
+            finished = true;
+            if (!result.ok) showScheduleToast("Pesan terjadwal gagal dikirim: " + (result.error || "tidak diketahui") + " (lihat Diagnostik)", "error");
+            resolve(result);
+        }
+        sendTextResponses.waitFor(requestId, finish);
+        setTimeout(function() { finish({ ok: false, error: "tidak ada jawaban dari halaman" }); }, 30000);
+        document.dispatchEvent(new CustomEvent("waIncognitoSendText", { detail: JSON.stringify({ id: requestId, jid: message.jid, text: message.text }) }));
+    });
+}
+
+function toDateTimeLocalValue(ms)
+{
+    var date = new Date(ms);
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
+}
+
+function scheduledMessagesHTML(items)
+{
+    if (items.length == 0) return "";
+    return "<div style='margin-top: 12px; font-size: 13px'><b>Jadwal chat ini</b>" + items.map(function(item)
+    {
+        var status = item.status == "error" ? " ⚠ " + escapeHTML(item.error || "gagal") : (item.status == "overdue" ? " ⏰ terlewat" : "");
+        return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + status + "<br><span style='opacity: 0.8'>" +
+               escapeHTML(item.text.length > 60 ? item.text.slice(0, 60) + "…" : item.text) + "</span> " +
+               "<button class='incognito-menu-action' style='margin: 0 0 0 6px' data-sched-cancel='" + escapeHTML(item.id) + "'>Batal</button></div>";
+    }).join("") + "</div>";
+}
+
+async function openScheduleMessageModal(context)
+{
+    var mine = sendScheduler.list().filter(function(item) { return context.jids.indexOf(item.jid) > -1; });
+
+    await Swal.fire({
+        title: "Jadwalkan pesan",
+        html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
+              "<textarea id='incognito-sched-text' class='swal2-textarea' placeholder='Isi pesan' style='margin: 8px 0'></textarea>" +
+              "<input type='datetime-local' id='incognito-sched-time' class='swal2-input' style='margin: 0' value='" + toDateTimeLocalValue(Date.now() + 10 * 60 * 1000) + "'>" +
+              "<div style='text-align: left; font-size: 12px; opacity: 0.8; margin-top: 8px'>Tab WhatsApp Web harus tetap terbuka. Pesan disimpan di browser ini tanpa enkripsi sampai terkirim.</div>" +
+              "<div id='incognito-sched-list'>" + scheduledMessagesHTML(mine) + "</div>",
+        width: 560,
+        showCancelButton: true,
+        confirmButtonText: "Jadwalkan",
+        cancelButtonText: "Tutup",
+        didOpen: function(popup)
+        {
+            popup.addEventListener("click", async function(e)
+            {
+                var button = e.target.closest ? e.target.closest("[data-sched-cancel]") : null;
+                if (!button) return;
+                await sendScheduler.cancel(button.dataset.schedCancel);
+                button.parentElement.remove();
+            });
+        },
+        preConfirm: function()
+        {
+            var text = document.getElementById("incognito-sched-text").value;
+            var dueAt = new Date(document.getElementById("incognito-sched-time").value).getTime();
+            if (!text.trim()) { Swal.showValidationMessage("Isi pesan tidak boleh kosong"); return false; }
+            if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { Swal.showValidationMessage("Pilih waktu di masa depan"); return false; }
+            return { text: text, dueAt: dueAt };
+        },
+    }).then(async function(result)
+    {
+        if (!result.isConfirmed) return;
+        await sendScheduler.add(context.primaryJid, result.value.text, result.value.dueAt, context.name);
+        showScheduleToast("Pesan dijadwalkan pada " + formatEditTime(result.value.dueAt), "success");
+    });
+}
+
+// scheduled messages that came due while the tab was closed are never sent on their own
+async function askAboutOverdueMessages(items)
+{
+    for (var i = 0; i < items.length; i++)
+    {
+        var item = items[i];
+        var answer = await Swal.fire({
+            title: "Pesan terjadwal terlewat",
+            html: "<div style='text-align: left; font-size: 14px'>Seharusnya terkirim pada " + escapeHTML(formatEditTime(item.dueAt)) +
+                  (item.name ? " ke <b>" + escapeHTML(item.name) + "</b>" : "") + ":<br><br><div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div></div>",
+            showCancelButton: true,
+            showDenyButton: true,
+            confirmButtonText: "Kirim sekarang",
+            denyButtonText: "Batalkan",
+            cancelButtonText: "Nanti",
+            allowOutsideClick: false,
+        });
+        if (answer.isConfirmed) await sendScheduler.sendNow(item.id);
+        else if (answer.isDenied) await sendScheduler.cancel(item.id);
     }
 }
 
