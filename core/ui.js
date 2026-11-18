@@ -8,6 +8,8 @@ var mutationObserver = null;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
+var deletedMessageResponses = createResponseRouter(document, "onDeletedMessageReceived", 10000);
+var deviceTypeResponses = createResponseRouter(document, "onDeviceTypeReceived", 10000);
 var pseudoMsgsIDs = new Set();
 
 if (chrome != undefined) 
@@ -878,14 +880,9 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 // attempts to syntethise a message that was deleted from our DB / just mark it in red
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
-    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeletedMessageReceived", function(e)
+    deletedMessageResponses.waitFor(msgID, function(data)
     {
-        var data = JSON.parse(e.detail);
-        var messageID = data.messageID;
         var messageData = data.messageData;
-
-        if (messageID != msgID) return;
 
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
@@ -936,6 +933,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         // Now try to synthesize the message from the DB (best effort)
         tryToSynthesizeMessage(messageSubElement, messageData);
     });
+    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1061,15 +1059,10 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         return;
     }
 
-    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeviceTypeReceived", async function(e)
+    deviceTypeResponses.waitFor(msgID, async function(data)
     {
-        var data = JSON.parse(e.detail);
         var messageID = data.messageID;
-
         var deviceType = data.deviceType;
-
-        if (messageID != msgID) return;
 
         var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
         if (possibleNodes.length > 0 )
@@ -1099,6 +1092,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
 
         messageNode.insertBefore(imageElement, messageNode.firstChild);
     });
+    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
 }
 
 function tickCheckbox(checkbox, checkmark)
