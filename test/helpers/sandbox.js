@@ -32,6 +32,9 @@ function createSandbox(globals = {}) {
 
 // Runs extension scripts in the sandbox, in order, like <script> tags.
 function loadScripts(sandbox, relativePaths) {
+    // Page-world files that open IndexedDB rely on core/idb_open.js, which core_injection.js loads before them.
+    const needsOpener = relativePaths.some((p) => p === "core/interception.js" || p === "core/vault.js");
+    if (needsOpener && !relativePaths.includes("core/idb_open.js")) relativePaths = ["core/idb_open.js", ...relativePaths];
     for (const relativePath of relativePaths) {
         const code = fs.readFileSync(path.join(ROOT, relativePath), "utf8");
         vm.runInContext(code, sandbox, { filename: relativePath });
