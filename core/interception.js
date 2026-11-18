@@ -222,10 +222,10 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     , 10);
 }
 
-var deletedMessageSaveAttempts = 0;
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
 
-async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId)
+// `attempt` counts retries for this one deleted message, so deleted messages don't share a retry budget.
+async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt = 0)
 {
     var chat = await getChatByJID(remoteJid);
     if (chat)
@@ -236,44 +236,32 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
             await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
 
         var msgs = chat.msgs.getModelsArray();
-    
-        var foundOriginalMessage = false;
         for (let i = 0; i < msgs.length; i++)
         {
             if (msgs[i].id.id == deletedMessageId)
             {
                 saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                foundOriginalMessage = true;
-                break;
+                return;
             }
         }
-
-        if (!foundOriginalMessage && deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
-            // We are probably starting up and the original message is not added yet to the message store,
-            // just schedule the search for later
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+        // We are probably starting up and the original message is not added yet to the message store
     }
     else
     {
-        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
-
-        if (deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message yet");
     }
+
+    if (attempt >= MAX_DELETED_MSG_SAVE_ATTEMPTS)
+    {
+        console.warn("WAIncognito: Giving up on saving deleted message " + deletedMessageId);
+        return;
+    }
+
+    console.warn("WAIncognito: Scheduling deleted message save for later");
+    setTimeout(async function() 
+    {
+        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1);
+    }, 1000);
 }
 
 async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID)
