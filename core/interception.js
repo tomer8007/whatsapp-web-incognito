@@ -532,7 +532,8 @@ function hookLogs()
 
     setTimeout(() => {
         var originalWALoggerLog = require("WALogger").LOG;
-        var originalWALoggerDev = require("WALogger").LOG;
+        var originalWALoggerDev = require("WALogger").DEV;
+        var originalWALoggerWarn = require("WALogger").WARN;
         var originalWALoggerERROR = require("WALogger").ERROR;
 
         require("WALogger").LOG = hookedWALoggerLog;
@@ -576,7 +577,7 @@ function hookLogs()
                     r[a - 1] = arguments[a];
             var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
             console.warn("[WhatsApp WARN] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            return originalWALoggerWarn.apply(null, arguments);
         }
         
     }, 2000);
@@ -585,10 +586,10 @@ function hookLogs()
 
     function hookedPromiseError(event)
     {
-        debugger;
         console.error("Unhandled promise rejection:");
-        console.error(errorObject);
-        return originalOnUnhandledRejection.call(event);
+        console.error(event ? event.reason : event);
+        if (typeof originalOnUnhandledRejection == "function")
+            return originalOnUnhandledRejection.call(window, event);
     }
 
     
