@@ -9,7 +9,7 @@ const realTimers = { setTimeout };
 function load(initial) {
     const fake = createFakeIndexedDB(initial);
     const s = createSandbox({ indexedDB: fake, setTimeout: realTimers.setTimeout, clearTimeout });
-    loadScripts(s, ["core/idb_open.js", "core/interception.js"]);
+    loadScripts(s, ["core/utils.js", "core/interception.js"]);
     return { s, fake };
 }
 const stores = (fake, name) => [...fake.dbs.get(name).stores].sort();
@@ -72,7 +72,7 @@ test("when another tab upgrades, our connection closes and reopens", async () =>
 test("vault DB is created and heals through the same opener", async () => {
     const fake = createFakeIndexedDB({ waIncognitoVault: { version: 1, stores: ["meta"] } });
     const s = createSandbox({ indexedDB: fake, setTimeout: realTimers.setTimeout, clearTimeout });
-    loadScripts(s, ["core/idb_open.js", "core/vault.js"]);
+    loadScripts(s, ["core/utils.js", "core/vault.js"]);
     const storage = s.createIndexedDBVaultStorage();
     await storage.getMeta().catch(() => {}); // fake has no transactions; only the open matters
     assert.deepStrictEqual(stores(fake, "waIncognitoVault"), ["meta", "records"]);
