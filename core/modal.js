@@ -66,6 +66,19 @@ var WAModal = (function()
 
     function top() { return stack.length ? stack[stack.length - 1] : null; }
 
+    var escapeHandledOnKeyDown = false;
+
+    function onKeyUp(e)
+    {
+        if (e.key != "Escape") return;
+        var handled = escapeHandledOnKeyDown;
+        escapeHandledOnKeyDown = false;
+        var current = top();
+        if (!current || handled) return;
+        e.stopPropagation();
+        if (current.closeOnEsc) current.close();
+    }
+
     function onKeyDown(e)
     {
         var current = top();
@@ -73,6 +86,7 @@ var WAModal = (function()
 
         if (e.key == "Escape")
         {
+            escapeHandledOnKeyDown = true;
             e.stopPropagation();
             e.preventDefault();
             if (current.closeOnEsc) current.close();
@@ -92,7 +106,9 @@ var WAModal = (function()
     {
         if (ensureGlobalListeners.done) return;
         ensureGlobalListeners.done = true;
-        document.addEventListener("keydown", onKeyDown, true);
+        window.addEventListener("keydown", onKeyDown, true);
+        // WhatsApp swallows Escape on keydown before our listener sees it; the keyup still arrives
+        window.addEventListener("keyup", onKeyUp, true);
     }
 
     function closeIcon()
@@ -170,7 +186,7 @@ var WAModal = (function()
         {
             backdrop.addEventListener(type, function(e)
             {
-                if (type == "keydown" && (e.key == "Escape" || e.key == "Tab")) return; // handled by the capture listener
+                if (e.key == "Escape" || (type == "keydown" && e.key == "Tab")) return; // handled by the capture listeners
                 e.stopPropagation();
             });
         });
