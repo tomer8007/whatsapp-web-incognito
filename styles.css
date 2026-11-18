@@ -683,3 +683,25 @@ input[type=number]::-webkit-inner-spin-button {
   font-size: 12px;
   opacity: 0.7;
 }
+
+.download-all-button-incognito
+{
+  position: absolute;
+  bottom: 90px;
+  right: 70px;
+  margin: 10px;
+  padding: 8px 12px;
+  background-color: rgba(255,255,255,0.3);
+  color: rgb(255, 255, 255);
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  z-index: 1000;
+}
+
+.download-all-button-incognito:hover
+{
+  background-color: rgba(255,255,255,0.5);
+}

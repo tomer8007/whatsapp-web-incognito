@@ -24,6 +24,7 @@ async function injectScripts()
 	await injectScript('core/ephemeral_keeper.js');
 	await injectScript('core/chat_menu_context.js');
 	await injectScript('core/voice_speed.js');
+	await injectScript('core/status_bulk.js');
 	await injectScript('core/ui_class_names.js');
 	await injectScript('core/injected_ui.js');
 	

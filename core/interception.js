@@ -316,8 +316,8 @@ function getStatusCollection()
     return null;
 }
 
-// The message of a status the sender has deleted, from the statuses that are still loaded. null when not found (yet).
-function findStatusMessage(participantJid, deletedMessageId)
+// The statuses of one contact (the collection entry, with .msgs), from the statuses that are loaded. null when not found.
+function findStatusEntry(participantJid)
 {
     var collection = getStatusCollection();
     if (!collection || !participantJid) return null;
@@ -336,6 +336,13 @@ function findStatusMessage(participantJid, deletedMessageId)
     {
         entry = collection.getModelsArray().find(function(m) { return m.id && m.id.user == user; });
     }
+    return entry || null;
+}
+
+// The message of a status the sender has deleted, from the statuses that are still loaded. null when not found (yet).
+function findStatusMessage(participantJid, deletedMessageId)
+{
+    var entry = findStatusEntry(participantJid);
     if (!entry || !entry.msgs || !entry.msgs.getModelsArray) return null;
 
     return entry.msgs.getModelsArray().find(function(m) { return m.id && m.id.id == deletedMessageId; }) || null;
@@ -796,6 +803,13 @@ async function loadEphemeralRecord(id)
 var statusViewerIdResolutions = 0;
 function findStatusMessageIdInFiber(fiber)
 {
+    var message = findStatusMessageInFiber(fiber);
+    return message ? message.id.id : null;
+}
+
+// The message model of the status shown in the status viewer, from the props of its React fibers. null when not found.
+function findStatusMessageInFiber(fiber)
+{
     var propNames = ["msg", "statusMsg", "message", "currentMsg"];
     for (var depth = 0; fiber && depth < 40; depth++, fiber = fiber.return)
     {
@@ -804,7 +818,7 @@ function findStatusMessageIdInFiber(fiber)
         for (var i = 0; i < propNames.length; i++)
         {
             var candidate = props[propNames[i]];
-            if (candidate && candidate.id && typeof candidate.id.id == "string") return candidate.id.id;
+            if (candidate && candidate.id && typeof candidate.id.id == "string") return candidate;
         }
     }
     return null;
@@ -845,6 +859,7 @@ function registerCoreDiagnostics()
         Diagnostics.register("core", "module", name, function() { return require(name) != null; });
     });
     Diagnostics.register("status", "module", "WAWebStatusCollection", function() { return getStatusCollection() != null; });
+    Diagnostics.register("status", "module", "downloadManager (bulk status)", function() { return window.WhatsAppAPI != null && WhatsAppAPI.downloadManager != null; });
     Diagnostics.register("status", "hook", "status-viewer-id", function() { return statusViewerIdResolutions; });
     Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
     Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
