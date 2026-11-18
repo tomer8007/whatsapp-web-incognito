@@ -18,6 +18,16 @@ var incognitoMenuActions = [
     { id: "vault", label: "🔒 Vault…", run: function() { openVaultModal(); } },
 ];
 var vaultResponses = createResponseRouter(document, "waIncognitoVaultResult", 120000);
+
+// Entries added to the context menu of a chat in the chat list. The page world (core/chat_menu_context.js) answers
+// `onDropdownOpened` with the chat; run(context) gets {jids, primaryJid, name, isGroup}.
+// Features append {id, label, run} below their own code.
+var chatMenuEntries = [];
+var chatMenuEntriesShown = 0;
+var ephemeralResponses = createResponseRouter(document, "onEphemeralForChatReceived", 10000);
+var ephemeralMediaResponses = createResponseRouter(document, "onEphemeralMediaReceived", 60000);
+
+chatMenuEntries.push({ id: "ephemeral", label: "Pesan sementara tersimpan", run: function(context) { openEphemeralModal(context); } });
 var editHistoryResponses = createResponseRouter(document, "onEditHistoryReceived", 10000);
 
 registerUIDiagnostics();
@@ -727,6 +737,7 @@ function registerUIDiagnostics()
         if (UIClassNames[name]) registerSelectorDiagnostic("ui", "UIClassNames." + name, classSelector(UIClassNames[name]));
     });
     registerSelectorDiagnostic("ui", "message-node", '[data-testid^="conv-msg"]');
+    Diagnostics.register("chat-menu", "hook", "chat-menu-entries", function() { return chatMenuEntriesShown; });
     Diagnostics.register("edits", "selector", "edited-label", function() { return document.getElementsByClassName("incognito-edit-original").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
@@ -950,6 +961,140 @@ function showEditHistory(messageId)
         Swal.fire({ title: "Versi asli", html: html, confirmButtonText: "Tutup" });
     });
     document.dispatchEvent(new CustomEvent("getEditHistory", { detail: JSON.stringify({ messageID: messageId }) }));
+}
+
+//
+// Chat context menu entries (see chatMenuEntries at the top)
+//
+document.addEventListener("waIncognitoChatMenuContext", function(e)
+{
+    var data = JSON.parse(e.detail);
+    if (data.context) appendChatMenuEntries(data.context);
+});
+
+function appendChatMenuEntries(context)
+{
+    if (chatMenuEntries.length == 0) return;
+    var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
+    if (!dropdown || dropdown.getElementsByClassName("incognito-chat-menu-entry").length > 0) return;
+    var template = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS)[0];
+    if (!template || !template.parentElement) return;
+
+    chatMenuEntries.forEach(function(entry)
+    {
+        var item = document.createElement("div");
+        item.className = UIClassNames.DROPDOWN_ENTRY_CLASS + " incognito-chat-menu-entry";
+        item.setAttribute("role", "button");
+        item.textContent = entry.label;
+        item.addEventListener("click", function(e)
+        {
+            e.stopPropagation();
+            closeChatMenu();
+            entry.run(context);
+        });
+        template.parentElement.appendChild(item);
+    });
+    chatMenuEntriesShown++;
+}
+
+// best effort: WhatsApp closes its menus on an outside click or Escape
+function closeChatMenu()
+{
+    try
+    {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
+        document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    }
+    catch (e) { /* the menu simply stays open */ }
+}
+
+//
+// Saved disappearing messages of a chat (core/ephemeral_keeper.js)
+//
+function mimeToExtension(mimetype)
+{
+    var map = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "audio/ogg": "ogg",
+                "audio/mpeg": "mp3", "audio/mp4": "m4a", "application/pdf": "pdf" };
+    var base = String(mimetype || "").split(";")[0].trim().toLowerCase();
+    return map[base] || (base.split("/")[1] || "bin").replace(/[^a-z0-9]/g, "");
+}
+
+function downloadBase64AsFile(b64, mimetype, fileName)
+{
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([bytes], { type: mimetype || "application/octet-stream" }));
+    var anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+}
+
+function requestEphemeralForChat(context)
+{
+    return new Promise(function(resolve)
+    {
+        var requestId = "eph-" + Date.now() + "-" + Math.random();
+        ephemeralResponses.waitFor(requestId, resolve);
+        setTimeout(function() { resolve({ items: [], locked: false, timedOut: true }); }, 10500);
+        document.dispatchEvent(new CustomEvent("getEphemeralForChat", { detail: JSON.stringify({ messageID: requestId, chatJids: context.jids }) }));
+    });
+}
+
+async function openEphemeralModal(context)
+{
+    var data = await requestEphemeralForChat(context);
+    if (data.locked)
+    {
+        Swal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat pesan sementara yang tersimpan.", icon: "info" });
+        return;
+    }
+
+    var html;
+    if (!data.items || data.items.length == 0)
+    {
+        html = "Belum ada pesan sementara yang tersimpan untuk chat ini. Aktifkan \"" + getOptionSchemaEntry("keepDisappearing").label +
+               "\" di menu Incognito; hanya pesan yang diterima setelah itu yang tersimpan.";
+    }
+    else
+    {
+        html = "<div style='max-height: 50vh; overflow-y: auto; text-align: left'>" + data.items.map(function(item)
+        {
+            var body = item.text ? "<div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div>" : "<i>(tanpa teks)</i>";
+            var button = item.hasMedia ?
+                "<button class='incognito-menu-action' style='margin: 4px 0 0 0' data-eph-id='" + escapeHTML(item.id) + "' data-eph-mime='" +
+                escapeHTML(item.mimetype || "") + "'>⬇ unduh media (" + escapeHTML(item.mediaType) + ")</button>" : "";
+            return "<div style='margin-bottom: 12px'><div style='font-size: 11px; opacity: 0.7'>" + escapeHTML(formatEditTime(item.ts)) + "</div>" + body + button + "</div>";
+        }).join("") + "</div>";
+    }
+
+    Swal.fire({
+        title: "Pesan sementara: " + (context.name || ""),
+        html: html,
+        width: 600,
+        confirmButtonText: "Tutup",
+        didOpen: function(popup)
+        {
+            popup.addEventListener("click", function(e)
+            {
+                var target = e.target.closest ? e.target.closest("[data-eph-id]") : null;
+                if (!target) return;
+                target.disabled = true;
+                var requestId = "ephm-" + Date.now() + "-" + Math.random();
+                ephemeralMediaResponses.waitFor(requestId, function(reply)
+                {
+                    target.disabled = false;
+                    if (!reply.ok) { target.textContent = "⚠ " + (reply.error || "gagal"); return; }
+                    downloadBase64AsFile(reply.b64, reply.mimetype, "pesan-sementara_" + Date.now() + "." + mimeToExtension(reply.mimetype));
+                });
+                document.dispatchEvent(new CustomEvent("downloadEphemeralMedia", { detail: JSON.stringify({ messageID: requestId, id: target.dataset.ephId }) }));
+            });
+        },
+    });
 }
 
 function setOptionFromMenu(key, value)

@@ -749,6 +749,49 @@ async function loadEditHistory(targetId)
     });
 }
 
+// All saved disappearing messages of the chats with these JIDs (pn and lid forms). -> {records: [...], locked: bool}
+async function loadEphemeralForChats(chatJids)
+{
+    if (await isVaultSetUp())
+    {
+        if (!Vault.isUnlocked()) return { records: [], locked: true };
+        var all = [];
+        for (var i = 0; i < chatJids.length; i++)
+            all = all.concat(await Vault.listByChat(chatJids[i], "ephemeral"));
+        return { records: all, locked: false };
+    }
+
+    var db = window.deletedMessagesDB;
+    if (db == null || !db.objectStoreNames.contains("ephemeral")) return { records: [], locked: false };
+
+    var records = [];
+    for (var j = 0; j < chatJids.length; j++)
+    {
+        records = records.concat(await new Promise(function(resolve)
+        {
+            var request = db.transaction("ephemeral", "readonly").objectStore("ephemeral").index("chatJid_index").getAll(chatJids[j]);
+            request.onsuccess = function() { resolve(request.result); };
+            request.onerror = function() { resolve([]); };
+        }));
+    }
+    return { records: records, locked: false };
+}
+
+// One saved disappearing message by id (vault must be unlocked when it is set up)
+async function loadEphemeralRecord(id)
+{
+    if (await isVaultSetUp()) return Vault.isUnlocked() ? Vault.get(id) : null;
+
+    var db = window.deletedMessagesDB;
+    if (db == null || !db.objectStoreNames.contains("ephemeral")) return null;
+    return new Promise(function(resolve)
+    {
+        var request = db.transaction("ephemeral", "readonly").objectStore("ephemeral").get(id);
+        request.onsuccess = function() { resolve(request.result || null); };
+        request.onerror = function() { resolve(null); };
+    });
+}
+
 // The id of the status shown in the status viewer, from the props of its React fibers. null when not found.
 var statusViewerIdResolutions = 0;
 function findStatusMessageIdInFiber(fiber)

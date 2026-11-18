@@ -332,6 +332,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     }
 
     NodeHandler.trackEdits(e2eMessage, messageId, remoteJid);
+    NodeHandler.keepEphemeral(e2eMessage, messageId, remoteJid, participant ? participant.toString() : remoteJid);
 
     if (!NodeHandler.shouldBlockRevoke(remoteJid))
     {
@@ -413,5 +414,26 @@ NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
     catch (exception)
     {
         console.warn("WAIncognito: edit tracking failed");
+    }
+}
+
+//
+// Disappearing messages (core/ephemeral_keeper.js): keep a copy when "keepDisappearing" is on. Never throws.
+//
+NodeHandler.keepEphemeral = function(e2eMessage, messageId, remoteJid, from)
+{
+    try
+    {
+        if (!(window.WAIncognitoOptions || {}).keepDisappearing) return;
+        if (typeof isEphemeralMessage == "undefined" || !messageId || !isEphemeralMessage(e2eMessage)) return;
+
+        // chats are looked up by their normalized JID (the same form the chat menu context uses)
+        var chatJid = (typeof normalizeJID == "function" && remoteJid) ? normalizeJID(String(remoteJid)) : remoteJid;
+        var snapshot = buildEphemeralSnapshot(e2eMessage, { messageId: messageId, chatJid: chatJid, from: from, ts: Date.now() });
+        saveArchiveRecord(snapshot, "ephemeral").catch(function() { console.warn("WAIncognito: could not save a disappearing message"); });
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: keeping a disappearing message failed");
     }
 }

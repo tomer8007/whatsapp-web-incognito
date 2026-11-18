@@ -595,3 +595,16 @@ input[type=number]::-webkit-inner-spin-button {
   font-size: 13px;
   pointer-events: none;
 }
+
+.incognito-chat-menu-entry
+{
+  padding: 8px 24px;
+  cursor: pointer;
+  font-size: 14.5px;
+  white-space: nowrap;
+}
+
+.incognito-chat-menu-entry:hover
+{
+  background: rgba(128, 128, 128, 0.2);
+}

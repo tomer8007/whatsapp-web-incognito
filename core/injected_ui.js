@@ -341,6 +341,46 @@ document.addEventListener("waIncognitoStatusCheck", async function(e)
     document.dispatchEvent(new CustomEvent("waIncognitoStatusCheckResult", { detail: JSON.stringify(reply) }));
 });
 
+// Disappearing messages saved for a chat (core/ephemeral_keeper.js): the list, and the media of one of them
+document.addEventListener("getEphemeralForChat", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, items: [], locked: false };
+    try
+    {
+        var result = await loadEphemeralForChats(data.chatJids || []);
+        reply.locked = result.locked;
+        reply.items = summarizeEphemeralRecords(result.records);
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: could not load the saved disappearing messages");
+    }
+    document.dispatchEvent(new CustomEvent("onEphemeralForChatReceived", { detail: JSON.stringify(reply) }));
+});
+
+document.addEventListener("downloadEphemeralMedia", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, ok: false, error: null };
+    try
+    {
+        var record = await loadEphemeralRecord(data.id);
+        if (!record || !record.mediaMeta) throw new Error("tidak ada media");
+        var meta = record.mediaMeta;
+        var decrypted = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: meta.directPath, encFilehash: meta.fileEncSha256,
+            filehash: meta.fileSha256, mediaKey: meta.mediaKey, type: meta.type, signal: (new AbortController).signal });
+        reply.b64 = arrayBufferToBase64(decrypted);
+        reply.mimetype = meta.mimetype;
+        reply.ok = true;
+    }
+    catch (exception)
+    {
+        reply.error = "Media tidak bisa diunduh (mungkin sudah kedaluwarsa di server)";
+    }
+    document.dispatchEvent(new CustomEvent("onEphemeralMediaReceived", { detail: JSON.stringify(reply) }));
+});
+
 // The original versions of an edited message (core/edit_tracker.js), asked for by the "↺ asli" button
 document.addEventListener("getEditHistory", async function(e)
 {
