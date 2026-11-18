@@ -418,20 +418,27 @@ input[type=number]::-webkit-inner-spin-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 27, 33, 0.97);
-  color: #e9edef;
+  /* fully opaque: the chats behind must not be readable */
+  background: var(--WDS-surface-default, var(--app-background, #111b21));
+  color: var(--WDS-content-default, var(--primary-strong, #e9edef));
+  font-family: "Roboto Variable", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 .incognito-lock-box
 {
-  width: 320px;
+  width: min(340px, 90vw);
+  padding: 32px 28px 24px 28px;
+  box-sizing: border-box;
   text-align: center;
+  border-radius: 16px;
+  background: var(--WDS-surface-highlight, rgba(255, 255, 255, 0.06));
 }
 
 .incognito-lock-title
 {
   font-size: 20px;
-  margin-bottom: 16px;
+  font-weight: 500;
+  margin-bottom: 18px;
 }
 
 #incognito-lock input
@@ -439,19 +446,22 @@ input[type=number]::-webkit-inner-spin-button {
   width: 100%;
   box-sizing: border-box;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
   color: inherit;
+  font: inherit;
   font-size: 16px;
   text-align: center;
 }
+
+#incognito-lock input:focus { outline: none; border-color: var(--WDS-accent, #21c063); box-shadow: 0 0 0 1px var(--WDS-accent, #21c063); }
 
 .incognito-lock-error
 {
   min-height: 18px;
   margin-top: 8px;
-  color: #ff8a80;
+  color: #f15c6d;
   font-size: 13px;
 }
 
@@ -459,7 +469,7 @@ input[type=number]::-webkit-inner-spin-button {
 {
   margin-top: 16px;
   font-size: 12px;
-  opacity: 0.7;
+  color: var(--WDS-content-deemphasized, rgba(255, 255, 255, 0.6));
 }
 
 .download-all-button-incognito
