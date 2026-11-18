@@ -315,7 +315,16 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     }
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
-    await interceptViewOnceMessages(e2eMessage, messageId);
+    try
+    {
+        await interceptViewOnceMessages(e2eMessage, messageId);
+    }
+    catch (exception)
+    {
+        // A view-once failure must not make the whole packet pass through unmodified (that would let REVOKEs through)
+        console.error("WhatsIncognito: Ignoring error while handling a view-once message:");
+        console.error(exception);
+    }
 
     if (!saveDeletedMsgsHookEnabled)
     {
