@@ -41,7 +41,7 @@ wsHook.before = function (originalData, url)
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return originalData;
 
         // encrytped binary payload
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=false);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, /* isIncoming */ false);
         if (decryptedFrames == null) return originalData;
 
         for (var i = 0; i < decryptedFrames.length; i++)
@@ -58,15 +58,15 @@ wsHook.before = function (originalData, url)
 
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(manipulatedNode, isIncoming=false, decryptedFrame.byteLength);
+                printNode(manipulatedNode, /* isIncoming */ false, decryptedFrame.byteLength);
                 if (WAPassthroughWithDebug) return originalData;
             }
 
-            // sanity check that our node parsing is complete
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
+            // sanity check that our node parsing is complete (decodes + re-encodes the frame: debug mode only)
+            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ false);
         }
 
-        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, /* isIncoming */ false);
 
         var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
         if (!looksEqual && isAllowed)
@@ -118,7 +118,7 @@ wsHook.after = function (messageEvent, url)
 
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return messageEvent;
 
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=true);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, /* isIncoming */ true);
         if (decryptedFrames == null) return messageEvent;
 
         var didBlockNode = false;
@@ -133,13 +133,13 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
+                printNode(realNode, /* isIncoming */ true, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            // sanity check that our node parsing is deterministic
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
+            // sanity check that our node parsing is deterministic (decodes + re-encodes the frame: debug mode only)
+            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
 
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
