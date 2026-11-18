@@ -1006,57 +1006,57 @@ function hookLogs()
     }
 }
 
-// Schema of the plaintext `deletedMsgs` DB. Every step is guarded by the old version, so any upgrade path works.
+// Schema of the plaintext `deletedMsgs` DB.
 //   v1: msgs   v2: msgs.originalID_index   v3: edits + ephemeral stores
+// The stores are created whenever they are missing, whatever the old version says, because some users
+// have a v3 database that was bumped without the new stores. See openDatabaseHealing (core/idb_open.js).
 var DELETED_MSGS_DB_VERSION = 3;
 
 function upgradeDeletedMsgsDB(db, txn, oldVersion)
 {
-    if (oldVersion < 1)
+    if (!db.objectStoreNames.contains('msgs'))
     {
         var store = db.createObjectStore('msgs', { keyPath: 'id' });
         console.log('WhatsIncognito: Deleted messages database generated');
         store.createIndex("originalID_index", "originalID");
     }
-    else if (oldVersion < 2)
+    else if (oldVersion < 2 && txn)
     {
         txn.objectStore("msgs").createIndex("originalID_index", "originalID");
     }
 
-    if (oldVersion < 3)
+    if (!db.objectStoreNames.contains("edits"))
     {
-        if (!db.objectStoreNames.contains("edits"))
-        {
-            var edits = db.createObjectStore('edits', { keyPath: 'id' });
-            edits.createIndex("targetId_index", "targetId");
-        }
-        if (!db.objectStoreNames.contains("ephemeral"))
-        {
-            var ephemeral = db.createObjectStore('ephemeral', { keyPath: 'id' });
-            ephemeral.createIndex("chatJid_index", "chatJid");
-        }
+        var edits = db.createObjectStore('edits', { keyPath: 'id' });
+        edits.createIndex("targetId_index", "targetId");
     }
+    if (!db.objectStoreNames.contains("ephemeral"))
+    {
+        var ephemeral = db.createObjectStore('ephemeral', { keyPath: 'id' });
+        ephemeral.createIndex("chatJid_index", "chatJid");
+    }
+}
+
+function isDeletedMsgsDBHealthy(db)
+{
+    return db.objectStoreNames.contains("msgs") && db.objectStoreNames.contains("edits") && db.objectStoreNames.contains("ephemeral");
 }
 
 function initializeDeletedMessagesDB()
 {
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", DELETED_MSGS_DB_VERSION);
-
-    deletedDBOpenRequest.onupgradeneeded = function (event)
-    {
-        var request = event.target;
-        upgradeDeletedMsgsDB(request.result, request.transaction, event.oldVersion);
-    };
-    deletedDBOpenRequest.onerror = function (e)
+    return openDatabaseHealing({
+        indexedDB: indexedDB,
+        name: "deletedMsgs",
+        upgrade: upgradeDeletedMsgsDB,
+        isHealthy: isDeletedMsgsDBHealthy,
+        onOpen: function(db) { window.deletedMessagesDB = db; },
+        onClose: function(db) { if (window.deletedMessagesDB === db) window.deletedMessagesDB = null; },
+        log: function() { console.warn.apply(console, arguments); },
+    }).catch(function(e)
     {
         console.error("WhatsIncognito: Error opening database");
-        console.error("Error", deletedDBOpenRequest);
         console.error(e);
-    };
-    deletedDBOpenRequest.onsuccess = () =>
-    {
-        window.deletedMessagesDB = deletedDBOpenRequest.result;
-    }
+    });
 }
 
 

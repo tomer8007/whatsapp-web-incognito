@@ -289,12 +289,11 @@ function createIndexedDBVaultStorage()
     function open()
     {
         if (dbPromise) return dbPromise;
-        dbPromise = new Promise(function(resolve, reject)
-        {
-            var request = indexedDB.open("waIncognitoVault", 1);
-            request.onupgradeneeded = function()
+        dbPromise = openDatabaseHealing({
+            indexedDB: indexedDB,
+            name: "waIncognitoVault",
+            upgrade: function(db)
             {
-                var db = request.result;
                 if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
                 if (!db.objectStoreNames.contains("records"))
                 {
@@ -303,10 +302,15 @@ function createIndexedDBVaultStorage()
                     records.createIndex("ts", "ts");
                     records.createIndex("chatHash", "chatHash");
                 }
-            };
-            request.onsuccess = function() { createIndexedDBVaultStorage.isOpen = true; resolve(request.result); };
-            request.onerror = function() { reject(request.error); };
+            },
+            isHealthy: function(db) { return db.objectStoreNames.contains("meta") && db.objectStoreNames.contains("records"); },
+            onOpen: function() { createIndexedDBVaultStorage.isOpen = true; },
+            // A versionchange from another tab closes this connection; drop the cache so the next call reopens it.
+            onClose: function() { createIndexedDBVaultStorage.isOpen = false; dbPromise = null; },
+            reopenOnVersionChange: false,
+            log: function() { console.warn.apply(console, arguments); },
         });
+        dbPromise.catch(function() { dbPromise = null; });
         return dbPromise;
     }
 
