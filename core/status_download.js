@@ -3,6 +3,33 @@
 //
 
 var allowStatusDownload = true;
+var statusCheckResponses = createResponseRouter(document, "waIncognitoStatusCheckResult", 5000);
+
+Diagnostics.register("status", "selector", "status-viewer", function() { return document.querySelectorAll("[data-animate-status-viewer]").length; });
+
+// "🗑️ Dihapus pengirim": shown while a status is on screen that the sender deleted and we archived
+function checkDeletedStatusLabel()
+{
+    setTimeout(function()
+    {
+        var requestId = "status-" + Date.now() + "-" + Math.random();
+        statusCheckResponses.waitFor(requestId, function(data)
+        {
+            if (!data.archived || document.getElementsByClassName("incognito-status-deleted-label").length > 0) return;
+            var label = document.createElement("div");
+            label.className = "incognito-status-deleted-label";
+            label.textContent = "🗑️ Dihapus pengirim";
+            document.body.appendChild(label);
+        });
+        document.dispatchEvent(new CustomEvent("waIncognitoStatusCheck", { detail: JSON.stringify({ messageID: requestId }) }));
+    }, 400);
+}
+
+function removeDeletedStatusLabel()
+{
+    var labels = document.getElementsByClassName("incognito-status-deleted-label");
+    while (labels.length > 0) labels[0].remove();
+}
 
 function determineIfNodeIsStatus(node) 
 {
@@ -79,9 +106,12 @@ function createDownloadButton(src)
 
 function handleSRCAdd(src, node)
 {
+    var isStatus = determineIfNodeIsStatus(node);
+    if (isStatus) checkDeletedStatusLabel();
+
     if (!allowStatusDownload) return;
 
-    if (determineIfNodeIsStatus(node))
+    if (isStatus)
     {
         if (src.startsWith("blob:")) 
         {
@@ -98,6 +128,7 @@ function handleSRCAdd(src, node)
 
 function handleSRCRemove(src, node) 
 {
+    removeDeletedStatusLabel();
     if (src != null)
         destroyOldButton(src)
 }

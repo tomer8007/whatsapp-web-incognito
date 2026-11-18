@@ -11,6 +11,8 @@ var showDeviceTypesEnabled = true;
 var autoReceiptOnReplay = true;
 var safetyDelay = 0;
 
+var STATUS_BROADCAST_JID = "status@broadcast";
+
 var isInitializing = true;
 var exceptionsList = [];
 var blinkingChats = {};
@@ -187,13 +189,30 @@ wsHook.after = function (messageEvent, url)
 
 
 // called from node_handler.js when a message node is blocked
-function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId)
+function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId, participant)
 {
+    var isStatus = remoteJid == STATUS_BROADCAST_JID;
+
     // do GUI operations after a small timeout. TODO: move it to injected_ui.js
     setTimeout(function()
     {
         try
         {
+            if (isStatus)
+            {
+                // a status the sender deleted: tell the user, and keep it only if saveDeletedStatus is on
+                notifyDeletedMessage("status-delete", remoteJid, deletedMessageId, participant);
+                if ((window.WAIncognitoOptions || {}).saveDeletedStatus)
+                {
+                    var statusWaitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
+                    setTimeout(async function()
+                    {
+                        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, 0, participant);
+                    }, statusWaitTime);
+                }
+                return;
+            }
+
             // In case the message already appears on screen, mark it in red
             var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
 
@@ -278,31 +297,88 @@ async function notifyEditedMessage(chatJid, preview)
 
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
 
-// `attempt` counts retries for this one deleted message, so deleted messages don't share a retry budget.
-async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt = 0)
+// The status collection (see wa-js): StatusV3CollectionImpl || StatusV3Collection || StatusCollection
+function getStatusCollection()
 {
-    var chat = await getChatByJID(remoteJid);
-    if (chat)
+    try
     {
-        if (chat.loadEarlierMsgs)
-            await chat.loadEarlierMsgs();
-        else
-            await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
+        var statusModule = require("WAWebStatusCollection");
+        var collection = statusModule && (statusModule.StatusV3CollectionImpl || statusModule.StatusV3Collection || statusModule.StatusCollection);
+        if (collection) return collection;
+    }
+    catch (e) { /* module not loaded */ }
 
-        var msgs = chat.msgs.getModelsArray();
-        for (let i = 0; i < msgs.length; i++)
+    try
+    {
+        if (typeof findExport == "function") return findExport("StatusV3Collection");
+    }
+    catch (e) { /* not found */ }
+    return null;
+}
+
+// The message of a status the sender has deleted, from the statuses that are still loaded. null when not found (yet).
+function findStatusMessage(participantJid, deletedMessageId)
+{
+    var collection = getStatusCollection();
+    if (!collection || !participantJid) return null;
+
+    var jid = String(participantJid).replace(/:\d+@/, "@");
+    var user = jid.split("@")[0];
+    var entry = null;
+    try
+    {
+        var wid = (window.WhatsAppAPI && WhatsAppAPI.WAWebWidFactory && WhatsAppAPI.WAWebWidFactory.createWid) ? WhatsAppAPI.WAWebWidFactory.createWid(jid) : jid;
+        entry = collection.get(wid);
+    }
+    catch (e) { /* fall back to a scan */ }
+
+    if (!entry && collection.getModelsArray)
+    {
+        entry = collection.getModelsArray().find(function(m) { return m.id && m.id.user == user; });
+    }
+    if (!entry || !entry.msgs || !entry.msgs.getModelsArray) return null;
+
+    return entry.msgs.getModelsArray().find(function(m) { return m.id && m.id.id == deletedMessageId; }) || null;
+}
+
+// `attempt` counts retries for this one deleted message, so deleted messages don't share a retry budget.
+// `participant` is only used for statuses (remoteJid == status@broadcast): the sender of the status.
+async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt = 0, participant = null)
+{
+    if (remoteJid == STATUS_BROADCAST_JID)
+    {
+        var statusMessage = findStatusMessage(participant, deletedMessageId);
+        if (statusMessage)
         {
-            if (msgs[i].id.id == deletedMessageId)
-            {
-                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                return;
-            }
+            saveDeletedMessage(statusMessage, { participant: participant, remoteJid: remoteJid }, messageId, "status");
+            return;
         }
-        // We are probably starting up and the original message is not added yet to the message store
     }
     else
     {
-        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message yet");
+        var chat = await getChatByJID(remoteJid);
+        if (chat)
+        {
+            if (chat.loadEarlierMsgs)
+                await chat.loadEarlierMsgs();
+            else
+                await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
+
+            var msgs = chat.msgs.getModelsArray();
+            for (let i = 0; i < msgs.length; i++)
+            {
+                if (msgs[i].id.id == deletedMessageId)
+                {
+                    saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                    return;
+                }
+            }
+            // We are probably starting up and the original message is not added yet to the message store
+        }
+        else
+        {
+            console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message yet");
+        }
     }
 
     if (attempt >= MAX_DELETED_MSG_SAVE_ATTEMPTS)
@@ -314,7 +390,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
     console.warn("WAIncognito: Scheduling deleted message save for later");
     setTimeout(async function() 
     {
-        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1);
+        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1, participant);
     }, 1000);
 }
 
@@ -368,6 +444,7 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     deletedMsgRecord.Jid = deletedMessageKey.remoteJid;
     deletedMsgRecord.lng = deletedMessage.lng;
     deletedMsgRecord.lat = deletedMessage.lat;
+    if (kind != "deleted") deletedMsgRecord.kind = kind; // "status": the plaintext `msgs` store holds it too, so keep the kind
 
     if ("id" in deletedMsgRecord && await isVaultSetUp())
     {
@@ -672,6 +749,45 @@ async function loadEditHistory(targetId)
     });
 }
 
+// The id of the status shown in the status viewer, from the props of its React fibers. null when not found.
+var statusViewerIdResolutions = 0;
+function findStatusMessageIdInFiber(fiber)
+{
+    var propNames = ["msg", "statusMsg", "message", "currentMsg"];
+    for (var depth = 0; fiber && depth < 40; depth++, fiber = fiber.return)
+    {
+        var props = fiber.memoizedProps;
+        if (!props || typeof props != "object") continue;
+        for (var i = 0; i < propNames.length; i++)
+        {
+            var candidate = props[propNames[i]];
+            if (candidate && candidate.id && typeof candidate.id.id == "string") return candidate.id.id;
+        }
+    }
+    return null;
+}
+
+// Is there an archived copy (vault or plaintext) of this message id? Never throws.
+async function isMessageArchived(messageId)
+{
+    try
+    {
+        if (await isVaultSetUp()) return await Vault.has(messageId);
+        var db = window.deletedMessagesDB;
+        if (!db || !db.objectStoreNames.contains("msgs")) return false;
+        return await new Promise(function(resolve)
+        {
+            var request = db.transaction("msgs", "readonly").objectStore("msgs").get(messageId);
+            request.onsuccess = function() { resolve(request.result != null); };
+            request.onerror = function() { resolve(false); };
+        });
+    }
+    catch (e)
+    {
+        return false;
+    }
+}
+
 // the WhatsApp internals the core features depend on (see core/diagnostics.js)
 function registerCoreDiagnostics()
 {
@@ -685,6 +801,8 @@ function registerCoreDiagnostics()
     {
         Diagnostics.register("core", "module", name, function() { return require(name) != null; });
     });
+    Diagnostics.register("status", "module", "WAWebStatusCollection", function() { return getStatusCollection() != null; });
+    Diagnostics.register("status", "hook", "status-viewer-id", function() { return statusViewerIdResolutions; });
     Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
     Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
     Diagnostics.register("archive", "db", "deletedMsgs v3 stores", function()

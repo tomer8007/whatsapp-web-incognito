@@ -299,6 +299,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var remoteJid = null;
     var participant = null;
     var messageId = null;
+    var isStatusNode = false;
 
     if (messageNode.attrs != null)
     {
@@ -308,14 +309,17 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         participant = messageNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
 
-        if (messageNode.attrs["sender_pn"] != null)
+        isStatusNode = remoteJid == STATUS_BROADCAST_JID;
+
+        // (for a status, "from" is status@broadcast and the sender is the participant: keep it that way)
+        if (messageNode.attrs["sender_pn"] != null && !isStatusNode)
         {
             // we prefer the full phone number JID over the possible LID
             remoteJid = messageNode.attrs["sender_pn"].toString();
         }
     }
 
-    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
+    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid, participant ? participant.toString() : null);
     try
     {
         await interceptViewOnceMessages(e2eMessage, messageId);
@@ -329,7 +333,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 
     NodeHandler.trackEdits(e2eMessage, messageId, remoteJid);
 
-    if (!saveDeletedMsgsHookEnabled)
+    if (!NodeHandler.shouldBlockRevoke(remoteJid))
     {
         isAllowed = true;
     }
@@ -342,7 +346,14 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     return isAllowed;
 }
 
-NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid)
+// Revokes in chats are blocked with "saveDeletedMsgs". Revokes of statuses are blocked with "saveDeletedStatus" or "saveDeletedMsgs".
+NodeHandler.shouldBlockRevoke = function(remoteJid)
+{
+    if (saveDeletedMsgsHookEnabled) return true;
+    return remoteJid == STATUS_BROADCAST_JID && !!(window.WAIncognitoOptions || {}).saveDeletedStatus;
+}
+
+NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid, participant)
 {
     //
     // Check if this is a message deletion node
@@ -351,9 +362,9 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
     {
         var deletedMessageId = message.protocolMessage.key.id;
-        if (saveDeletedMsgsHookEnabled)
+        if (NodeHandler.shouldBlockRevoke(remoteJid))
         {
-            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId);
+            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId, participant);
         }
 
         return true;

@@ -318,6 +318,29 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     
 });
 
+// The status viewer asks whether the status on screen was deleted by its sender and is in the archive
+document.addEventListener("waIncognitoStatusCheck", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, archived: false };
+    try
+    {
+        var viewer = document.querySelector("[data-animate-status-viewer]");
+        var fiberKey = viewer ? Object.keys(viewer).find(function(key) { return key.startsWith("__reactFiber$"); }) : null;
+        var statusId = fiberKey ? findStatusMessageIdInFiber(viewer[fiberKey]) : null;
+        if (statusId)
+        {
+            statusViewerIdResolutions++;
+            reply.archived = await isMessageArchived(statusId);
+        }
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: status check failed");
+    }
+    document.dispatchEvent(new CustomEvent("waIncognitoStatusCheckResult", { detail: JSON.stringify(reply) }));
+});
+
 // The original versions of an edited message (core/edit_tracker.js), asked for by the "↺ asli" button
 document.addEventListener("getEditHistory", async function(e)
 {

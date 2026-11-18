@@ -580,3 +580,18 @@ input[type=number]::-webkit-inner-spin-button {
   cursor: pointer;
   text-decoration: underline;
 }
+
+.incognito-status-deleted-label
+{
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100000;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(200, 40, 40, 0.9);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+}

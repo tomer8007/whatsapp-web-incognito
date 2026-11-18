@@ -255,7 +255,7 @@ var Vault = (function()
             for (var i = 0; i < items.length; i++)
             {
                 var record = Object.assign({}, items[i].record);
-                record.kind = LEGACY_KINDS[items[i].store] || items[i].store;
+                record.kind = record.kind || LEGACY_KINDS[items[i].store] || items[i].store;
                 record.chatJid = record.chatJid || record.Jid;
                 if (typeof record.ts != "number") record.ts = Date.now();
                 await this.put(record);
