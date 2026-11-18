@@ -520,3 +520,43 @@ input[type=number]::-webkit-inner-spin-button {
   padding: 3px 6px;
   text-align: left;
 }
+
+/*
+  Toasts (core/toast.js)
+*/
+
+#incognito-toasts
+{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.incognito-toast
+{
+  background: rgba(32, 44, 51, 0.95);
+  color: #e9edef;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  cursor: pointer;
+  animation: fadeIn 0.2s;
+}
+
+.incognito-toast-title
+{
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.incognito-toast-body
+{
+  opacity: 0.85;
+  word-break: break-word;
+}

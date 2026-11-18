@@ -203,6 +203,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             }
 
+            notifyDeletedMessage("delete", remoteJid, deletedMessageId);
+
             // Now, save the deleted message in the DB after a short wait
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
             setTimeout(async function() 
@@ -217,6 +219,45 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
         
     }
     , 10);
+}
+
+// Asks the isolated world (core/toast.js) to show a toast. Best effort: never throws.
+function dispatchIncognitoToast(kind, chatName, preview)
+{
+    document.dispatchEvent(new CustomEvent("waIncognitoToast", { detail: JSON.stringify({kind: kind, chatName: chatName, preview: preview || ""}) }));
+}
+
+function getChatDisplayName(chat, fallbackJid)
+{
+    if (chat)
+    {
+        var name = chat.formattedTitle || chat.name || (chat.contact && (chat.contact.name || chat.contact.pushname));
+        if (name) return String(name);
+    }
+    return fallbackJid ? String(fallbackJid).split("@")[0] : "";
+}
+
+async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
+{
+    try
+    {
+        var options = window.WAIncognitoOptions || {};
+        if (!options.toastOnDelete) return; // nothing would be shown, skip the lookups
+
+        var chat = await getChatByJID(nameJid || chatJid);
+        var preview = "";
+        if (chat && chat.msgs && chat.msgs.getModelsArray)
+        {
+            var original = chat.msgs.getModelsArray().find(function(m) { return m.id && m.id.id == deletedMessageId; });
+            if (original && typeof original.body == "string" && !original.isMedia) preview = original.body;
+            else if (original && original.caption) preview = original.caption;
+        }
+        dispatchIncognitoToast(kind, getChatDisplayName(chat, nameJid || chatJid), preview);
+    }
+    catch (e)
+    {
+        console.warn("WAIncognito: could not build the deletion toast");
+    }
 }
 
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;

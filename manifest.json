@@ -23,7 +23,7 @@
   	},
   	{
       "matches": ["https://web.whatsapp.com/*"],
-  	  "js": ["core/ui_class_names.js", "core/response_router.js", "core/options_schema.js", "core/diagnostics.js", "core/ui.js", "lib/drop.js", "lib/sweetalert.min.js","core/status_download.js"],
+  	  "js": ["core/ui_class_names.js", "core/response_router.js", "core/options_schema.js", "core/diagnostics.js", "core/toast.js", "core/ui.js", "lib/drop.js", "lib/sweetalert.min.js","core/status_download.js"],
   	  "css": ["styles.css", "lib/css/drop-theme-basic.css"]
   	}
    ],
