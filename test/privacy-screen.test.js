@@ -91,7 +91,10 @@ test("every blur selector used for diagnostics is really in styles.css", () => {
     const { PRIVACY_BLUR_TARGETS } = load();
     const css = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
     for (const target of Object.values(PRIVACY_BLUR_TARGETS)) {
-        assert.ok(css.includes(target.selector), `styles.css is missing ${target.selector}`);
+        assert.ok(target.selectors.includes(target.selector));
+        for (const selector of target.selectors) {
+            assert.ok(css.includes(`.${target.cls} ${selector}`), `styles.css is missing ${selector}`);
+        }
     }
 });
 

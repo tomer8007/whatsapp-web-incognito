@@ -5,13 +5,18 @@
 
 var PRIVACY_LOCK_DISCLAIMER = "Kunci ini layar privasi, bukan pengaman data. Untuk melindungi data, gunakan Vault.";
 
-// What each blur option targets. `selector` is the canonical one: it must appear in styles.css (a test checks it)
-// and it is registered in the diagnostics.
+// What each blur option targets.
+// `selector` is what the diagnostics count; every entry of `selectors` must appear in styles.css (a test checks it).
+// Verified against the live DOM (2.3000.x): data-testid / role hooks only, no atomic class names.
 var PRIVACY_BLUR_TARGETS = {
-    blurChatList: { cls: "incognito-blur-chatlist", selector: '#pane-side [role="listitem"]' },
-    blurMessages: { cls: "incognito-blur-messages", selector: '[data-id] .selectable-text' },
-    blurMedia:    { cls: "incognito-blur-media",    selector: '[data-id] img[src^="blob:"]' },
-    blurAvatars:  { cls: "incognito-blur-avatars",  selector: 'img[src*="pps.whatsapp.net"]' },
+    blurChatList: { cls: "incognito-blur-chatlist", selector: '#pane-side [data-testid="cell-frame-title"]',
+        selectors: ['#pane-side [data-testid="cell-frame-title"]', '#pane-side [data-testid="cell-frame-primary-detail"]'] },
+    blurMessages: { cls: "incognito-blur-messages", selector: '#main [data-pre-plain-text]',
+        selectors: ['#main [data-pre-plain-text]', '#main [role="row"] span.selectable-text'] },
+    blurMedia:    { cls: "incognito-blur-media",    selector: '#main [role="row"] img[src^="blob:"]',
+        selectors: ['#main [role="row"] img[src^="blob:"]', '#main [role="row"] video'] },
+    blurAvatars:  { cls: "incognito-blur-avatars",  selector: 'img[src*=".cdn.whatsapp.net/"]',
+        selectors: ['img[src*=".cdn.whatsapp.net/"]', 'img[src*="pps.whatsapp.net/"]', '#pane-side [data-testid="cell-frame-container"] > div:first-child img'] },
 };
 
 function blurClassesFor(options)

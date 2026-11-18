@@ -613,21 +613,29 @@ input[type=number]::-webkit-inner-spin-button {
   Privacy screen (core/privacy_screen.js). The canonical selectors are also registered in the diagnostics.
 */
 
-.incognito-blur-chatlist #pane-side [role="listitem"],
-.incognito-blur-messages [data-id] .selectable-text,
-.incognito-blur-media [data-id] img[src^="blob:"],
-.incognito-blur-media [data-id] video,
-.incognito-blur-avatars img[src*="pps.whatsapp.net"]
+.incognito-blur-chatlist #pane-side [data-testid="cell-frame-title"],
+.incognito-blur-chatlist #pane-side [data-testid="cell-frame-primary-detail"],
+.incognito-blur-messages #main [data-pre-plain-text],
+.incognito-blur-messages #main [role="row"] span.selectable-text,
+.incognito-blur-media #main [role="row"] img[src^="blob:"],
+.incognito-blur-media #main [role="row"] video,
+.incognito-blur-avatars img[src*=".cdn.whatsapp.net/"],
+.incognito-blur-avatars img[src*="pps.whatsapp.net/"],
+.incognito-blur-avatars #pane-side [data-testid="cell-frame-container"] > div:first-child img
 {
   filter: blur(6px);
   transition: filter 0.15s;
 }
 
-.incognito-blur-chatlist #pane-side [role="listitem"]:hover,
-.incognito-blur-messages [data-id] .selectable-text:hover,
-.incognito-blur-media [data-id] img[src^="blob:"]:hover,
-.incognito-blur-media [data-id] video:hover,
-.incognito-blur-avatars img[src*="pps.whatsapp.net"]:hover
+.incognito-blur-chatlist #pane-side [data-testid="cell-frame-title"]:hover,
+.incognito-blur-chatlist #pane-side [data-testid="cell-frame-primary-detail"]:hover,
+.incognito-blur-messages #main [data-pre-plain-text]:hover,
+.incognito-blur-messages #main [role="row"] span.selectable-text:hover,
+.incognito-blur-media #main [role="row"] img[src^="blob:"]:hover,
+.incognito-blur-media #main [role="row"] video:hover,
+.incognito-blur-avatars img[src*=".cdn.whatsapp.net/"]:hover,
+.incognito-blur-avatars img[src*="pps.whatsapp.net/"]:hover,
+.incognito-blur-avatars #pane-side [data-testid="cell-frame-container"] > div:first-child img:hover
 {
   filter: none;
 }
