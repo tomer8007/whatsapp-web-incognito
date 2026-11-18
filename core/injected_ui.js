@@ -264,6 +264,22 @@ document.addEventListener('sendReadConfirmation', async function (e)
     //WACrypto.sendNode(node);
 });
 
+// A scheduled blue tick is due (core/receipt_scheduler.js, isolated world). Uses the newest state of the chat.
+document.addEventListener("sendReadConfirmationForJid", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var chat = null;
+    for (var attempt = 0; attempt < 5 && !chat; attempt++)
+    {
+        chat = await getChatByJID(data.jid);
+        if (!chat) await new Promise(function(resolve) { setTimeout(resolve, 2000); }); // right after startup the chats may not be loaded yet
+    }
+    if (!chat || !chat.unreadCount || !chat.lastReceivedKey) return;
+
+    var payload = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
+    document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(payload) }));
+});
+
 document.addEventListener("getDeletedMessageByID", async function(e) 
 {
     var data = JSON.parse(e.detail);
@@ -593,11 +609,26 @@ function markChatAsBlocked(chat)
             sendButton.setAttribute('class', 'incognito-send-button');
             sendButton.innerHTML = "Mark as read";
             warningMessage.appendChild(sendButton);
+
+            // "Kirim centang biru nanti…": inserted BEFORE the send button, because the send button must stay the last child
+            var scheduleButton = document.createElement('div');
+            scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
+            scheduleButton.innerHTML = "Kirim nanti…";
+            warningMessage.insertBefore(scheduleButton, sendButton);
         }
         else
         {
             // we already have a warning message, remove it first
             warningMessage.remove();
+        }
+
+        var scheduleReceiptButton = warningMessage.querySelector(".incognito-schedule-button");
+        if (scheduleReceiptButton)
+        {
+            scheduleReceiptButton.onclick = function ()
+            {
+                document.dispatchEvent(new CustomEvent('onScheduleReceiptClick', { detail: JSON.stringify({ context: buildChatMenuContext(chat) }) }));
+            };
         }
 
         var sendButton = warningMessage.lastChild;

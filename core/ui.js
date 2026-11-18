@@ -28,6 +28,16 @@ var ephemeralResponses = createResponseRouter(document, "onEphemeralForChatRecei
 var ephemeralMediaResponses = createResponseRouter(document, "onEphemeralMediaReceived", 60000);
 
 var contactRulesCache = {};
+var receiptScheduler = createReceiptScheduler({
+    now: function() { return Date.now(); },
+    setTimer: function(fn, ms) { return setTimeout(fn, ms); },
+    clearTimer: function(handle) { clearTimeout(handle); },
+    store: createChromeListStore("scheduledReceipts"),
+    send: function(jid) { document.dispatchEvent(new CustomEvent("sendReadConfirmationForJid", { detail: JSON.stringify({ jid: jid }) })); },
+});
+var receiptSchedulerRestored = false;
+
+chatMenuEntries.push({ id: "schedule-receipt", label: "Kirim centang biru nanti…", run: function(context) { openScheduleReceiptModal(context); } });
 
 chatMenuEntries.push({ id: "contact-privacy", label: "Privasi kontak ini…", run: function(context) { openContactPrivacyModal(context); } });
 chatMenuEntries.push({ id: "ephemeral", label: "Pesan sementara tersimpan", run: function(context) { openEphemeralModal(context); } });
@@ -157,6 +167,12 @@ function onMainUIReady()
 {
     document.dispatchEvent(new CustomEvent('onMainUIReady', {}));
     loadAndPushContactRules(); // the page world may not have been listening yet at startup
+    if (!receiptSchedulerRestored)
+    {
+        receiptSchedulerRestored = true;
+        // give the page world time to load its chats before overdue receipts are sent
+        setTimeout(function() { receiptScheduler.restore().catch(function() { console.warn("WAIncognito: could not restore scheduled read receipts"); }); }, 4000);
+    }
 
     setTimeout(checkInterception, 1000);
 
@@ -1163,6 +1179,55 @@ async function openContactPrivacyModal(context)
         }
     }
     pushContactRules(rules);
+}
+
+//
+// Scheduled blue ticks (core/receipt_scheduler.js)
+//
+document.addEventListener("onScheduleReceiptClick", function(e)
+{
+    var data = JSON.parse(e.detail);
+    if (data.context) openScheduleReceiptModal(data.context);
+});
+
+async function openScheduleReceiptModal(context)
+{
+    var jid = context.primaryJid;
+    var existing = receiptScheduler.list().find(function(item) { return item.jid == jid; });
+
+    var result = await Swal.fire({
+        title: "Kirim centang biru nanti",
+        html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
+              (existing ? "Sudah dijadwalkan pada " + escapeHTML(formatEditTime(existing.dueAt)) + ". Memilih lagi akan menimpa jadwal itu.<br><br>" : "") +
+              "<select id='incognito-receipt-choice' class='swal2-select' style='margin: 0 0 8px 0'>" +
+              "<option value='15m'>15 menit lagi</option><option value='1h'>1 jam lagi</option><option value='3h'>3 jam lagi</option>" +
+              "<option value='time'>Jam tertentu…</option></select><br>" +
+              "<input type='time' id='incognito-receipt-time' class='swal2-input' style='margin: 0; display: none'><br>" +
+              "<span style='font-size: 12px; opacity: 0.8'>Tab WhatsApp Web harus tetap terbuka. Kalau jadwal terlewat saat tab tertutup, centang biru dikirim begitu tab dibuka lagi.</span></div>",
+        showCancelButton: true,
+        showDenyButton: !!existing,
+        denyButtonText: "Batalkan jadwal",
+        confirmButtonText: "Jadwalkan",
+        cancelButtonText: "Tutup",
+        didOpen: function()
+        {
+            var choice = document.getElementById("incognito-receipt-choice");
+            choice.addEventListener("change", function()
+            {
+                document.getElementById("incognito-receipt-time").style.display = choice.value == "time" ? "" : "none";
+            });
+        },
+        preConfirm: function()
+        {
+            var dueAt = resolveScheduleChoice(document.getElementById("incognito-receipt-choice").value, Date.now(),
+                                              document.getElementById("incognito-receipt-time").value);
+            if (dueAt == null) { Swal.showValidationMessage("Pilih jam yang valid"); return false; }
+            return dueAt;
+        },
+    });
+
+    if (result.isDenied) await receiptScheduler.cancel(jid);
+    else if (result.isConfirmed) await receiptScheduler.schedule(jid, result.value);
 }
 
 function setOptionFromMenu(key, value)
