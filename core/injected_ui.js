@@ -318,6 +318,24 @@ document.addEventListener("getDeletedMessageByID", async function(e)
     
 });
 
+// The original versions of an edited message (core/edit_tracker.js), asked for by the "↺ asli" button
+document.addEventListener("getEditHistory", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, edits: [], locked: false };
+    try
+    {
+        var history = await loadEditHistory(data.messageID);
+        reply.edits = history.edits.map(function(edit) { return { original: edit.original, newText: edit.newText, ts: edit.ts, originalTs: edit.originalTs }; });
+        reply.locked = history.locked;
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: could not load the edit history");
+    }
+    document.dispatchEvent(new CustomEvent("onEditHistoryReceived", { detail: JSON.stringify(reply) }));
+});
+
 // Vault commands from the "Vault…" menu (isolated world). The passphrase only travels through this event.
 document.addEventListener("waIncognitoVaultCommand", async function(e)
 {

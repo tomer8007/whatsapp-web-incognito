@@ -260,6 +260,22 @@ async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
     }
 }
 
+async function notifyEditedMessage(chatJid, preview)
+{
+    try
+    {
+        var options = window.WAIncognitoOptions || {};
+        if (!options.toastOnEdit) return;
+
+        var chat = await getChatByJID(chatJid);
+        dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview);
+    }
+    catch (e)
+    {
+        console.warn("WAIncognito: could not build the edit toast");
+    }
+}
+
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
 
 // `attempt` counts retries for this one deleted message, so deleted messages don't share a retry budget.
@@ -633,6 +649,29 @@ async function saveArchiveRecord(record, legacyStoreName)
     });
 }
 
+// All saved versions of an edited message, oldest first. -> {edits: [...], locked: bool}
+async function loadEditHistory(targetId)
+{
+    if (await isVaultSetUp())
+    {
+        if (!Vault.isUnlocked()) return { edits: [], locked: true };
+        return { edits: await Vault.listByIdPrefix("edit:" + targetId + ":"), locked: false };
+    }
+
+    var db = window.deletedMessagesDB;
+    if (db == null || !db.objectStoreNames.contains("edits")) return { edits: [], locked: false };
+
+    return new Promise(function(resolve)
+    {
+        var request = db.transaction("edits", "readonly").objectStore("edits").index("targetId_index").getAll(targetId);
+        request.onsuccess = function()
+        {
+            resolve({ edits: request.result.sort(function(a, b) { return a.ts - b.ts; }), locked: false });
+        };
+        request.onerror = function() { resolve({ edits: [], locked: false }); };
+    });
+}
+
 // the WhatsApp internals the core features depend on (see core/diagnostics.js)
 function registerCoreDiagnostics()
 {
@@ -648,6 +687,11 @@ function registerCoreDiagnostics()
     });
     Diagnostics.register("core", "hook", "interception", function() { return isInitializing === false; });
     Diagnostics.register("core", "db", "deletedMsgs", function() { return window.deletedMessagesDB != null; });
+    Diagnostics.register("archive", "db", "deletedMsgs v3 stores", function()
+    {
+        var db = window.deletedMessagesDB;
+        return db != null && db.objectStoreNames.contains("edits") && db.objectStoreNames.contains("ephemeral");
+    });
 }
 
 function hookLogs()
@@ -761,40 +805,46 @@ function hookLogs()
     }
 }
 
+// Schema of the plaintext `deletedMsgs` DB. Every step is guarded by the old version, so any upgrade path works.
+//   v1: msgs   v2: msgs.originalID_index   v3: edits + ephemeral stores
+var DELETED_MSGS_DB_VERSION = 3;
+
+function upgradeDeletedMsgsDB(db, txn, oldVersion)
+{
+    if (oldVersion < 1)
+    {
+        var store = db.createObjectStore('msgs', { keyPath: 'id' });
+        console.log('WhatsIncognito: Deleted messages database generated');
+        store.createIndex("originalID_index", "originalID");
+    }
+    else if (oldVersion < 2)
+    {
+        txn.objectStore("msgs").createIndex("originalID_index", "originalID");
+    }
+
+    if (oldVersion < 3)
+    {
+        if (!db.objectStoreNames.contains("edits"))
+        {
+            var edits = db.createObjectStore('edits', { keyPath: 'id' });
+            edits.createIndex("targetId_index", "targetId");
+        }
+        if (!db.objectStoreNames.contains("ephemeral"))
+        {
+            var ephemeral = db.createObjectStore('ephemeral', { keyPath: 'id' });
+            ephemeral.createIndex("chatJid_index", "chatJid");
+        }
+    }
+}
+
 function initializeDeletedMessagesDB()
 {
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 2);
+    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", DELETED_MSGS_DB_VERSION);
 
     deletedDBOpenRequest.onupgradeneeded = function (event)
     {
-        // triggers if the client had no database
-        // ...perform initialization...
-
-        // Get a reference to the request related to this event
-        // @type IDBOpenRequest (a specialized type of IDBRequest)
         var request = event.target;
-
-        // Get a reference to the IDBDatabase object for this request
-        // @type IDBDatabase
-        var db = request.result;
-
-        // Get a reference to the implicit transaction for this request
-        // @type IDBTransaction
-        var txn = request.transaction;
-
-        switch (event.oldVersion)
-        {
-            case 0:
-                var store = db.createObjectStore('msgs', { keyPath: 'id' });
-                console.log('WhatsIncognito: Deleted messages database generated');
-                store.createIndex("originalID_index", "originalID");
-                break;
-            case 1:
-                var store = txn.objectStore("msgs");
-                
-                store.createIndex("originalID_index", "originalID");
-                break;
-        }
+        upgradeDeletedMsgsDB(request.result, request.transaction, event.oldVersion);
     };
     deletedDBOpenRequest.onerror = function (e)
     {

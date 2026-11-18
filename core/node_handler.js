@@ -327,6 +327,8 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         console.error(exception);
     }
 
+    NodeHandler.trackEdits(e2eMessage, messageId, remoteJid);
+
     if (!saveDeletedMsgsHookEnabled)
     {
         isAllowed = true;
@@ -358,4 +360,47 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     }
 
     return false;
+}
+
+//
+// Edit tracking (core/edit_tracker.js). Edits are never blocked: WhatsApp still shows the new version.
+// Active when "saveEdits" (keep the original) or "toastOnEdit" (notify) is on. Never throws.
+//
+NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
+{
+    try
+    {
+        var options = window.WAIncognitoOptions || {};
+        if (!options.saveEdits && !options.toastOnEdit) return;
+        if (typeof EditTracker == "undefined") return;
+
+        var edit = EditTracker.detectEdit(e2eMessage);
+        if (!edit)
+        {
+            var text = extractText(e2eMessage);
+            if (text != null && messageId) EditTracker.remember(messageId, text, Date.now());
+            return;
+        }
+
+        var original = EditTracker.recall(edit.targetId);
+        if (!original) return; // received before the tab was opened (or more than 20 minutes ago)
+        if (edit.newText != null && edit.newText === original.text) return; // e.g. a link preview update
+
+        var ts = Date.now();
+        var record = { kind: "edit", id: "edit:" + edit.targetId + ":" + ts, targetId: edit.targetId, original: original.text,
+                       newText: edit.newText, ts: ts, originalTs: original.ts, chatJid: remoteJid };
+
+        // the next edit of the same message starts from this version
+        if (edit.newText != null) EditTracker.remember(edit.targetId, edit.newText, ts);
+
+        if (options.saveEdits)
+        {
+            saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not save the original of an edited message"); });
+        }
+        notifyEditedMessage(remoteJid, edit.newText != null ? edit.newText : original.text);
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: edit tracking failed");
+    }
 }

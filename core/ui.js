@@ -18,6 +18,7 @@ var incognitoMenuActions = [
     { id: "vault", label: "🔒 Vault…", run: function() { openVaultModal(); } },
 ];
 var vaultResponses = createResponseRouter(document, "waIncognitoVaultResult", 120000);
+var editHistoryResponses = createResponseRouter(document, "onEditHistoryReceived", 10000);
 
 registerUIDiagnostics();
 
@@ -109,6 +110,8 @@ function onMutationsObserved(mutations)
                 const currentNode = msgNodes[i];
                 onNewMessageNodeAdded(currentNode);
             }
+
+            scanForEditedLabels(addedNode);
         }
 
         
@@ -724,6 +727,7 @@ function registerUIDiagnostics()
         if (UIClassNames[name]) registerSelectorDiagnostic("ui", "UIClassNames." + name, classSelector(UIClassNames[name]));
     });
     registerSelectorDiagnostic("ui", "message-node", '[data-testid^="conv-msg"]');
+    Diagnostics.register("edits", "selector", "edited-label", function() { return document.getElementsByClassName("incognito-edit-original").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
 
@@ -872,6 +876,80 @@ async function openVaultModal()
         cancelButtonText: "Tutup",
     });
     if (info.isConfirmed) await sendVaultCommand("lock");
+}
+
+//
+// Edit history (core/edit_tracker.js): a small "↺ asli" button next to WhatsApp's "Edited" label
+//
+function isEditedLabelText(text)
+{
+    return /^\s*(edited|diedit)\s*$/i.test(text || "");
+}
+
+function scanForEditedLabels(root)
+{
+    if (!root || !root.querySelectorAll) return;
+    var candidates = isEditedLabelText(root.textContent) && root.children.length == 0 ? [root] : Array.from(root.querySelectorAll("span"));
+    for (var i = 0; i < candidates.length; i++)
+    {
+        var label = candidates[i];
+        if (label.children.length > 0 || label.dataset.incognitoEditBtn) continue;
+        if (!isEditedLabelText(label.textContent)) continue;
+        addOriginalButton(label);
+    }
+}
+
+function addOriginalButton(label)
+{
+    var messageElement = label.closest("[data-id]");
+    if (!messageElement) return;
+    var dataId = messageElement.getAttribute("data-id");
+    var messageId = dataId.includes("_") ? dataId.split("_")[2] : dataId;
+
+    label.dataset.incognitoEditBtn = "true";
+    var button = document.createElement("span");
+    button.className = "incognito-edit-original";
+    button.textContent = "↺ asli";
+    button.title = "Lihat versi asli sebelum diedit";
+    button.addEventListener("click", function(e)
+    {
+        e.stopPropagation();
+        showEditHistory(messageId);
+    });
+    label.parentNode.insertBefore(button, label.nextSibling);
+}
+
+function formatEditTime(ts)
+{
+    try { return new Date(ts).toLocaleString("id-ID"); }
+    catch (e) { return String(ts); }
+}
+
+function showEditHistory(messageId)
+{
+    editHistoryResponses.waitFor(messageId, function(data)
+    {
+        if (data.locked)
+        {
+            Swal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat versi asli.", icon: "info" });
+            return;
+        }
+        var html;
+        if (!data.edits || data.edits.length == 0)
+        {
+            html = "Versi asli tidak tertangkap (pesan diterima sebelum tab dibuka).";
+        }
+        else
+        {
+            html = data.edits.map(function(edit)
+            {
+                return "<div style='text-align: left; margin-bottom: 10px'><div style='font-size: 11px; opacity: 0.7'>Versi sebelum diedit pada " +
+                       escapeHTML(formatEditTime(edit.ts)) + "</div><div style='white-space: pre-wrap'>" + escapeHTML(edit.original) + "</div></div>";
+            }).join("");
+        }
+        Swal.fire({ title: "Versi asli", html: html, confirmButtonText: "Tutup" });
+    });
+    document.dispatchEvent(new CustomEvent("getEditHistory", { detail: JSON.stringify({ messageID: messageId }) }));
 }
 
 function setOptionFromMenu(key, value)
