@@ -852,8 +852,13 @@ async function isMessageArchived(messageId)
 // The call itself was never exercised against a real chat (signature only inspected).
 var SEND_TEXT_MODULE_HINT = /SendTextMsgChatAction/;
 var SEND_MSG_MODULE_HINT = /SendMsgChatAction/;
-function findSendTextFunction() { return findExport("sendTextMsgToChat", SEND_TEXT_MODULE_HINT); }
-function findAddAndSendFunction() { return findExport("addAndSendMsgToChat", SEND_MSG_MODULE_HINT); }
+function requireExport(moduleName, exportName)
+{
+    try { var exported = require(moduleName); return exported && typeof exported[exportName] == "function" ? exported[exportName] : null; }
+    catch (e) { return null; }
+}
+function findSendTextFunction() { return requireExport("WAWebSendTextMsgChatAction", "sendTextMsgToChat") || findExport("sendTextMsgToChat", SEND_TEXT_MODULE_HINT); }
+function findAddAndSendFunction() { return requireExport("WAWebSendMsgChatAction", "addAndSendMsgToChat") || findExport("addAndSendMsgToChat", SEND_MSG_MODULE_HINT); }
 
 async function sendTextToChat(jid, text)
 {
