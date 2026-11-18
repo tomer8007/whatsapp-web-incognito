@@ -5,18 +5,10 @@ if (typeof chrome !== "undefined") {
   var browser = chrome;
 }
 
-// Default value of every option. Stored values override these.
-const DEFAULT_OPTIONS = {
-    onlineUpdatesHook: false,
-    typingUpdatesHook: false,
-    readConfirmationsHook: true,
-    showReadWarning: true,
-    safetyDelay: 0,
-    saveDeletedMsgs: false,
-    showDeviceTypes: true,
-    autoReceiptOnReplay: true,
-    allowStatusDownload: true,
-};
+importScripts("core/options_schema.js");
+
+// Default value of every option (from the shared schema). Stored values override these.
+const DEFAULT_OPTIONS = defaultOptions();
 
 browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 {

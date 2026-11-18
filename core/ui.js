@@ -193,7 +193,8 @@ async function addIconIfNeeded()
                 {
                     nextButton.addEventListener("click", onBackButtonClicked);
                 };
-                
+                bindSchemaOptionsOnce();
+
                 //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
                 //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
                 //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
@@ -373,8 +374,19 @@ function generateDropContent(options)
                             ${allowStatusDownloadTitle}
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
                         </div>
-                        <div class='incognito-options-item' style='cursor: pointer;'>
-                            More options coming soon!
+                        <br>
+                        <button class='incognito-next-button'>Fitur lanjutan &gt</button>
+                        <button class='incognito-back-button'>&lt Back</button>
+                    </div>
+                </div>
+
+                <div class='incognito-options-view-container' style='transform: translate(300%, 0%);' id='incognito-options-view4'>
+
+                    <!---- Fourth Page (rendered from core/options_schema.js) ---!>
+                    <div class='incognito-options-view' id='incognito-options-view-internal4'>
+                        <div class='incognito-options-scroll'>
+                            <div id='incognito-options-actions'></div>
+                            ${renderSchemaOptionsHTML(options)}
                         </div>
                         <button class='incognito-back-button'>&lt Back</button>
                     </div>
@@ -633,6 +645,46 @@ function onStatusDownloadingTick()
     {
         detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
     }));
+}
+
+// Options rendered from the schema (fourth menu page): one delegated listener per page, bound once.
+function bindSchemaOptionsOnce()
+{
+    var page = document.getElementById("incognito-options-view4");
+    if (!page || page.dataset.bound) return;
+    page.dataset.bound = "true";
+
+    page.addEventListener("click", function(e)
+    {
+        var item = e.target.closest ? e.target.closest(".incognito-schema-option") : null;
+        if (!item) return;
+        var checkbox = item.querySelector(".checkbox-incognito");
+        var checkmark = checkbox.firstElementChild;
+        var value = checkbox.getAttribute("class").indexOf("unchecked") > -1;
+        if (value) tickCheckbox(checkbox, checkmark);
+        else untickCheckbox(checkbox, checkmark);
+        setOptionFromMenu(item.dataset.optionKey, value);
+    });
+
+    page.addEventListener("change", function(e)
+    {
+        if (!e.target.classList || !e.target.classList.contains("incognito-schema-input")) return;
+        var key = e.target.dataset.optionKey;
+        var value = parseOptionValue(key, e.target.value);
+        e.target.value = value;
+        setOptionFromMenu(key, value);
+    });
+}
+
+function setOptionFromMenu(key, value)
+{
+    var message = { name: "setOptions" };
+    message[key] = value;
+    browser.runtime.sendMessage(message);
+
+    var update = {};
+    update[key] = value;
+    document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(update) }));
 }
 
 function onNextButtonClicked()

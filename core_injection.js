@@ -16,6 +16,7 @@ async function injectScripts()
 	await injectScript('core/parsing/protobuf/WAProto.js');
 
 	await injectScript('core/utils.js');
+	await injectScript('core/options_schema.js');
 	await injectScript('core/ui_class_names.js');
 	await injectScript('core/injected_ui.js');
 	

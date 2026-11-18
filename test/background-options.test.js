@@ -12,6 +12,21 @@ const DEFAULTS = {
     showDeviceTypes: true,
     autoReceiptOnReplay: true,
     allowStatusDownload: true,
+    // added by the options schema (core/options_schema.js)
+    toastOnDelete: false,
+    toastOnEdit: false,
+    saveEdits: false,
+    keepDisappearing: false,
+    saveDeletedStatus: false,
+    vaultRetentionDays: 90,
+    vaultMaxMB: 500,
+    blurChatList: false,
+    blurMessages: false,
+    blurMedia: false,
+    blurAvatars: false,
+    lockEnabled: false,
+    lockIdleMinutes: 10,
+    voiceNoteRate: 1,
 };
 
 function loadBackground(stored = {}) {
@@ -26,9 +41,12 @@ function loadBackground(stored = {}) {
         action: { onClicked: { addListener() {} } },
         tabs: { create() {} },
     };
-    loadScripts(createSandbox({ chrome }), ["background.js"]);
+    const sandbox = createSandbox({ chrome });
+    sandbox.importScripts = (...paths) => loadScripts(sandbox, paths);
+    loadScripts(sandbox, ["background.js"]);
     return {
         store,
+        listener: (message) => new Promise((resolve) => listener(message, {}, resolve)),
         getOptions: () => new Promise((resolve) => listener({ name: "getOptions" }, {}, resolve)),
         setOptions: (options) => listener({ name: "setOptions", ...options }, {}, () => {}),
     };

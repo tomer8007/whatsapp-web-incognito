@@ -2,6 +2,8 @@
 // UI Event handlers
 // ---------------------
 
+window.WAIncognitoOptions = window.WAIncognitoOptions || defaultOptions();
+
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
@@ -69,6 +71,10 @@ document.addEventListener('onOptionsUpdate', function (e)
     // update enforcing globals
     // TODO: move outside injected_ui.js
     var options = JSON.parse(e.detail);
+
+    // the full options object (some updates only carry the changed keys, so merge)
+    window.WAIncognitoOptions = Object.assign(window.WAIncognitoOptions || defaultOptions(), options);
+
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
