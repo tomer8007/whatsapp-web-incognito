@@ -391,8 +391,8 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
                 type: type, signal: (new AbortController).signal
             });
 
-            body = arrayBufferToBase64(decryptedData);
-            dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
+            var body = arrayBufferToBase64(decryptedData);
+            var dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
             var caption = retrievedMsg.caption;
             // store in indexedDB called "view-once" messageID and dataURI 
             var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);

@@ -254,7 +254,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         modifiedMessageNode = deepClone(messageNode);
         modifiedMessageNode.content = [];
 
-        indexOfEncNode = 0;
+        var indexOfEncNode = 0;
         for (var i = 0; i < messageNode.content.length; i++)
         {
             var node = messageNode.content[i];
@@ -298,7 +298,8 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
-    
+    var messageId = null;
+
     if (messageNode.attrs != null)
     {
         messageId = messageNode.attrs["id"];
