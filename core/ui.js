@@ -10,7 +10,6 @@ var isUIClassesWorking = true;
 var deletedMessagesDB = null;
 var deletedMessageResponses = createResponseRouter(document, "onDeletedMessageReceived", 10000);
 var deviceTypeResponses = createResponseRouter(document, "onDeviceTypeReceived", 10000);
-var pseudoMsgsIDs = new Set();
 
 if (chrome != undefined) 
 {
@@ -435,25 +434,6 @@ document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
-
-    // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
-    {
-        var deletedMsgsDB = deletedDBOpenRequest.result;
-        var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                pseudoMsgsIDs.add(value.originalID);
-            });
-            document.addEventListener("pseudoMsgs", (e) => 
-            {
-                pseudoMsgsIDs.add(e.detail);
-            });
-        };
-        deletedMsgsDB.close();
-    };
 });
 
 function getTheme() 

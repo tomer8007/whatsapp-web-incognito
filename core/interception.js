@@ -202,10 +202,6 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             }
 
-            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-                detail: deletedMessageId
-            }));
-
             // Now, save the deleted message in the DB after a short wait
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
             setTimeout(async function() 
