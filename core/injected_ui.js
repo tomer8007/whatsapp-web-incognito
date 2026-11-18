@@ -29,35 +29,6 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
 });
 
 
-document.addEventListener('onIncognitoOptionsOpened', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    /*
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    if (!readConfirmationsHookEnabled)
-    {
-        safetyDelayPanel.style.opacity = 0;
-        safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px";
-    }
-    */
-});
-
-document.addEventListener('onIncognitoOptionsClosed', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
-    // validateSafetyDelay();
-});
-
 function validateSafetyDelay()
 {
     var string = document.getElementById("incognito-option-safety-delay").value;

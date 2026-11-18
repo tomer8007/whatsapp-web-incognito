@@ -12,12 +12,6 @@ var deletedMessageResponses = createResponseRouter(document, "onDeletedMessageRe
 var deviceTypeResponses = createResponseRouter(document, "onDeviceTypeReceived", 10000);
 var diagnosticsResponses = createResponseRouter(document, "waIncognitoDiagnosticsResult", 5000);
 
-// Buttons at the top of the fourth menu page. Features add their entries below their own code.
-var incognitoMenuActions = [
-    { id: "diagnostics", label: "🩺 Diagnostik", run: function() { openDiagnosticsModal(); } },
-    { id: "vault", label: "🔒 Vault…", run: function() { openVaultModal(); } },
-    { id: "lock", label: "🔐 Kunci layar…", run: function() { openLockSetupModal(); } },
-];
 var vaultResponses = createResponseRouter(document, "waIncognitoVaultResult", 120000);
 
 // Entries added to the context menu of a chat in the chat list. The page world (core/chat_menu_context.js) answers
@@ -210,82 +204,18 @@ async function addIconIfNeeded()
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
         {
             document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
+        });
 
-            var dropContent = generateDropContent(options);
-            var drop = new Drop(
-            {
-                target: menuItemElem,
-                content: dropContent,
-                position: "bottom left",
-                classes: "drop-theme-incognito",
-                openOn: "click",
-                tetherOptions:
-                {
-                    offset: "-4px -4px 0 0"
-                },
-            });
-            var originalCloseFunction = drop.close;
-            drop.close = function ()
-            {
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
-                setTimeout(function () { originalCloseFunction.apply(drop, arguments); }, 100);
-            }
-            drop.on("open", function ()
-            {
-                if (!checkInterception()) return;
-                var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
-
-                document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").addEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").addEventListener("click", onTypingUpdatesTick);
-                document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
-                document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
-                document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
-                document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.addEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.addEventListener("click", onBackButtonClicked);
-                };
-                bindSchemaOptionsOnce();
-
-                //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
-                //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
-                //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
-
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
-            });
-            drop.on("close", function ()
-            {
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-                document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
-
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.removeEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.removeEventListener("click", onBackButtonClicked);
-                };
-
-                //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
-            });
+        menuItemElem.addEventListener("click", function() { openSettingsDialog(); });
+        menuItemElem.addEventListener("keydown", function(e)
+        {
+            if (e.key == "Enter" || e.key == " ") { e.preventDefault(); openSettingsDialog(); }
         });
     }
     else if (isUIClassesWorking)
     {
         isUIClassesWorking = false;
-        Swal.fire({
+        WAModal.fire({
             title: "WAIncognito is temporarily broken",
             html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. \
                     <br><Br> Please be patient for a few days until a newer compatible version will be released.',
@@ -297,167 +227,6 @@ async function addIconIfNeeded()
     }
 }
 
-function generateDropContent(options)
-{
-    var onlineStatusTitle = "Hide \"online\" status";
-    var onlineStatusCaption = "Stops sending presence updates. Will prevent you from seeing others' online status.";
-
-    var typingStatusTitle = "Hide \"typing...\" status";
-    var typingStatusCaption = "Stops sending typing updates.";
-
-    var readConfirmationsTitle = "Don't send read confirmations";
-    var readConfirmationsCaption = "Blocked messages will be marked with a button.";
-    var readConfirmationsNote = "Also works for stories and audio messages.";
-
-    var deletedMessagesTitle = "Restore deleted messages";
-    var deletedMessagesCaption = "Marks deleted messages in red";
-
-    var showDeviceTypeTitle = "Show device of messages";
-    var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
-
-    var autoReceiptTitle = "Auto-Send receipts on reply";
-    var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
-
-    var allowStatusDownloadTitle = "Allow status downloading";
-    var allowStatusDownloadCaption = "Adds a button to download statuses";
-
-    var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var onlineUpdatesCheckbox = (options.onlineUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var showDeviceTypeCheckbox = (options.showDeviceTypes ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-
-
-    var dropContent = ` \
-        <div class='incognito-options-container' dir='ltr'>
-            <div class='incognito-options-title'>Incognito options</div>
-
-            <div class='incognito-options-navigator'>
-                <div class='incognito-options-view-container' style='transform: translate(0%, 0%);' id='incognito-options-view1'>
-
-                    <!---- First Page ---!>
-                                                                            
-                    <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'> 
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
-                            </div>
-                        </div>
-                        ${readConfirmationsTitle}
-                        <div class='incognito-options-description'>${readConfirmationsCaption}</div>
-                        <br>
-                        <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
-                            ${readConfirmationsNote}
-                        </div> 
-                    </div> 
-                            
-                    <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${onlineUpdatesCheckbox}
-                            </div>
-                        </div>
-                        ${onlineStatusTitle}
-                        <div class='incognito-options-description'>${onlineStatusCaption}</div>
-                    </div>
-                    <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${typingUpdatesCheckbox}
-                            </div>
-                        </div>
-                        ${typingStatusTitle}
-                        <div class='incognito-options-description'>${typingStatusCaption}</div>
-                    </div>
-                    <button class='incognito-next-button'>Next &gt</button>
-                </div>
-
-                <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
-
-                    <!---- Second Page ---!>
-                    
-                    <div class='incognito-options-view' id='incognito-options-view-internal2'>
-                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
-                                </div>
-                            </div>
-                            ${deletedMessagesTitle}
-                            <div class='incognito-options-description'>${deletedMessagesCaption}</div>
-                        </div>
-                        <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
-                                </div>
-                            </div>
-                            ${showDeviceTypeTitle}
-                            <div class='incognito-options-description'>${showDeviceTypeCaption}</div>
-                        </div>
-                        <div id='incognito-option-auto-receipt' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${autoReceiptCheckbox}
-                                </div>
-                            </div>
-                            ${autoReceiptTitle}
-                            <div class='incognito-options-description'>${autoReceiptCaption}</div>
-                        </div>
-                        <br>
-                        <button class='incognito-next-button'>Next &gt</button>
-                        <button class='incognito-back-button'>&lt Back</button>
-                    </div>
-                </div>
-
-                <div class='incognito-options-view-container' style='transform: translate(200%, 0%);' id='incognito-options-view3'>
-
-                    <!---- Third Page ---!>
-                    <div class='incognito-options-view' id='incognito-options-view-internal3'>
-                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
-                                </div>
-                            </div>
-                            ${allowStatusDownloadTitle}
-                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
-                        </div>
-                        <br>
-                        <button class='incognito-next-button'>Fitur lanjutan &gt</button>
-                        <button class='incognito-back-button'>&lt Back</button>
-                    </div>
-                </div>
-
-                <div class='incognito-options-view-container' style='transform: translate(300%, 0%);' id='incognito-options-view4'>
-
-                    <!---- Fourth Page (rendered from core/options_schema.js) ---!>
-                    <div class='incognito-options-view' id='incognito-options-view-internal4'>
-                        <div class='incognito-options-scroll'>
-                            <div id='incognito-options-actions'>${renderMenuActionsHTML()}</div>
-                            ${renderSchemaOptionsHTML(options)}
-                        </div>
-                        <button class='incognito-back-button'>&lt Back</button>
-                    </div>
-                </div>
-
-                
-            </div>
-            
-        </div>`;
-
-    return dropContent;
-}
-
 document.addEventListener('onMarkAsReadClick', function (e)
 {
     var data = JSON.parse(e.detail);
@@ -467,7 +236,7 @@ document.addEventListener('onMarkAsReadClick', function (e)
         {
             if (options.showReadWarning)
             {
-                Swal.fire({
+                WAModal.fire({
                     title: "Mark as read?",
                     text: data.formattedName + " will be able to tell you read the last " + 
                             (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
@@ -505,250 +274,6 @@ document.addEventListener('onInterceptionWorking', function (e)
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
 });
-
-function getTheme() 
-{
-    // light/dark mode detection
-    if (localStorage["theme"] != "null" && localStorage["theme"] != undefined) 
-        return localStorage["theme"]
-    else 
-    {
-        // this is if there is no theme selected by default (null)
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches || 
-            document.getElementsByClassName("web")[0].classList.contains("dark")) 
-            return "\"dark\"";
-        else 
-            return "\"light\"";
-    }
-}
-
-//
-// Drop handlers
-//
-
-function onReadConfirmaionsTick()
-{
-    var readConfirmationsHook = false;
-    var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        readConfirmationsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-
-        readConfirmationsHook = false;
-        var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
-        for (var i = 0; i < redChats.length; i++)
-        {
-            redChats[i].className = 'icon-meta unread-count';
-        }
-    }
-    browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
-    }));
-}
-
-function onOnlineUpdatesTick()
-{
-    var onlineUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-online-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = true;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = false;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
-    }
-    browser.runtime.sendMessage({ name: "setOptions", onlineUpdatesHook: onlineUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ onlineUpdatesHook: onlineUpdatesHook })
-    }));
-}
-
-function onTypingUpdatesTick()
-{
-    var typingUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-typing-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", typingUpdatesHook: typingUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ typingUpdatesHook: typingUpdatesHook })
-    }));
-}
-
-function onSaveDeletedMsgsTick()
-{
-    var saveDeletedMsgsHook = false;
-    var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
-    }));
-}
-
-function onShowDeviceTypesTick()
-{
-    var showDeviceTypes = false;
-    var checkbox = document.querySelector("#incognito-option-show-device-type .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        showDeviceTypes = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        showDeviceTypes = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", showDeviceTypes: showDeviceTypes });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ showDeviceTypes: showDeviceTypes })
-    }));
-}
-
-function onAutoReceiptsTick()
-{
-    var autoReceipts = false;
-    var checkbox = document.querySelector("#incognito-option-auto-receipt .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        autoReceipts = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        autoReceipts = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", autoReceiptOnReplay: autoReceipts });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ autoReceiptOnReplay: autoReceipts })
-    }));
-}
-
-function onStatusDownloadingTick()
-{
-    var allowStatusDownload = false;
-    var checkbox = document.querySelector("#incognito-option-status-downloading .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        allowStatusDownload = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        allowStatusDownload = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", allowStatusDownload: allowStatusDownload });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
-    }));
-}
-
-// Options rendered from the schema (fourth menu page): one delegated listener per page, bound once.
-function bindSchemaOptionsOnce()
-{
-    var page = document.getElementById("incognito-options-view4");
-    if (!page || page.dataset.bound) return;
-    page.dataset.bound = "true";
-
-    page.addEventListener("click", function(e)
-    {
-        var actionButton = e.target.closest ? e.target.closest("[data-incognito-action]") : null;
-        if (actionButton)
-        {
-            var action = incognitoMenuActions.find(function(a) { return a.id == actionButton.dataset.incognitoAction; });
-            if (action) action.run();
-            return;
-        }
-
-        var item = e.target.closest ? e.target.closest(".incognito-schema-option") : null;
-        if (!item) return;
-        var checkbox = item.querySelector(".checkbox-incognito");
-        var checkmark = checkbox.firstElementChild;
-        var value = checkbox.getAttribute("class").indexOf("unchecked") > -1;
-        if (value) tickCheckbox(checkbox, checkmark);
-        else untickCheckbox(checkbox, checkmark);
-        setOptionFromMenu(item.dataset.optionKey, value);
-    });
-
-    page.addEventListener("change", function(e)
-    {
-        if (!e.target.classList || !e.target.classList.contains("incognito-schema-input")) return;
-        var key = e.target.dataset.optionKey;
-        var value = parseOptionValue(key, e.target.value);
-        e.target.value = value;
-        setOptionFromMenu(key, value);
-    });
-}
-
-function renderMenuActionsHTML()
-{
-    return incognitoMenuActions.map(function(action)
-    {
-        return "<button class='incognito-menu-action' data-incognito-action='" + action.id + "'>" + action.label + "</button>";
-    }).join("");
-}
 
 //
 // Diagnostics (see core/diagnostics.js): this world owns the DOM, so it checks the selectors
@@ -800,43 +325,6 @@ function escapeHTML(text)
     });
 }
 
-async function openDiagnosticsModal()
-{
-    var results = (await requestPageDiagnostics()).concat(Diagnostics.run());
-    var icons = {ok: "✅", missing: "❌", unseen: "⚪"};
-    var rows = results.map(function(r)
-    {
-        return "<tr><td>" + (icons[r.status] || "") + " " + escapeHTML(r.status) + "</td><td>" + escapeHTML(r.feature) +
-               "</td><td>" + escapeHTML(r.kind) + "</td><td style='word-break: break-all'>" + escapeHTML(r.id) + "</td></tr>";
-    }).join("");
-
-    var result = await Swal.fire({
-        title: "Diagnostik",
-        html: "<div style='text-align: left; font-size: 12px'>" +
-              "⚪ <i>unseen</i> berarti elemen/aksi itu belum muncul di layar, belum tentu rusak.<br><br>" +
-              "<div style='max-height: 50vh; overflow-y: auto'><table class='incognito-diagnostics-table'>" +
-              "<tr><th>Status</th><th>Fitur</th><th>Jenis</th><th>Dependensi</th></tr>" + rows + "</table></div></div>",
-        width: 760,
-        showCancelButton: true,
-        confirmButtonText: "Salin laporan",
-        cancelButtonText: "Tutup",
-    });
-
-    if (result.isConfirmed)
-    {
-        var report = Diagnostics.report(results);
-        try
-        {
-            await navigator.clipboard.writeText(report);
-            Swal.fire({ title: "Laporan disalin", text: "Laporan tidak memuat isi pesan atau JID.", icon: "success", timer: 2000 });
-        }
-        catch (e)
-        {
-            Swal.fire({ title: "Salin manual", html: "<textarea style='width: 100%; height: 200px'>" + escapeHTML(report) + "</textarea>" });
-        }
-    }
-}
-
 //
 // Vault (core/vault.js lives in the page world; the passphrase is sent there through waIncognitoVaultCommand)
 //
@@ -858,20 +346,20 @@ async function openVaultModal()
     var result = await sendVaultCommand("status");
     if (!result.ok || !result.status)
     {
-        Swal.fire({ title: "Vault tidak tersedia", text: result.error || "Halaman belum siap.", icon: "error" });
+        WAModal.fire({ title: "Vault tidak tersedia", text: result.error || "Halaman belum siap.", icon: "error" });
         return;
     }
     var status = result.status;
 
     if (!status.isSetUp)
     {
-        var setup = await Swal.fire({
+        var setup = await WAModal.fire({
             title: "Buat vault",
             html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
                   "<b style='color: #d33'>Lupa passphrase berarti data hilang permanen.</b> Tidak ada pemulihan.<br><br>" +
                   "Arsip lama yang belum terenkripsi akan dipindahkan ke vault.</div>" +
-                  "<input type='password' id='incognito-vault-pass1' class='swal2-input' placeholder='Passphrase (min. 8 karakter)'>" +
-                  "<input type='password' id='incognito-vault-pass2' class='swal2-input' placeholder='Ulangi passphrase'>",
+                  "<input type='password' id='incognito-vault-pass1' class='wam-input' placeholder='Passphrase (min. 8 karakter)'>" +
+                  "<input type='password' id='incognito-vault-pass2' class='wam-input' placeholder='Ulangi passphrase'>",
             showCancelButton: true,
             confirmButtonText: "Buat vault",
             cancelButtonText: "Batal",
@@ -879,23 +367,23 @@ async function openVaultModal()
             {
                 var pass1 = document.getElementById("incognito-vault-pass1").value;
                 var pass2 = document.getElementById("incognito-vault-pass2").value;
-                if (pass1.length < 8) { Swal.showValidationMessage("Passphrase minimal 8 karakter"); return false; }
-                if (pass1 !== pass2) { Swal.showValidationMessage("Passphrase tidak sama"); return false; }
+                if (pass1.length < 8) { WAModal.showValidationMessage("Passphrase minimal 8 karakter"); return false; }
+                if (pass1 !== pass2) { WAModal.showValidationMessage("Passphrase tidak sama"); return false; }
                 return pass1;
             },
         });
         if (!setup.isConfirmed) return;
         var setupResult = await sendVaultCommand("setup", setup.value);
         if (setupResult.ok)
-            Swal.fire({ title: "Vault dibuat", text: setupResult.migrated + " arsip lama dipindahkan ke vault.", icon: "success" });
+            WAModal.fire({ title: "Vault dibuat", text: setupResult.migrated + " arsip lama dipindahkan ke vault.", icon: "success" });
         else
-            Swal.fire({ title: "Gagal membuat vault", text: setupResult.error || "", icon: "error" });
+            WAModal.fire({ title: "Gagal membuat vault", text: setupResult.error || "", icon: "error" });
         return;
     }
 
     if (!status.isUnlocked)
     {
-        var unlock = await Swal.fire({
+        var unlock = await WAModal.fire({
             title: "Buka vault",
             html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "</div>",
             input: "password",
@@ -907,13 +395,13 @@ async function openVaultModal()
         if (!unlock.isConfirmed) return;
         var unlockResult = await sendVaultCommand("unlock", unlock.value);
         if (unlockResult.ok)
-            Swal.fire({ title: "Vault terbuka", text: "Buka ulang chat untuk melihat pesan yang tadi terkunci.", icon: "success", timer: 2500 });
+            WAModal.fire({ title: "Vault terbuka", text: "Buka ulang chat untuk melihat pesan yang tadi terkunci.", icon: "success", timer: 2500 });
         else
-            Swal.fire({ title: "Passphrase salah", icon: "error" });
+            WAModal.fire({ title: "Passphrase salah", icon: "error" });
         return;
     }
 
-    var info = await Swal.fire({
+    var info = await WAModal.fire({
         title: "Vault terbuka",
         html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
               "Isi: " + status.count + " arsip, " + (status.bytes / (1024 * 1024)).toFixed(2) + " MB.</div>",
@@ -977,7 +465,7 @@ function showEditHistory(messageId)
     {
         if (data.locked)
         {
-            Swal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat versi asli.", icon: "info" });
+            WAModal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat versi asli.", icon: "info" });
             return;
         }
         var html;
@@ -993,7 +481,7 @@ function showEditHistory(messageId)
                        escapeHTML(formatEditTime(edit.ts)) + "</div><div style='white-space: pre-wrap'>" + escapeHTML(edit.original) + "</div></div>";
             }).join("");
         }
-        Swal.fire({ title: "Versi asli", html: html, confirmButtonText: "Tutup" });
+        WAModal.fire({ title: "Versi asli", html: html, confirmButtonText: "Tutup" });
     });
     document.dispatchEvent(new CustomEvent("getEditHistory", { detail: JSON.stringify({ messageID: messageId }) }));
 }
@@ -1085,7 +573,7 @@ async function openEphemeralModal(context)
     var data = await requestEphemeralForChat(context);
     if (data.locked)
     {
-        Swal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat pesan sementara yang tersimpan.", icon: "info" });
+        WAModal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat pesan sementara yang tersimpan.", icon: "info" });
         return;
     }
 
@@ -1101,13 +589,13 @@ async function openEphemeralModal(context)
         {
             var body = item.text ? "<div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div>" : "<i>(tanpa teks)</i>";
             var button = item.hasMedia ?
-                "<button class='incognito-menu-action' style='margin: 4px 0 0 0' data-eph-id='" + escapeHTML(item.id) + "' data-eph-mime='" +
+                "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-top: 6px' data-eph-id='" + escapeHTML(item.id) + "' data-eph-mime='" +
                 escapeHTML(item.mimetype || "") + "'>⬇ unduh media (" + escapeHTML(item.mediaType) + ")</button>" : "";
             return "<div style='margin-bottom: 12px'><div style='font-size: 11px; opacity: 0.7'>" + escapeHTML(formatEditTime(item.ts)) + "</div>" + body + button + "</div>";
         }).join("") + "</div>";
     }
 
-    Swal.fire({
+    WAModal.fire({
         title: "Pesan sementara: " + (context.name || ""),
         html: html,
         width: 600,
@@ -1166,11 +654,11 @@ async function openContactPrivacyModal(context)
     var current = {};
     context.jids.forEach(function(jid) { current = Object.assign(current, contactRulesCache[jid] || {}); });
 
-    var result = await Swal.fire({
+    var result = await WAModal.fire({
         title: "Privasi kontak ini",
         html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
-              "Centang biru<br><select id='incognito-contact-read' class='swal2-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
-              "Status mengetik<br><select id='incognito-contact-typing' class='swal2-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
+              "Centang biru<br><select id='incognito-contact-read' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
+              "Status mengetik<br><select id='incognito-contact-typing' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
               "<span style='font-size: 12px; opacity: 0.8'>Status online tidak bisa diatur per kontak: WhatsApp tidak punya status online per kontak, jadi tetap mengikuti pengaturan global.</span></div>",
         showCancelButton: true,
         confirmButtonText: "Simpan",
@@ -1208,14 +696,14 @@ async function openScheduleReceiptModal(context)
     var jid = context.primaryJid;
     var existing = receiptScheduler.list().find(function(item) { return item.jid == jid; });
 
-    var result = await Swal.fire({
+    var result = await WAModal.fire({
         title: "Kirim centang biru nanti",
         html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
               (existing ? "Sudah dijadwalkan pada " + escapeHTML(formatEditTime(existing.dueAt)) + ". Memilih lagi akan menimpa jadwal itu.<br><br>" : "") +
-              "<select id='incognito-receipt-choice' class='swal2-select' style='margin: 0 0 8px 0'>" +
+              "<select id='incognito-receipt-choice' class='wam-select' style='margin: 0 0 8px 0'>" +
               "<option value='15m'>15 menit lagi</option><option value='1h'>1 jam lagi</option><option value='3h'>3 jam lagi</option>" +
               "<option value='time'>Jam tertentu…</option></select><br>" +
-              "<input type='time' id='incognito-receipt-time' class='swal2-input' style='margin: 0; display: none'><br>" +
+              "<input type='time' id='incognito-receipt-time' class='wam-input' style='margin: 0; display: none'><br>" +
               "<span style='font-size: 12px; opacity: 0.8'>Tab WhatsApp Web harus tetap terbuka. Kalau jadwal terlewat saat tab tertutup, centang biru dikirim begitu tab dibuka lagi.</span></div>",
         showCancelButton: true,
         showDenyButton: !!existing,
@@ -1234,7 +722,7 @@ async function openScheduleReceiptModal(context)
         {
             var dueAt = resolveScheduleChoice(document.getElementById("incognito-receipt-choice").value, Date.now(),
                                               document.getElementById("incognito-receipt-time").value);
-            if (dueAt == null) { Swal.showValidationMessage("Pilih jam yang valid"); return false; }
+            if (dueAt == null) { WAModal.showValidationMessage("Pilih jam yang valid"); return false; }
             return dueAt;
         },
     });
@@ -1251,13 +739,13 @@ async function openLockSetupModal()
     var stored = await chrome.storage.local.get(["lockPasscode"]);
     var hasPasscode = !!stored.lockPasscode;
 
-    var result = await Swal.fire({
+    var result = await WAModal.fire({
         title: hasPasscode ? "Kunci layar" : "Buat passcode",
         html: "<div style='text-align: left; font-size: 14px'>" + escapeHTML(PRIVACY_LOCK_DISCLAIMER) + "<br><br>" +
               "Aktifkan opsi \"" + escapeHTML(getOptionSchemaEntry("lockEnabled").label) + "\" di menu ini supaya kunci dipakai." +
               (hasPasscode ? "<br><br>Passcode sudah dibuat. Isi di bawah untuk menggantinya." : "") + "</div>" +
-              "<input type='password' id='incognito-lock-pass1' class='swal2-input' placeholder='Passcode baru (min. 4 karakter)'>" +
-              "<input type='password' id='incognito-lock-pass2' class='swal2-input' placeholder='Ulangi passcode'>",
+              "<input type='password' id='incognito-lock-pass1' class='wam-input' placeholder='Passcode baru (min. 4 karakter)'>" +
+              "<input type='password' id='incognito-lock-pass2' class='wam-input' placeholder='Ulangi passcode'>",
         showCancelButton: true,
         showDenyButton: hasPasscode,
         denyButtonText: "Kunci sekarang",
@@ -1267,8 +755,8 @@ async function openLockSetupModal()
         {
             var pass1 = document.getElementById("incognito-lock-pass1").value;
             var pass2 = document.getElementById("incognito-lock-pass2").value;
-            if (pass1.length < 4) { Swal.showValidationMessage("Passcode minimal 4 karakter"); return false; }
-            if (pass1 !== pass2) { Swal.showValidationMessage("Passcode tidak sama"); return false; }
+            if (pass1.length < 4) { WAModal.showValidationMessage("Passcode minimal 4 karakter"); return false; }
+            if (pass1 !== pass2) { WAModal.showValidationMessage("Passcode tidak sama"); return false; }
             return pass1;
         },
     });
@@ -1283,7 +771,7 @@ async function openLockSetupModal()
         var salt = btoa(String.fromCharCode.apply(null, saltBytes));
         var hash = await hashPasscode(result.value, salt);
         await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
-        Swal.fire({ title: "Passcode disimpan", icon: "success", timer: 2000 });
+        WAModal.fire({ title: "Passcode disimpan", icon: "success", timer: 2000 });
     }
 }
 
@@ -1292,7 +780,7 @@ async function openLockSetupModal()
 //
 function showScheduleToast(title, icon)
 {
-    Swal.fire({ toast: true, position: "bottom-end", icon: icon, title: title, showConfirmButton: false, timer: 7000 });
+    WAModal.fire({ toast: true, position: "bottom-end", icon: icon, title: title, showConfirmButton: false, timer: 7000 });
 }
 
 function sendTextViaPageWorld(message)
@@ -1329,7 +817,7 @@ function scheduledMessagesHTML(items)
         var status = item.status == "error" ? " ⚠ " + escapeHTML(item.error || "gagal") : (item.status == "overdue" ? " ⏰ terlewat" : "");
         return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + status + "<br><span style='opacity: 0.8'>" +
                escapeHTML(item.text.length > 60 ? item.text.slice(0, 60) + "…" : item.text) + "</span> " +
-               "<button class='incognito-menu-action' style='margin: 0 0 0 6px' data-sched-cancel='" + escapeHTML(item.id) + "'>Batal</button></div>";
+               "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-left: 8px' data-sched-cancel='" + escapeHTML(item.id) + "'>Batal</button></div>";
     }).join("") + "</div>";
 }
 
@@ -1337,11 +825,11 @@ async function openScheduleMessageModal(context)
 {
     var mine = sendScheduler.list().filter(function(item) { return context.jids.indexOf(item.jid) > -1; });
 
-    await Swal.fire({
+    await WAModal.fire({
         title: "Jadwalkan pesan",
         html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<textarea id='incognito-sched-text' class='swal2-textarea' placeholder='Isi pesan' style='margin: 8px 0'></textarea>" +
-              "<input type='datetime-local' id='incognito-sched-time' class='swal2-input' style='margin: 0' value='" + toDateTimeLocalValue(Date.now() + 10 * 60 * 1000) + "'>" +
+              "<textarea id='incognito-sched-text' class='wam-textarea' placeholder='Isi pesan' style='margin: 8px 0'></textarea>" +
+              "<input type='datetime-local' id='incognito-sched-time' class='wam-input' style='margin: 0' value='" + toDateTimeLocalValue(Date.now() + 10 * 60 * 1000) + "'>" +
               "<div style='text-align: left; font-size: 12px; opacity: 0.8; margin-top: 8px'>Tab WhatsApp Web harus tetap terbuka. Pesan disimpan di browser ini tanpa enkripsi sampai terkirim.</div>" +
               "<div id='incognito-sched-list'>" + scheduledMessagesHTML(mine) + "</div>",
         width: 560,
@@ -1362,8 +850,8 @@ async function openScheduleMessageModal(context)
         {
             var text = document.getElementById("incognito-sched-text").value;
             var dueAt = new Date(document.getElementById("incognito-sched-time").value).getTime();
-            if (!text.trim()) { Swal.showValidationMessage("Isi pesan tidak boleh kosong"); return false; }
-            if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { Swal.showValidationMessage("Pilih waktu di masa depan"); return false; }
+            if (!text.trim()) { WAModal.showValidationMessage("Isi pesan tidak boleh kosong"); return false; }
+            if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { WAModal.showValidationMessage("Pilih waktu di masa depan"); return false; }
             return { text: text, dueAt: dueAt };
         },
     }).then(async function(result)
@@ -1380,7 +868,7 @@ async function askAboutOverdueMessages(items)
     for (var i = 0; i < items.length; i++)
     {
         var item = items[i];
-        var answer = await Swal.fire({
+        var answer = await WAModal.fire({
             title: "Pesan terjadwal terlewat",
             html: "<div style='text-align: left; font-size: 14px'>Seharusnya terkirim pada " + escapeHTML(formatEditTime(item.dueAt)) +
                   (item.name ? " ke <b>" + escapeHTML(item.name) + "</b>" : "") + ":<br><br><div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div></div>",
@@ -1405,83 +893,18 @@ function setOptionFromMenu(key, value)
     var update = {};
     update[key] = value;
     document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(update) }));
-}
 
-function onNextButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX - 100) + "%, 0%)";
-        }
-    });
-}
-
-function onBackButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX + 100) + "%, 0%)";
-        }
-    });
-}
-
-function getTransformXOfView(view)
-{
-    if (view.style.transform.includes("translate"))
-        return parseInt(view.style.transform.match(/-?[\d\.]+/g)[0]);
-    else
-        return 0;
-}
-
-//
-//    Safety Delay
-//
-function onSafetyDelayChanged(event)
-{
-    if (isSafetyDelayValid(event.srcElement.value))
+    // side effects the old menu had
+    if (key == "onlineUpdatesHook")
     {
-        var delay = parseInt(event.srcElement.value);
-        document.getElementById("incognito-option-safety-delay").disabled = false;
-        browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-        document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ safetyDelay: delay })
-        }));
+        document.dispatchEvent(new CustomEvent(value ? 'onPresenceOptionTicked' : 'onPresenceOptionUnticked'));
+    }
+    else if (key == "readConfirmationsHook" && !value)
+    {
+        var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
+        for (var i = redChats.length - 1; i >= 0; i--) redChats[i].className = 'icon-meta unread-count';
     }
 }
-
-function onSafetyDelayDisabled()
-{
-    document.getElementById("incognito-option-safety-delay").disabled = true;
-    document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ safetyDelay: 0 })
-    }));
-}
-
-function onSafetyDelayEnabled()
-{
-    var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
-    if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
-    document.getElementById("incognito-option-safety-delay").disabled = false;
-    document.getElementById("incognito-radio-disable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {detail: JSON.stringify({ safetyDelay: delay })}));
-}
-
-//
-// Utils
-//
 
 async function generateSVGElement(svgImagePath, clazz="", title="", size=24, role="")
 {
@@ -1609,7 +1032,7 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                     learnMore.href = "#";
                     learnMore.innerHTML = "Sent as view once: Learn more";
                     learnMore.addEventListener("click", function () {
-                        Swal.fire({
+                        WAModal.fire({
                             title: "View-once message",
                             html: 'This message was sent as a view-once. \
                             <br><br> Note that the recipient\'s device will show this as unopened \
@@ -1865,32 +1288,11 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
     document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
 }
 
-function tickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " incognito-checked");
-    checkmark.classList.add("incognito-marked");
-}
-
-function untickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    var chekmarkClass = checkmark.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("incognito-checked").join(" "));
-    checkmark.setAttribute("class", chekmarkClass.replace("incognito-marked", ""));
-}
-
-function isSafetyDelayValid(string)
-{
-    var number = Math.floor(Number(string));
-    return (String(number) === string && number >= 1 && number <= 30) || string == ""
-}
-
 function checkInterception()
 {
     if (!isInterceptionWorking)
     {
-        Swal.fire({
+        WAModal.fire({
             title: "Oops...",
             html: "WhatsApp Web Incognito has detected that interception is not working. \
                    Please try refreshing this page, or, if the problem presists, writing back to the developer.",
@@ -1938,12 +1340,4 @@ function updateUIClassNamesIfNeeded()
         UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV = "x1lliihq xh8yej3";
     }
 
-}
-
-function isNumberKey(evt)
-{
-    var charCode = (evt.which) ? evt.which : event.keyCode
-    if (charCode > 31 && (charCode < 48 || charCode > 57))
-        return false;
-    return true;
 }
