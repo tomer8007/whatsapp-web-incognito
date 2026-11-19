@@ -322,6 +322,12 @@ function registerUIDiagnostics()
     registerSelectorDiagnostic("hidetag", "sticker-menu-item (mi-remove-recent / mi-copy-favorite)", 'li[data-testid="mi-remove-recent-sticker"], li[data-testid="mi-copy-favorite-sticker"]');
     registerSelectorDiagnostic("hidetag", "composer-hidetag-button", ".incognito-composer-button");
     registerSelectorDiagnostic("hidetag", "sticker-hidetag-menu-item", '[data-testid="mi-incognito-sticker-hidetag"]');
+    // 0 (unseen) when our item is in the DOM but WhatsApp's animation state left it transparent
+    Diagnostics.register("hidetag", "selector", "sticker-hidetag-menu-item-visible", function()
+    {
+        var items = document.querySelectorAll('[data-testid="mi-incognito-sticker-hidetag"]');
+        return Array.prototype.filter.call(items, function(item) { return getComputedStyle(item).opacity != "0"; }).length;
+    });
     Diagnostics.register("contacts", "selector", "incognito-header-button", function() { return document.getElementsByClassName("incognito-header-button").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
@@ -582,6 +588,7 @@ function appendChatMenuEntries(context)
     {
         var item = document.createElement("div");
         item.className = UIClassNames.DROPDOWN_ENTRY_CLASS + " incognito-chat-menu-entry";
+        revealDropdownItem(item);
         item.setAttribute("role", "button");
         item.textContent = t(entry.labelKey);
         item.addEventListener("click", function(e)
@@ -997,6 +1004,7 @@ function fitStickerMenu(item)
 {
     try
     {
+        revealDropdownItem(item); // re-applied on every pass: a re-render must not leave the item at opacity 0
         var popup = item.parentElement;
         while (popup && popup !== document.body && ["absolute", "fixed"].indexOf(getComputedStyle(popup).position) == -1) popup = popup.parentElement;
         var itemBottom = item.getBoundingClientRect().bottom;
@@ -1037,6 +1045,8 @@ function addStickerHidetagItem(sample)
     var copy = holder.cloneNode(true);
     var li = copy.querySelector("li") || copy;
     li.setAttribute("data-testid", "mi-incognito-sticker-hidetag");
+    revealDropdownItem(li);
+    revealDropdownItem(copy);
     var spans = li.querySelectorAll("span");
     var label = Array.prototype.filter.call(spans, function(span) { return span.getAttribute("aria-hidden") != "true" && !span.querySelector("svg") && span.children.length == 0; })[0];
     if (label) label.textContent = t("hidetag.sticker.menu");

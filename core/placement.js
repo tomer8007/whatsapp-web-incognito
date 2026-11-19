@@ -46,6 +46,15 @@ function placePopover(anchor, size, viewport, prefer, options)
     return { left: leftValue, top: topValue, side: side, arrow: clampNumber(centerX - leftValue, nub, size.width - nub) };
 }
 
+// WhatsApp's entrance animation sets inline "opacity: 1; transform: translateY(0%)" on the dropdown items it mounts itself. An item we add
+// later never gets that and stays at its default opacity 0, so it is invisible. Every cloned/added dropdown item goes through this.
+function revealDropdownItem(element)
+{
+    if (!element || !element.style) return;
+    element.style.setProperty("opacity", "1", "important");
+    element.style.setProperty("transform", "translateY(0%)");
+}
+
 // A menu (rect) whose content now reaches `contentBottom`: how much to grow it, and how far to move it up so it stays on screen.
 function menuFit(menuRect, contentBottom, viewportHeight, margin)
 {

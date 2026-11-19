@@ -43,3 +43,21 @@ test("a menu with a third item grows by the missing height and is moved up when 
     assert.deepStrictEqual(plain(menuFit({ bottom: 630 }, 630, 961, 8)), { growBy: 0, shiftUp: 0 });
     assert.deepStrictEqual(plain(menuFit({ bottom: 930 }, 970, 961, 8)), { growBy: 40, shiftUp: 17 });
 });
+
+test("an added dropdown item is made visible with inline opacity and transform (WhatsApp's entrance animation never runs on it)", () => {
+    const { revealDropdownItem } = load();
+    const calls = [];
+    const element = { style: { setProperty: (name, value, priority) => calls.push([name, value, priority || ""]) } };
+    revealDropdownItem(element);
+    assert.deepStrictEqual(calls, [["opacity", "1", "important"], ["transform", "translateY(0%)", ""]]);
+    assert.doesNotThrow(() => revealDropdownItem(null));
+    assert.doesNotThrow(() => revealDropdownItem({}));
+});
+
+test("ui.js applies the reveal to the sticker item, on every fit pass and to chat-menu entries", () => {
+    const fs = require("node:fs"), path = require("node:path");
+    const code = fs.readFileSync(path.join(require("./helpers/sandbox").ROOT, "core/ui.js"), "utf8");
+    assert.ok(/revealDropdownItem\(li\)/.test(code));
+    assert.ok(/function fitStickerMenu\(item\)\s*\{\s*try\s*\{\s*revealDropdownItem\(item\)/.test(code));
+    assert.ok(/incognito-chat-menu-entry";\s*revealDropdownItem\(item\)/.test(code));
+});
