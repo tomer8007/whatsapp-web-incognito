@@ -114,3 +114,52 @@ test("deletedMsgs upgrade: v1 gets the index, v2 only gets the new stores, v3 ch
     assert.deepStrictEqual(run(2, ["msgs"]), { created: ["edits", "ephemeral"], msgsIndexes: [] });
     assert.deepStrictEqual(run(3, ["msgs", "edits", "ephemeral"]), { created: [], msgsIndexes: [] });
 });
+
+const tick = () => new Promise((r) => setImmediate(r));
+const chatWith = (id, body) => ({ msgs: { getModelsArray: () => [{ id: { id }, body, t: 1700000000 }] } });
+
+test("an unknown edit falls back to the body in WhatsApp's own message model", async () => {
+    const s = load({ saveEdits: true, toastOnEdit: true });
+    s.getChatByJID = async () => chatWith("OLD1", "harga lama");
+    s.NodeHandler.trackEdits(edit("OLD1", "harga baru"), "E1", "111@c.us");
+    await tick(); await tick();
+    assert.strictEqual(s.saved.length, 1);
+    assert.strictEqual(s.saved[0].record.original, "harga lama");
+    assert.strictEqual(s.saved[0].record.newText, "harga baru");
+    assert.strictEqual(s.toasts.length, 1);
+});
+
+test("the toast is shown even when the original is unknown, and nothing is saved", async () => {
+    const s = load({ saveEdits: true, toastOnEdit: true });
+    s.getChatByJID = async () => chatWith("OTHER", "x");
+    s.NodeHandler.trackEdits(edit("NOPE", "teks baru"), "E1", "111@c.us");
+    await tick(); await tick();
+    assert.strictEqual(s.saved.length, 0);
+    assert.deepStrictEqual({ ...s.toasts[0] }, { chatJid: "111@c.us", preview: "teks baru" });
+});
+
+test("an edit with no lookup possible at all still toasts", async () => {
+    const s = load({ toastOnEdit: true });
+    s.NodeHandler.trackEdits(edit("NOPE", "teks baru"), "E1", "111@c.us"); // getChatByJID is not even defined
+    await tick(); await tick();
+    assert.strictEqual(s.toasts.length, 1);
+});
+
+test("resolveEditOriginal prefers the cache and readOriginalFromChatModel never throws", () => {
+    const s = load({});
+    assert.strictEqual(s.resolveEditOriginal({ text: "c", ts: 1 }, { text: "m", ts: 2 }).source, "cache");
+    assert.strictEqual(s.resolveEditOriginal(null, { text: "m", ts: 2 }).source, "model");
+    assert.strictEqual(s.resolveEditOriginal(null, null), null);
+    assert.strictEqual(s.readOriginalFromChatModel(null, "x"), null);
+    assert.strictEqual(s.readOriginalFromChatModel({ msgs: { getModelsArray() { throw new Error("x"); } } }, "x"), null);
+    assert.strictEqual(s.readOriginalFromChatModel({ msgs: { getModelsArray: () => [{ id: { id: "x" }, body: "b", isMedia: true }] } }, "x"), null);
+    assert.strictEqual(s.readOriginalFromChatModel({ msgs: { getModelsArray: () => [{ id: { id: "x" }, caption: "cap", isMedia: true }] } }, "x").text, "cap");
+});
+
+test("an edit inside an ephemeral wrapper, or with a string enum type, is detected", () => {
+    const s = load({});
+    const wrapped = { ephemeralMessage: { message: edit("M9", "z") } };
+    assert.strictEqual(s.EditTracker.detectEdit(wrapped).targetId, "M9");
+    const str = { protocolMessage: { type: "MESSAGE_EDIT", key: { id: "M8" }, editedMessage: { conversation: "q" } } };
+    assert.deepStrictEqual({ ...s.EditTracker.detectEdit(str) }, { targetId: "M8", newText: "q" });
+});

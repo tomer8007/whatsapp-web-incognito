@@ -48,6 +48,35 @@ function extractText(message)
     return null;
 }
 
+// The original text of a message as WhatsApp's own model still holds it (chat.msgs), or null. Used when the 20-minute cache
+// does not know the message (received before the tab was opened). Never throws.
+function readOriginalFromChatModel(chat, targetId)
+{
+    try
+    {
+        if (!chat || !chat.msgs || !chat.msgs.getModelsArray || !targetId) return null;
+        var model = chat.msgs.getModelsArray().find(function(m) { return m && m.id && m.id.id == targetId; });
+        if (!model) return null;
+        if (typeof model.body == "string" && model.body !== "" && !model.isMedia) return { text: model.body, ts: model.t ? model.t * 1000 : null };
+        if (typeof model.caption == "string" && model.caption !== "") return { text: model.caption, ts: model.t ? model.t * 1000 : null };
+    }
+    catch (e) {}
+    return null;
+}
+
+// -> {text, ts, source: "cache"|"model"} | null. The cache wins: it holds the latest version we saw.
+function resolveEditOriginal(recalled, fromModel)
+{
+    if (recalled) return { text: recalled.text, ts: recalled.ts, source: "cache" };
+    if (fromModel) return { text: fromModel.text, ts: fromModel.ts, source: "model" };
+    return null;
+}
+
+function isEditProtocolType(type)
+{
+    return type === PROTOCOL_MESSAGE_TYPE_MESSAGE_EDIT || type === "MESSAGE_EDIT";
+}
+
 function createEditTracker(options)
 {
     var now = options.now;
@@ -85,13 +114,21 @@ function createEditTracker(options)
         {
             if (!e2eMessage) return null;
 
-            var protocol = e2eMessage.protocolMessage;
-            if (protocol && protocol.type === PROTOCOL_MESSAGE_TYPE_MESSAGE_EDIT && protocol.key && protocol.key.id)
-                return { targetId: protocol.key.id, newText: extractText(protocol.editedMessage) };
+            // the edit can sit inside an ephemeral / view-once wrapper (disappearing chats)
+            var candidates = [e2eMessage, unwrapMessage(e2eMessage)];
+            for (var i = 0; i < candidates.length; i++)
+            {
+                var message = candidates[i];
+                if (!message) continue;
 
-            var secret = e2eMessage.secretEncryptedMessage;
-            if (secret && secret.secretEncType === SECRET_ENC_TYPE_MESSAGE_EDIT && secret.targetMessageKey && secret.targetMessageKey.id)
-                return { targetId: secret.targetMessageKey.id, newText: null };
+                var protocol = message.protocolMessage;
+                if (protocol && isEditProtocolType(protocol.type) && protocol.key && protocol.key.id)
+                    return { targetId: protocol.key.id, newText: extractText(protocol.editedMessage) };
+
+                var secret = message.secretEncryptedMessage;
+                if (secret && (secret.secretEncType === SECRET_ENC_TYPE_MESSAGE_EDIT || secret.secretEncType === "MESSAGE_EDIT") && secret.targetMessageKey && secret.targetMessageKey.id)
+                    return { targetId: secret.targetMessageKey.id, newText: null };
+            }
 
             return null;
         },

@@ -26,6 +26,9 @@ const DEFAULTS = {
     blurAvatars: false,
     lockEnabled: false,
     lockIdleMinutes: 10,
+    lockOnHidden: false,
+    lockOnHiddenMinutes: 2,
+    language: "auto",
     voiceNoteRate: 1,
 };
 
