@@ -82,10 +82,12 @@ function buildHidetagPlan(chat, selfForms, selectedJids)
     return { ok: true, wids: wids, count: wids.length, big: wids.length > HIDETAG_BIG_GROUP };
 }
 
-// the options WhatsApp's text sender reads
-function buildHidetagOptions(plan)
+// the options WhatsApp's text sender reads. quotedMsg (a Msg model) makes it a reply; without it the message is plain.
+function buildHidetagOptions(plan, quotedMsg)
 {
-    return { mentionedJidList: plan.wids, groupMentions: [] };
+    var options = { mentionedJidList: plan.wids, groupMentions: [] };
+    if (quotedMsg) options.quotedMsg = quotedMsg;
+    return options;
 }
 
 // only structure: key names and the length of the mention list, never the text
@@ -96,6 +98,7 @@ function summarizeMessageData(data, text)
         mentionedJidListLength: data && data.mentionedJidList ? data.mentionedJidList.length : 0,
         hasGroupMentions: !!(data && "groupMentions" in data),
         bodyIsText: !!data && data.body === text,
+        hasQuoted: !!(data && (data.quotedMsg || data.quotedStanzaID)),
     };
 }
 
@@ -166,7 +169,7 @@ function findCreateTextMsgData()
 }
 
 // -> {ok, error?, count, big, dry?}. dryRun builds the message with WhatsApp's own function and reports its structure, sends nothing.
-async function sendHidetag(chat, text, dryRun, selectedJids)
+async function sendHidetag(chat, text, dryRun, selectedJids, quotedMsg)
 {
     try
     {
@@ -174,7 +177,7 @@ async function sendHidetag(chat, text, dryRun, selectedJids)
         if (!plan.ok) return { ok: false, error: plan.error, count: 0, big: false };
         if (plan.count == 0) return { ok: false, error: "no-members", count: 0, big: false };
         if (typeof text != "string" || text.trim() == "") return { ok: false, error: "empty-text", count: plan.count, big: plan.big };
-        var options = buildHidetagOptions(plan);
+        var options = buildHidetagOptions(plan, quotedMsg);
 
         if (dryRun)
         {
@@ -198,6 +201,100 @@ async function sendHidetag(chat, text, dryRun, selectedJids)
     }
 }
 
+//
+// Composer helpers: the "@" button in the composer sends what the user typed
+//
+function composerTextBox() { return document.querySelector('#main footer [data-testid="conversation-compose-box-input"]'); }
+
+// the draft text of the open chat ("" when none)
+function readComposerText(chat)
+{
+    try
+    {
+        var contents = chat && typeof chat.getComposeContents == "function" ? chat.getComposeContents() : null;
+        if (contents && typeof contents.text == "string") return contents.text;
+    }
+    catch (e) { /* use the text box */ }
+    try { var box = composerTextBox(); return box ? String(box.innerText || "") : ""; }
+    catch (e) { return ""; }
+}
+
+// empties the composer (text and reply target) after a hidetag was sent from it. Never throws.
+function clearComposer(chat)
+{
+    try
+    {
+        var box = composerTextBox();
+        if (box) { box.focus(); document.execCommand("selectAll"); document.execCommand("delete"); }
+    }
+    catch (e) { /* the model is cleared below */ }
+    try { if (chat && typeof chat.setComposeContents == "function") chat.setComposeContents({ text: "", timestamp: Date.now() }); } catch (e) { /* ignore */ }
+    clearComposeQuote(chat);
+}
+
+function clearComposeQuote(chat)
+{
+    try { if (chat) { chat.composeQuotedMsg = null; chat.composeQuotedMsgRemoteJid = null; } } catch (e) { /* ignore */ }
+}
+
+//
+// Stickers: WhatsApp's own sticker send path is wrapped. While armed (one shot, ~3 s) the next sendStickerToChat gets the mention list.
+//
+var stickerArm = null;          // {options, useQuote, expires}
+var stickerHookInstalled = false;
+
+// -> {args, used}. Never mutates the caller's options object.
+function applyStickerArm(arm, chat, args, now)
+{
+    if (!arm || now > arm.expires) return { args: args, used: false };
+    var options = Object.assign({}, args[2] || {}, arm.options);
+    if (arm.useQuote && options.quotedMsg == null && chat && chat.composeQuotedMsg) options.quotedMsg = chat.composeQuotedMsg;
+    var next = args.slice();
+    next[2] = options;
+    return { args: next, used: true };
+}
+
+// wraps moduleExports.sendStickerToChat once. Pass-through when not armed; any error in our code leaves the call untouched.
+function installStickerHook(moduleExports)
+{
+    if (!moduleExports || typeof moduleExports.sendStickerToChat != "function" || moduleExports.__incognitoStickerWrapped) return !!(moduleExports && moduleExports.__incognitoStickerWrapped);
+    var original = moduleExports.sendStickerToChat;
+    moduleExports.sendStickerToChat = function()
+    {
+        var args = Array.prototype.slice.call(arguments);
+        try
+        {
+            if (stickerArm)
+            {
+                var arm = stickerArm;
+                stickerArm = null; // one shot
+                var result = applyStickerArm(arm, args[0], args, Date.now());
+                if (result.used) args = result.args;
+            }
+        }
+        catch (e) { stickerArm = null; }
+        return original.apply(this, args);
+    };
+    moduleExports.__incognitoStickerWrapped = true;
+    stickerHookInstalled = true;
+    return true;
+}
+
+function ensureStickerHook()
+{
+    try { return installStickerHook(require("WAWebSendStickerAction")); }
+    catch (e) { return false; }
+}
+
+function armStickerHidetag(chat, selectedJids)
+{
+    var plan = buildHidetagPlan(chat, hidetagSelfForms(), selectedJids);
+    if (!plan.ok || plan.count == 0) return { ok: false, error: plan.ok ? "no-members" : plan.error, count: 0 };
+    if (!ensureStickerHook()) return { ok: false, error: "sticker send function not found", count: plan.count };
+    stickerArm = { options: buildHidetagOptions(plan), useQuote: true, expires: Date.now() + 3000 };
+    return { ok: true, count: plan.count };
+}
+
 function replyHidetag(name, payload) { document.dispatchEvent(new CustomEvent(name, { detail: JSON.stringify(payload) })); }
 
 if (typeof document !== "undefined" && document.addEventListener)
@@ -211,7 +308,8 @@ if (typeof document !== "undefined" && document.addEventListener)
         {
             var chat = await getChatByJID(data.jid);
             var plan = buildHidetagPlan(chat, hidetagSelfForms(), data.selected || null);
-            reply = { messageID: data.messageID, ok: plan.ok, error: plan.error, count: plan.count, big: plan.big };
+            reply = { messageID: data.messageID, ok: plan.ok, error: plan.error, count: plan.count, big: plan.big,
+                      hasQuote: !!(chat && chat.composeQuotedMsg), composerHasText: readComposerText(chat).trim() != "" };
             if (data.withMembers) reply.members = listHidetagMembers(chat, hidetagSelfForms());
         }
         catch (exception) { /* the default reply says unavailable */ }
@@ -226,15 +324,63 @@ if (typeof document !== "undefined" && document.addEventListener)
         else
         {
             var chat = await getChatByJID(data.jid);
-            result = await sendHidetag(chat, data.text, !!data.dryRun, data.selected || null);
+            var quoted = data.reply && chat ? chat.composeQuotedMsg : null;
+            result = await sendHidetag(chat, data.text, !!data.dryRun, data.selected || null, quoted);
+            if (result.ok && !data.dryRun && quoted) clearComposeQuote(chat);
         }
         result.messageID = data.messageID;
         replyHidetag("waIncognitoHidetagResult", result);
     });
 }
 
+// the "@" composer button: send the draft as a hidetag (reply when a message is being replied to)
+if (typeof document !== "undefined" && document.addEventListener)
+{
+    document.addEventListener("waIncognitoHidetagFromComposer", async function(e)
+    {
+        var data = JSON.parse(e.detail);
+        var result;
+        try
+        {
+            if (!(window.WAIncognitoOptions || {}).hidetagEnabled) result = { ok: false, error: "disabled" };
+            else
+            {
+                var chat = await getChatByJID(data.jid);
+                var text = readComposerText(chat);
+                if (text.trim() == "") result = { ok: false, error: "empty-text" };
+                else
+                {
+                    var quoted = chat.composeQuotedMsg || null;
+                    result = await sendHidetag(chat, text, false, data.selected || null, quoted);
+                    if (result.ok) clearComposer(chat);
+                }
+            }
+        }
+        catch (exception) { result = { ok: false, error: String(exception && exception.message ? exception.message : exception) }; }
+        result.messageID = data.messageID;
+        replyHidetag("waIncognitoHidetagResult", result);
+    });
+
+    document.addEventListener("waIncognitoStickerArm", async function(e)
+    {
+        var data = JSON.parse(e.detail);
+        var result;
+        try
+        {
+            if (!(window.WAIncognitoOptions || {}).hidetagEnabled) result = { ok: false, error: "disabled" };
+            else result = armStickerHidetag(await getChatByJID(data.jid), data.selected || null);
+        }
+        catch (exception) { result = { ok: false, error: String(exception && exception.message ? exception.message : exception) }; }
+        result.messageID = data.messageID;
+        replyHidetag("waIncognitoStickerArmResult", result);
+    });
+}
+
+try { ensureStickerHook(); } catch (e) { /* retried when armed */ }
+
 if (typeof Diagnostics !== "undefined")
 {
+    Diagnostics.register("hidetag", "hook", "sticker-send-wrapper", function() { return stickerHookInstalled ? 1 : 0; });
     Diagnostics.register("hidetag", "export", "createTextMsgData", function() { return findCreateTextMsgData() != null; });
     Diagnostics.register("hidetag", "export", "sendTextMsgToChat (hidetag)", function() { return findSendTextFunction() != null; });
     Diagnostics.register("hidetag", "hook", "group-metadata", function()

@@ -1067,3 +1067,35 @@ body #main[data-incognito-noblur~="avatars"] header img
 .wam-seg:focus-visible { outline: 2px solid var(--wam-accent); outline-offset: 1px; }
 
 @media (prefers-reduced-motion: reduce) { .wam-pick, .wam-check, .wam-seg { transition: none; } }
+
+/* hidetag popover (composer button, sticker menu) */
+.wam-popover
+{
+  position: fixed;
+  z-index: 2000100;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 12px;
+  background: var(--WDS-surface-default, var(--app-background, #ffffff));
+  color: var(--WDS-content-default, var(--primary-strong, #111b21));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  font-family: "Roboto Variable", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 14.5px;
+}
+.wam-popover-note { padding: 6px 10px 8px 10px; font-size: 12.5px; color: var(--WDS-accent, #21c063); }
+.wam-popover-item
+{
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.wam-popover-item:hover, .wam-popover-item:focus-visible { background: var(--WDS-surface-highlight, rgba(128, 128, 128, 0.2)); outline: none; }
+.incognito-composer-button { margin-inline: 2px; }

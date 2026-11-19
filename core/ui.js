@@ -317,6 +317,11 @@ function registerUIDiagnostics()
     Diagnostics.register("chat-menu", "hook", "chat-menu-entries", function() { return chatMenuEntriesShown; });
     Diagnostics.register("edits", "selector", "edited-label", function() { return document.getElementsByClassName("incognito-edit-original").length; });
     registerSelectorDiagnostic("contacts", "conversation-header (#main header)", "#main header");
+    registerSelectorDiagnostic("hidetag", "composer-footer (#main footer)", "#main footer");
+    registerSelectorDiagnostic("hidetag", "sticker-tile (sticker-item)", '[data-testid="sticker-item"]');
+    registerSelectorDiagnostic("hidetag", "sticker-menu-item (mi-remove-recent / mi-copy-favorite)", 'li[data-testid="mi-remove-recent-sticker"], li[data-testid="mi-copy-favorite-sticker"]');
+    registerSelectorDiagnostic("hidetag", "composer-hidetag-button", ".incognito-composer-button");
+    registerSelectorDiagnostic("hidetag", "sticker-hidetag-menu-item", '[data-testid="mi-incognito-sticker-hidetag"]');
     Diagnostics.register("contacts", "selector", "incognito-header-button", function() { return document.getElementsByClassName("incognito-header-button").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
@@ -754,6 +759,8 @@ setInterval(function() { try { ensureConversationHeaderButton(); ensureHidetagHe
 var hidetagPlanResponses = createResponseRouter(document, "waIncognitoHidetagPlanResult", 5000);
 var hidetagSendResponses = createResponseRouter(document, "waIncognitoHidetagResult", 45000);
 var hidetagEnabledCache = false;
+var hidetagActiveContext = null; // the open chat when it is a group (kept fresh by the 2 s tick)
+var stickerArmResponses = createResponseRouter(document, "waIncognitoStickerArmResult", 6000);
 
 document.addEventListener("onOptionsUpdate", function(e)
 {
@@ -768,10 +775,14 @@ function ensureHidetagHeaderButton()
     if (!hidetagEnabledCache || !header)
     {
         if (existing) existing.remove();
+        hidetagActiveContext = null;
+        ensureComposerHidetagButton();
         return;
     }
     requestActiveChatContext().then(function(context)
     {
+        hidetagActiveContext = context && context.isGroup ? context : null;
+        ensureComposerHidetagButton();
         var button = document.querySelector(".incognito-hidetag-button");
         header = document.querySelector("#main header");
         if (!context || !context.isGroup || !header) { if (button) button.remove(); return; }
@@ -786,11 +797,209 @@ function ensureHidetagHeaderButton()
     });
 }
 
+// A small WhatsApp-style popover anchored to an element: who gets the mention? onChoose("all" | "selected")
+function showHidetagPopover(anchor, info, onChoose)
+{
+    var old = document.querySelector(".wam-popover");
+    if (old) old.remove();
+    var pop = document.createElement("div");
+    pop.className = "wam-popover";
+    pop.setAttribute("role", "menu");
+    pop.setAttribute("dir", isRtlLanguage() ? "rtl" : "ltr");
+    pop.setAttribute("aria-label", t("hidetag.title"));
+    if (info && info.hasQuote)
+    {
+        var note = document.createElement("div");
+        note.className = "wam-popover-note";
+        note.textContent = t("hidetag.reply");
+        pop.appendChild(note);
+    }
+    [["all", "hidetag.popover.all"], ["selected", "hidetag.popover.selected"]].forEach(function(pair)
+    {
+        var item = document.createElement("button");
+        item.type = "button";
+        item.className = "wam-popover-item";
+        item.setAttribute("role", "menuitem");
+        item.textContent = t(pair[1]);
+        item.addEventListener("click", function() { close(); onChoose(pair[0]); });
+        pop.appendChild(item);
+    });
+    document.body.appendChild(pop);
+    var rect = anchor.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = Math.max(8, rect.top - pop.offsetHeight - 8) + "px";
+
+    function close()
+    {
+        pop.remove();
+        document.removeEventListener("mousedown", outside, true);
+        document.removeEventListener("keydown", onKey, true);
+    }
+    function outside(e) { if (!pop.contains(e.target)) close(); }
+    function onKey(e) { if (e.key == "Escape") { e.stopPropagation(); close(); } }
+    document.addEventListener("mousedown", outside, true);
+    document.addEventListener("keydown", onKey, true);
+    var first = pop.querySelector(".wam-popover-item");
+    if (first) first.focus();
+    pop.addEventListener("keydown", function(e)
+    {
+        var items = Array.prototype.slice.call(pop.querySelectorAll(".wam-popover-item"));
+        var at = items.indexOf(document.activeElement);
+        if (e.key == "ArrowDown") { e.preventDefault(); items[(at + 1) % items.length].focus(); }
+        else if (e.key == "ArrowUp") { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+    });
+    return close;
+}
+
+var AT_ICON = "<svg viewBox='0 0 24 24' width='22' height='22' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='4'/><path d='M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94'/></svg>";
+
+// The "@" button in the composer footer, next to the voice/send button. Only in groups and only with hidetagEnabled.
+// The flex row of the composer (verified on the live DOM): Attach | Emojis | text box | spacer | voice/send. Found from the text box.
+function findComposerRow()
+{
+    var box = document.querySelector('#main footer [data-testid="conversation-compose-box-input"]');
+    var element = box;
+    var footer = document.querySelector("#main footer");
+    while (element && element !== footer)
+    {
+        var parent = element.parentElement;
+        if (parent && parent.children.length >= 4 && parent.querySelector("button")) return parent;
+        element = parent;
+    }
+    return null;
+}
+
+function ensureComposerHidetagButton()
+{
+    var existing = document.querySelector(".incognito-composer-button");
+    var row = findComposerRow();
+    if (!hidetagEnabledCache || !hidetagActiveContext || !row)
+    {
+        if (existing) existing.remove();
+        return;
+    }
+    if (existing && existing.parentElement === row) return;
+    if (existing) existing.remove();
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "incognito-header-button incognito-composer-button";
+    button.title = t("hidetag.composer.tooltip");
+    button.setAttribute("aria-label", t("hidetag.composer.tooltip"));
+    button.setAttribute("data-testid", "incognito-composer-hidetag");
+    button.innerHTML = AT_ICON;
+    button.addEventListener("click", function(e) { e.stopPropagation(); e.preventDefault(); onComposerHidetagClick(button); });
+    row.insertBefore(button, row.lastElementChild); // right next to the voice/send button
+}
+
+async function onComposerHidetagClick(button)
+{
+    var context = hidetagActiveContext;
+    if (!context) return;
+    var info = await requestFromPageWorld(hidetagPlanResponses, "waIncognitoHidetagPlan", "hplan", { ok: false, count: 0, big: false }, { jid: context.primaryJid });
+    if (!info.ok || info.count == 0) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.none"), icon: "info", confirmButtonText: t("common.ok") }); return; }
+    if (!info.composerHasText) { openHidetagModal(context); return; } // nothing typed: the full window
+
+    showHidetagPopover(button, info, async function(choice)
+    {
+        var selected = null;
+        if (choice == "selected")
+        {
+            selected = await openHidetagModal(context, { pickOnly: true });
+            if (!selected) return;
+        }
+        var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagFromComposer", "hcomp", { ok: false, error: t("sched.noAnswer") },
+                                                { jid: context.primaryJid, selected: selected }, 40000);
+        if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || info.count }), icon: "success", toast: true, timer: 6000 });
+        else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
+    });
+}
+
+//
+// Sticker menu: a third item "Send with Hidetag" in the right-click menu of a sticker. The page world is armed for one send, then the
+// remembered sticker tile is clicked so WhatsApp's own send path runs (core/hidetag.js adds the mentions).
+//
+var lastStickerTile = null;
+document.addEventListener("contextmenu", function(e)
+{
+    var tile = e.target && e.target.closest ? e.target.closest('[data-testid="sticker-item"]') : null;
+    if (tile) lastStickerTile = tile;
+}, true);
+
+function stickerMenuItems(root)
+{
+    return root.querySelectorAll ? root.querySelectorAll('li[data-testid="mi-remove-recent-sticker"], li[data-testid="mi-copy-favorite-sticker"]') : [];
+}
+
+function addStickerHidetagItem(sample)
+{
+    var list = sample.parentElement;
+    var container = sample.closest("ul") || list;
+    if (!hidetagEnabledCache || !hidetagActiveContext || !lastStickerTile) return;
+    if (container.querySelector('[data-testid="mi-incognito-sticker-hidetag"]')) return;
+
+    var holder = sample.parentElement; // the wrapper of one item; clone it so the classes match WhatsApp's items
+    var copy = holder.cloneNode(true);
+    var li = copy.querySelector("li") || copy;
+    li.setAttribute("data-testid", "mi-incognito-sticker-hidetag");
+    var spans = li.querySelectorAll("span");
+    var label = Array.prototype.filter.call(spans, function(span) { return span.getAttribute("aria-hidden") != "true" && !span.querySelector("svg") && span.children.length == 0; })[0];
+    if (label) label.textContent = t("hidetag.sticker.menu");
+    var iconHolder = li.querySelector("span[aria-hidden]");
+    if (iconHolder) iconHolder.innerHTML = AT_ICON;
+    li.addEventListener("click", function(e)
+    {
+        e.stopPropagation();
+        var tile = lastStickerTile;
+        var rect = tile ? tile.getBoundingClientRect() : li.getBoundingClientRect();
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); // closes WhatsApp's menu
+        startStickerHidetag(tile, rect);
+    });
+    holder.parentElement.appendChild(copy);
+}
+
+async function startStickerHidetag(tile, rect)
+{
+    var context = hidetagActiveContext;
+    if (!context || !tile) return;
+    var anchor = { getBoundingClientRect: function() { return rect; } };
+    showHidetagPopover(anchor, { hasQuote: false }, async function(choice)
+    {
+        var selected = null;
+        if (choice == "selected")
+        {
+            selected = await openHidetagModal(context, { pickOnly: true });
+            if (!selected) return;
+        }
+        var armed = await requestFromPageWorld(stickerArmResponses, "waIncognitoStickerArm", "sarm", { ok: false, error: t("sched.noAnswer") }, { jid: context.primaryJid, selected: selected });
+        if (!armed.ok) { WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(armed.error) }), icon: "error", toast: true, timer: 8000 }); return; }
+        if (document.contains(tile)) tile.click(); // WhatsApp's own path sends the sticker, with the mentions added
+        else WAModal.fire({ title: t("hidetag.sticker.gone"), icon: "info", toast: true, timer: 6000 });
+    });
+}
+
+new MutationObserver(function(mutations)
+{
+    if (!hidetagEnabledCache) return;
+    for (var i = 0; i < mutations.length; i++)
+    {
+        var added = mutations[i].addedNodes;
+        for (var j = 0; j < added.length; j++)
+        {
+            if (added[j].nodeType != 1) continue;
+            var items = stickerMenuItems(added[j]);
+            if (items.length > 0) { try { addStickerHidetagItem(items[0]); } catch (e) { console.warn("WAIncognito: sticker menu item failed"); } return; }
+            if (added[j].matches && added[j].matches('li[data-testid="mi-remove-recent-sticker"], li[data-testid="mi-copy-favorite-sticker"]')) { try { addStickerHidetagItem(added[j]); } catch (e) {} return; }
+        }
+    }
+}).observe(document.body, { childList: true, subtree: true });
+
 function hidetagErrorText(error)
 {
     if (error == "disabled") return t("hidetag.disabled");
     if (error == "not-a-group") return t("hidetag.notGroup");
     if (error == "empty-selection" || error == "no-members") return t("hidetag.noneSelected");
+    if (error == "empty-text") return t("hidetag.empty");
     if (error == "unknown-member") return t("hidetag.unknownMember");
     return String(error || t("sched.unknown"));
 }
@@ -826,8 +1035,10 @@ function filterHidetagMembers(members, query)
     return needle ? members.filter(function(member) { return member.name.toLowerCase().indexOf(needle) > -1; }) : members;
 }
 
-async function openHidetagModal(context)
+// opts.pickOnly: only choose members and return their ids (or null), used by the composer button and the sticker menu
+async function openHidetagModal(context, opts)
 {
+    opts = opts || {};
     if (!context || !context.isGroup) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.notGroup"), icon: "info", confirmButtonText: t("common.ok") }); return; }
     var plan = await requestFromPageWorld(hidetagPlanResponses, "waIncognitoHidetagPlan", "hplan", { ok: false, count: 0, big: false }, { jid: context.primaryJid, withMembers: true });
     if (!plan.ok || plan.count == 0)
@@ -840,12 +1051,12 @@ async function openHidetagModal(context)
     members.forEach(function(member) { known[member.id] = true; });
     var chosen = {};
     (await loadHidetagSelection(context.primaryJid)).forEach(function(id) { if (known[id]) chosen[id] = true; });
-    var mode = "all";
+    var mode = opts.pickOnly ? "selected" : "all";
 
     var typed = await WAModal.fire({
         title: t("hidetag.title"),
         html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<div class='wam-segmented wam-hidetag-mode' role='radiogroup' aria-label='" + escapeHTML(t("hidetag.mode.label")) + "' style='margin-top: 10px'>" +
+              "<div class='wam-segmented wam-hidetag-mode' role='radiogroup'" + (opts.pickOnly ? " hidden" : "") + " aria-label='" + escapeHTML(t("hidetag.mode.label")) + "' style='margin-top: 10px'>" +
               "<button type='button' class='wam-seg' role='radio' data-mode='all'>" + escapeHTML(t("hidetag.mode.all")) + "</button>" +
               "<button type='button' class='wam-seg' role='radio' data-mode='selected'>" + escapeHTML(t("hidetag.mode.selected")) + "</button></div>" +
               "<div class='wam-validation' id='incognito-hidetag-warning' style='margin-top: 10px' role='note'></div>" +
@@ -854,12 +1065,13 @@ async function openHidetagModal(context)
               "<div class='wam-picker-actions'><button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-all'>" + escapeHTML(t("hidetag.selectAll")) + "</button>" +
               "<button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-none'>" + escapeHTML(t("hidetag.clear")) + "</button></div></div>" +
               "<div id='incognito-hidetag-list' class='wam-picker-list' role='listbox' aria-multiselectable='true' aria-label='" + escapeHTML(t("hidetag.members.label")) + "'></div></div>" +
-              "<textarea id='incognito-hidetag-text' class='wam-textarea' placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' aria-label='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
+              (plan.hasQuote && !opts.pickOnly ? "<label class='wam-check-row'><input type='checkbox' id='incognito-hidetag-reply' class='wam-checkbox' checked><span>" + escapeHTML(t("hidetag.reply")) + "</span></label>" : "") +
+              "<textarea id='incognito-hidetag-text' class='wam-textarea'" + (opts.pickOnly ? " hidden" : "") + " placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' aria-label='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
               "<div id='incognito-hidetag-count' class='wam-picker-count' role='status'></div>" +
               (plan.big ? "<div class='wam-validation' id='incognito-hidetag-big' style='margin-top: 8px'>" + escapeHTML(t("hidetag.big", { n: plan.count })) + "</div>" : ""),
         width: 560,
         showCancelButton: true,
-        confirmButtonText: t("hidetag.continue"),
+        confirmButtonText: opts.pickOnly ? t("hidetag.pick.confirm") : t("hidetag.continue"),
         cancelButtonText: t("common.cancel"),
         didOpen: function(popup)
         {
@@ -1001,13 +1213,19 @@ async function openHidetagModal(context)
         },
         preConfirm: function()
         {
-            var text = document.getElementById("incognito-hidetag-text").value;
-            if (!text.trim()) { WAModal.showValidationMessage(t("hidetag.empty")); return false; }
+            var text = opts.pickOnly ? "" : document.getElementById("incognito-hidetag-text").value;
+            if (!opts.pickOnly && !text.trim()) { WAModal.showValidationMessage(t("hidetag.empty")); return false; }
             if (mode == "selected" && Object.keys(chosen).length == 0) { WAModal.showValidationMessage(t("hidetag.noneSelected")); return false; }
-            return { text: text, mode: mode, selected: mode == "selected" ? Object.keys(chosen) : null };
+            var replyBox = document.getElementById("incognito-hidetag-reply");
+            return { text: text, mode: mode, selected: mode == "selected" ? Object.keys(chosen) : null, reply: !!(replyBox && replyBox.checked) };
         },
     });
-    if (!typed.isConfirmed) return;
+    if (!typed.isConfirmed) return opts.pickOnly ? null : undefined;
+    if (opts.pickOnly)
+    {
+        saveHidetagSelection(context.primaryJid, typed.value.selected);
+        return typed.value.selected;
+    }
 
     var targetCount = typed.value.mode == "selected" ? typed.value.selected.length : plan.count;
     var confirmed = await WAModal.fire({
@@ -1022,7 +1240,7 @@ async function openHidetagModal(context)
 
     if (typed.value.mode == "selected") saveHidetagSelection(context.primaryJid, typed.value.selected);
     var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagSend", "hsend", { ok: false, error: t("sched.noAnswer") },
-                                            { jid: context.primaryJid, text: typed.value.text, dryRun: false, selected: typed.value.selected }, 40000);
+                                            { jid: context.primaryJid, text: typed.value.text, dryRun: false, selected: typed.value.selected, reply: typed.value.reply }, 40000);
     if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || targetCount }), icon: "success", toast: true, timer: 6000 });
     else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
 }

@@ -154,3 +154,101 @@ test("member names: contact name, else the last 4 digits only, never the full nu
     assert.ok(!JSON.stringify(members.map((m) => m.name)).includes("628111"));
     assert.strictEqual(s.maskedMemberName("12@c.us"), "...");
 });
+
+// ---- reply, composer and sticker ----
+
+test("a reply hidetag passes quotedMsg to the sender; a plain one does not", async () => {
+    const seen = [];
+    const s = load({ WAWebSendMsgResultAction: { SendMsgResult: { OK: "OK" } } });
+    s.findSendTextFunction = () => async (chat, text, options) => { seen.push({ ...options }); return { messageSendResult: "OK" }; };
+    const chat = groupWith(["1@lid", "2@lid"]);
+    const quoted = { id: "quoted-model" };
+    assert.strictEqual((await s.sendHidetag(chat, "halo", false, null, quoted)).ok, true);
+    assert.strictEqual((await s.sendHidetag(chat, "halo", false, null)).ok, true);
+    assert.strictEqual(seen[0].quotedMsg, quoted);
+    assert.ok(!("quotedMsg" in seen[1]));
+    assert.strictEqual(seen[0].mentionedJidList.length, 2);
+});
+
+test("dry run reports whether the built message is a reply, without the text", async () => {
+    const s = load({ WAWebSendTextMsgChatAction: { createTextMsgData: async (chat, text, options) => ({ body: text, mentionedJidList: options.mentionedJidList, quotedMsg: options.quotedMsg, quotedStanzaID: options.quotedMsg ? "S1" : undefined }) } });
+    const chat = groupWith(["1@lid"]);
+    const reply = await s.sendHidetag(chat, "rahasia", true, null, { id: "m" });
+    const plain = await s.sendHidetag(chat, "rahasia", true, null);
+    assert.strictEqual(reply.dry.hasQuoted, true);
+    assert.strictEqual(plain.dry.hasQuoted, false);
+    assert.ok(!JSON.stringify([reply, plain]).includes("rahasia"));
+});
+
+test("a failing reply send reports the error and leaves nothing half-done", async () => {
+    const s = load({ WAWebSendMsgResultAction: { SendMsgResult: { OK: "OK" } } });
+    s.findSendTextFunction = () => async () => { throw new Error("boom"); };
+    const result = await s.sendHidetag(groupWith(["1@lid"]), "x", false, null, { id: "m" });
+    assert.strictEqual(result.ok, false);
+    assert.strictEqual(result.error, "boom");
+});
+
+test("composer: the draft is read from the chat model, else from the text box; clearing empties text and reply target", () => {
+    const s = load();
+    assert.strictEqual(s.readComposerText({ getComposeContents: () => ({ text: "draf", timestamp: 1 }) }), "draf");
+    s.document = { querySelector: () => ({ innerText: "dari kotak" }) };
+    assert.strictEqual(s.readComposerText({ getComposeContents: () => { throw new Error("x"); } }), "dari kotak");
+    assert.strictEqual(s.readComposerText(null), "dari kotak");
+    const calls = [];
+    const chat = { setComposeContents: (c) => calls.push(c), composeQuotedMsg: { id: 1 }, composeQuotedMsgRemoteJid: "x" };
+    s.document = { querySelector: () => null, execCommand() {} };
+    s.clearComposer(chat);
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].text, "");
+    assert.strictEqual(chat.composeQuotedMsg, null);
+    assert.doesNotThrow(() => s.clearComposer({ setComposeContents() { throw new Error("no"); } }));
+});
+
+test("sticker arm: merged once, never mutates the original options, honors the reply target, expires", () => {
+    const s = load();
+    const arm = { options: { mentionedJidList: ["a", "b"], groupMentions: [] }, useQuote: true, expires: 5000 };
+    const original = { stickerSendOrigin: 3, quotedMsg: null };
+    const used = s.applyStickerArm(arm, { composeQuotedMsg: { id: "q" } }, ["chat", "sticker", original], 1000);
+    assert.strictEqual(used.used, true);
+    assert.deepStrictEqual([...used.args[2].mentionedJidList], ["a", "b"]);
+    assert.strictEqual(used.args[2].stickerSendOrigin, 3);
+    assert.deepStrictEqual({ ...used.args[2].quotedMsg }, { id: "q" });
+    assert.deepStrictEqual({ ...original }, { stickerSendOrigin: 3, quotedMsg: null }, "caller object untouched");
+    assert.strictEqual(s.applyStickerArm(arm, null, ["c", "s", {}], 5001).used, false, "expired");
+    assert.strictEqual(s.applyStickerArm(null, null, ["c", "s", {}], 1).used, false, "not armed");
+    assert.strictEqual(s.applyStickerArm(arm, { composeQuotedMsg: { id: "q" } }, ["c", "s", { quotedMsg: { id: "own" } }], 1).args[2].quotedMsg.id, "own", "an existing reply target wins");
+});
+
+test("sticker wrapper: pass-through when not armed, one-shot injection when armed, never throws, wraps once", () => {
+    const s = load();
+    const calls = [];
+    const mod = { sendStickerToChat: function(...args) { calls.push(args); return "sent"; } };
+    assert.strictEqual(s.installStickerHook(mod), true);
+    assert.strictEqual(s.installStickerHook(mod), true);
+    const first = mod.sendStickerToChat("chat", "sticker", { stickerSendOrigin: 3 });
+    assert.strictEqual(first, "sent");
+    assert.deepStrictEqual({ ...calls[0][2] }, { stickerSendOrigin: 3 }, "untouched when not armed");
+    s.stickerArm = { options: { mentionedJidList: ["x"], groupMentions: [] }, useQuote: false, expires: Date.now() + 3000 };
+    mod.sendStickerToChat("chat", "sticker", { stickerSendOrigin: 3 });
+    assert.deepStrictEqual([...calls[1][2].mentionedJidList], ["x"]);
+    mod.sendStickerToChat("chat", "sticker", { stickerSendOrigin: 3 });
+    assert.ok(!("mentionedJidList" in calls[2][2]), "one shot");
+    s.stickerArm = { options: null, useQuote: false, expires: Date.now() + 3000 }; // a broken arm must not break sending
+    assert.doesNotThrow(() => mod.sendStickerToChat("chat", "sticker", {}));
+    assert.strictEqual(calls.length, 4);
+    assert.strictEqual(s.installStickerHook({}), false);
+    assert.strictEqual(s.installStickerHook(null), false);
+});
+
+test("arming needs members and a sticker module; the arm lasts about three seconds", () => {
+    const mod = { sendStickerToChat() {} };
+    const s = load({ WAWebSendStickerAction: mod, WAWebUserPrefsMeUser: { getMaybeMeLidUser: () => wid("5@lid") } });
+    const before = Date.now();
+    const result = s.armStickerHidetag(groupWith(["5@lid", "1@lid", "2@lid"]), null);
+    assert.deepStrictEqual([result.ok, result.count], [true, 2]);
+    assert.ok(s.stickerArm.expires >= before + 2900 && s.stickerArm.expires <= Date.now() + 3100);
+    assert.strictEqual(s.armStickerHidetag(groupWith(["5@lid"]), null).error, "no-members");
+    assert.strictEqual(s.armStickerHidetag(groupWith(["1@lid"]), ["9@lid"]).error, "unknown-member");
+    const none = load({});
+    assert.strictEqual(none.armStickerHidetag(groupWith(["1@lid"]), null).error, "sticker send function not found");
+});
