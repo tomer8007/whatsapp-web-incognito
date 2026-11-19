@@ -600,8 +600,7 @@ function closeChatMenu()
 {
     try
     {
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }));
-        document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })); // an outside click closes WhatsApp's menu
     }
     catch (e) { /* the menu simply stays open */ }
 }
@@ -797,16 +796,31 @@ function ensureHidetagHeaderButton()
     });
 }
 
-// A small WhatsApp-style popover anchored to an element: who gets the mention? onChoose("all" | "selected")
-function showHidetagPopover(anchor, info, onChoose)
+// A WhatsApp-style popover next to an element: "who do you mention?" anchor needs getBoundingClientRect(). options.side: "right" | "above" ...
+// Its Escape handling is ours: only this popover closes, and the key never reaches WhatsApp (no key events are ever sent to WhatsApp).
+var POPOVER_ICONS = {
+    all: "<svg viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>",
+    selected: "<svg viewBox='0 0 24 24' width='20' height='20' fill='none' stroke='currentColor' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><polyline points='9 11 12 14 22 4'/><path d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/></svg>",
+};
+
+function showHidetagPopover(anchor, info, onChoose, options)
 {
+    options = options || {};
     var old = document.querySelector(".wam-popover");
-    if (old) old.remove();
+    if (old && old.__close) old.__close();
+    var rtl = isRtlLanguage();
     var pop = document.createElement("div");
     pop.className = "wam-popover";
     pop.setAttribute("role", "menu");
-    pop.setAttribute("dir", isRtlLanguage() ? "rtl" : "ltr");
-    pop.setAttribute("aria-label", t("hidetag.title"));
+    pop.setAttribute("dir", rtl ? "rtl" : "ltr");
+    pop.setAttribute("aria-label", t("hidetag.popover.title"));
+    var arrow = document.createElement("span");
+    arrow.className = "wam-popover-arrow";
+    pop.appendChild(arrow);
+    var title = document.createElement("div");
+    title.className = "wam-popover-title";
+    title.textContent = t("hidetag.popover.title");
+    pop.appendChild(title);
     if (info && info.hasQuote)
     {
         var note = document.createElement("div");
@@ -814,40 +828,64 @@ function showHidetagPopover(anchor, info, onChoose)
         note.textContent = t("hidetag.reply");
         pop.appendChild(note);
     }
+    var closed = false;
+    function close()
+    {
+        if (closed) return;
+        closed = true;
+        pop.remove();
+        document.removeEventListener("mousedown", outside, true);
+        window.removeEventListener("keydown", onKeyDown, true);
+        window.removeEventListener("keyup", onKeyUp, true);
+        if (options.returnFocus && options.returnFocus.focus) { try { options.returnFocus.focus(); } catch (e) {} }
+    }
+    pop.__close = close;
     [["all", "hidetag.popover.all"], ["selected", "hidetag.popover.selected"]].forEach(function(pair)
     {
         var item = document.createElement("button");
         item.type = "button";
         item.className = "wam-popover-item";
         item.setAttribute("role", "menuitem");
-        item.textContent = t(pair[1]);
+        item.innerHTML = "<span class='wam-popover-icon'>" + POPOVER_ICONS[pair[0]] + "</span>";
+        var label = document.createElement("span");
+        label.textContent = t(pair[1]);
+        item.appendChild(label);
         item.addEventListener("click", function() { close(); onChoose(pair[0]); });
         pop.appendChild(item);
     });
     document.body.appendChild(pop);
-    var rect = anchor.getBoundingClientRect();
-    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
-    pop.style.top = Math.max(8, rect.top - pop.offsetHeight - 8) + "px";
 
-    function close()
-    {
-        pop.remove();
-        document.removeEventListener("mousedown", outside, true);
-        document.removeEventListener("keydown", onKey, true);
-    }
+    var rect = anchor.getBoundingClientRect();
+    var anchorBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height };
+    var placed = placePopover(anchorBox, { width: pop.offsetWidth, height: pop.offsetHeight }, { width: window.innerWidth, height: window.innerHeight },
+                              options.side || "above", { gap: 12 });
+    pop.style.left = placed.left + "px";
+    pop.style.top = placed.top + "px";
+    pop.setAttribute("data-side", placed.side);
+    pop.style.setProperty("--wam-arrow", placed.arrow + "px");
+
     function outside(e) { if (!pop.contains(e.target)) close(); }
-    function onKey(e) { if (e.key == "Escape") { e.stopPropagation(); close(); } }
+    // WhatsApp swallows Escape on keydown, so keyup closes too. Either way the key stops here.
+    function onKeyDown(e)
+    {
+        if (!pop.contains(document.activeElement) && e.key != "Escape") return;
+        if (e.key == "Escape") { e.stopPropagation(); e.preventDefault(); close(); }
+    }
+    function onKeyUp(e) { if (e.key == "Escape") { e.stopPropagation(); close(); } }
     document.addEventListener("mousedown", outside, true);
-    document.addEventListener("keydown", onKey, true);
-    var first = pop.querySelector(".wam-popover-item");
-    if (first) first.focus();
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
     pop.addEventListener("keydown", function(e)
     {
         var items = Array.prototype.slice.call(pop.querySelectorAll(".wam-popover-item"));
         var at = items.indexOf(document.activeElement);
         if (e.key == "ArrowDown") { e.preventDefault(); items[(at + 1) % items.length].focus(); }
         else if (e.key == "ArrowUp") { e.preventDefault(); items[(at - 1 + items.length) % items.length].focus(); }
+        else if (e.key == "Tab") { e.preventDefault(); items[(at + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus(); }
+        e.stopPropagation(); // typing inside the popover never reaches WhatsApp's shortcuts
     });
+    var first = pop.querySelector(".wam-popover-item");
+    if (first) first.focus({ preventScroll: true });
     return close;
 }
 
@@ -912,29 +950,86 @@ async function onComposerHidetagClick(button)
                                                 { jid: context.primaryJid, selected: selected }, 40000);
         if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || info.count }), icon: "success", toast: true, timer: 6000 });
         else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
-    });
+    }, { side: "above", returnFocus: button });
 }
 
 //
 // Sticker menu: a third item "Send with Hidetag" in the right-click menu of a sticker. The page world is armed for one send, then the
 // remembered sticker tile is clicked so WhatsApp's own send path runs (core/hidetag.js adds the mentions).
 //
-var lastStickerTile = null;
+var lastStickerTile = null; // {el, key, index} of the tile that was right-clicked
+
+function stickerTileKey(tile)
+{
+    var image = tile.querySelector("img");
+    return image ? (image.getAttribute("src") || "") : "";
+}
+
 document.addEventListener("contextmenu", function(e)
 {
     var tile = e.target && e.target.closest ? e.target.closest('[data-testid="sticker-item"]') : null;
-    if (tile) lastStickerTile = tile;
+    if (!tile) return;
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('[data-testid="sticker-item"]'));
+    lastStickerTile = { el: tile, key: stickerTileKey(tile), index: tiles.indexOf(tile) };
 }, true);
+
+// the remembered tile, or the same sticker found again when WhatsApp re-rendered the panel; null when it is gone
+function resolveStickerTile(saved)
+{
+    if (!saved) return null;
+    if (document.contains(saved.el)) return saved.el;
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('[data-testid="sticker-item"]'));
+    if (saved.key)
+    {
+        var same = tiles.filter(function(tile) { return stickerTileKey(tile) == saved.key; });
+        if (same.length > 0) return same[0];
+    }
+    return null;
+}
 
 function stickerMenuItems(root)
 {
     return root.querySelectorAll ? root.querySelectorAll('li[data-testid="mi-remove-recent-sticker"], li[data-testid="mi-copy-favorite-sticker"]') : [];
 }
 
+// WhatsApp sizes its menu for its own items: grow every clipped ancestor so our item is visible, and keep the menu on screen
+function fitStickerMenu(item)
+{
+    try
+    {
+        var popup = item.parentElement;
+        while (popup && popup !== document.body && ["absolute", "fixed"].indexOf(getComputedStyle(popup).position) == -1) popup = popup.parentElement;
+        var itemBottom = item.getBoundingClientRect().bottom;
+        var element = item.parentElement;
+        while (element && element !== document.body)
+        {
+            var rect = element.getBoundingClientRect();
+            if (rect.bottom < itemBottom - 1 || element.scrollHeight > element.clientHeight + 1)
+            {
+                element.style.setProperty("height", "auto", "important");
+                element.style.setProperty("max-height", "none", "important");
+                element.style.setProperty("overflow", "visible", "important");
+            }
+            if (element === popup) break;
+            element = element.parentElement;
+        }
+        if (popup)
+        {
+            var box = popup.getBoundingClientRect();
+            var fit = menuFit({ bottom: box.bottom }, itemBottom, window.innerHeight, 8);
+            if (fit.shiftUp > 0 && !popup.dataset.incognitoShifted)
+            {
+                popup.dataset.incognitoShifted = "true";
+                popup.style.top = (parseFloat(popup.style.top) || box.top) - fit.shiftUp + "px";
+            }
+        }
+    }
+    catch (e) { /* the menu stays as WhatsApp made it */ }
+}
+
 function addStickerHidetagItem(sample)
 {
-    var list = sample.parentElement;
-    var container = sample.closest("ul") || list;
+    var container = sample.closest("ul") || sample.parentElement;
     if (!hidetagEnabledCache || !hidetagActiveContext || !lastStickerTile) return;
     if (container.querySelector('[data-testid="mi-incognito-sticker-hidetag"]')) return;
 
@@ -950,18 +1045,19 @@ function addStickerHidetagItem(sample)
     li.addEventListener("click", function(e)
     {
         e.stopPropagation();
-        var tile = lastStickerTile;
-        var rect = tile ? tile.getBoundingClientRect() : li.getBoundingClientRect();
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); // closes WhatsApp's menu
-        startStickerHidetag(tile, rect);
+        // everything is captured first: WhatsApp may close its menu as soon as our popover takes focus
+        var saved = lastStickerTile;
+        var rect = li.getBoundingClientRect();
+        startStickerHidetag(saved, { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height });
     });
     holder.parentElement.appendChild(copy);
+    [0, 60, 200].forEach(function(delay) { setTimeout(function() { if (document.contains(li)) fitStickerMenu(li); }, delay); });
 }
 
-async function startStickerHidetag(tile, rect)
+async function startStickerHidetag(saved, rect)
 {
     var context = hidetagActiveContext;
-    if (!context || !tile) return;
+    if (!context || !saved) return;
     var anchor = { getBoundingClientRect: function() { return rect; } };
     showHidetagPopover(anchor, { hasQuote: false }, async function(choice)
     {
@@ -973,9 +1069,10 @@ async function startStickerHidetag(tile, rect)
         }
         var armed = await requestFromPageWorld(stickerArmResponses, "waIncognitoStickerArm", "sarm", { ok: false, error: t("sched.noAnswer") }, { jid: context.primaryJid, selected: selected });
         if (!armed.ok) { WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(armed.error) }), icon: "error", toast: true, timer: 8000 }); return; }
-        if (document.contains(tile)) tile.click(); // WhatsApp's own path sends the sticker, with the mentions added
+        var tile = resolveStickerTile(saved);
+        if (tile) tile.click(); // outside WhatsApp's menu, so it closes by itself; the send wrapper adds the mentions
         else WAModal.fire({ title: t("hidetag.sticker.gone"), icon: "info", toast: true, timer: 6000 });
-    });
+    }, { side: isRtlLanguage() ? "left" : "right" });
 }
 
 new MutationObserver(function(mutations)

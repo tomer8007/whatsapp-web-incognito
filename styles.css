@@ -1068,34 +1068,54 @@ body #main[data-incognito-noblur~="avatars"] header img
 
 @media (prefers-reduced-motion: reduce) { .wam-pick, .wam-check, .wam-seg { transition: none; } }
 
-/* hidetag popover (composer button, sticker menu) */
+/* hidetag popover (composer button, sticker menu): WhatsApp-style, with a nub that points at its source */
 .wam-popover
 {
   position: fixed;
   z-index: 2000100;
-  min-width: 220px;
-  padding: 6px;
+  min-width: 240px;
+  padding: 8px;
   border: 1px solid rgba(128, 128, 128, 0.25);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--WDS-surface-default, var(--app-background, #ffffff));
   color: var(--WDS-content-default, var(--primary-strong, #111b21));
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   font-family: "Roboto Variable", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 14.5px;
+  animation: wam-pop 0.12s ease-out;
 }
-.wam-popover-note { padding: 6px 10px 8px 10px; font-size: 12.5px; color: var(--WDS-accent, #21c063); }
+.wam-popover-title { padding: 6px 10px 6px 10px; font-size: 13px; font-weight: 500; color: var(--WDS-content-deemphasized, var(--secondary, #667781)); }
+.wam-popover-note { padding: 0 10px 8px 10px; font-size: 12.5px; color: var(--WDS-accent, #21c063); }
 .wam-popover-item
 {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  padding: 9px 12px;
+  padding: 11px 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
+.wam-popover-icon { display: inline-flex; color: var(--WDS-content-deemphasized, var(--secondary, #667781)); }
 .wam-popover-item:hover, .wam-popover-item:focus-visible { background: var(--WDS-surface-highlight, rgba(128, 128, 128, 0.2)); outline: none; }
+.wam-popover-item:hover .wam-popover-icon, .wam-popover-item:focus-visible .wam-popover-icon { color: var(--WDS-accent, #21c063); }
+
+.wam-popover-arrow
+{
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--WDS-surface-default, var(--app-background, #ffffff));
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  transform: rotate(45deg);
+}
+.wam-popover[data-side="above"] .wam-popover-arrow { bottom: -7px; left: calc(var(--wam-arrow, 24px) - 6px); border-top: none; border-left: none; }
+.wam-popover[data-side="below"] .wam-popover-arrow { top: -7px; left: calc(var(--wam-arrow, 24px) - 6px); border-bottom: none; border-right: none; }
+.wam-popover[data-side="right"] .wam-popover-arrow { left: -7px; top: calc(var(--wam-arrow, 24px) - 6px); border-top: none; border-right: none; }
+.wam-popover[data-side="left"] .wam-popover-arrow { right: -7px; top: calc(var(--wam-arrow, 24px) - 6px); border-bottom: none; border-left: none; }
 .incognito-composer-button { margin-inline: 2px; }
