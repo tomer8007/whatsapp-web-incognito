@@ -112,11 +112,11 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
         return;
     }
 
-    if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
+    if (readConfirmationsHookEnabled && safetyDelay > 0 && chatMatchesJid(chat, blockedJid))
     {
         markChatAsPendingReciptsSending(chat);
     }
-    else if ((readConfirmationsHookEnabled || NodeHandler.isBlockedForContact(blockedJid, "readReceipts", false)) && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
+    else if ((readConfirmationsHookEnabled || NodeHandler.isBlockedForContact(blockedJid, "readReceipts", false)) && chatMatchesJid(chat, blockedJid))
     {
         markChatAsBlocked(chat);
     }

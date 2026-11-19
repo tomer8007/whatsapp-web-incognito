@@ -65,3 +65,67 @@ test("a group is recognised from the jid server too", () => {
     const context = buildChatMenuContext({ id: Object.assign(wid("1203@g.us"), { server: "g.us" }), formattedTitle: "G" });
     assert.strictEqual(context.isGroup, true);
 });
+
+// ---- LID / PN chat lookup (core/utils.js) ----
+function fakeLookup(chats, pnToLid = {}) {
+    const wid = (jid) => ({ jid, toString: () => jid });
+    const byId = new Map(chats.map((c) => [c.id.toString(), c]));
+    return {
+        collection: { get: (w) => byId.get(w.jid), getModelsArray: () => chats },
+        createWid: (jid) => wid(jid),
+        lidUtils: {
+            toLid: (w) => (pnToLid[w.jid] ? wid(pnToLid[w.jid]) : undefined),
+            toPn: (w) => { const pn = Object.keys(pnToLid).find((k) => pnToLid[k] === w.jid); return pn ? wid(pn) : undefined; },
+        },
+        lidPnMap: new Map(),
+    };
+}
+const lidChat = (lid, ids = []) => ({ id: Object.assign(wid(lid), { server: "lid" }), msgs: { getModelsArray: () => ids.map((id) => ({ id: { id } })) } });
+
+test("a PN lookup finds the chat that WhatsApp keys by LID", () => {
+    const s = load();
+    const chat = lidChat("9@lid");
+    const deps = fakeLookup([chat], { "628111@c.us": "9@lid" });
+    assert.strictEqual(s.resolveChat(deps, "628111@c.us"), chat);
+    assert.strictEqual(s.resolveChat(deps, "628111@s.whatsapp.net"), chat);
+});
+
+test("a LID lookup finds the chat directly, and a PN-keyed chat is found from its LID", () => {
+    const s = load();
+    const lid = lidChat("9@lid");
+    const pnChat = { id: Object.assign(wid("5@c.us"), { server: "c.us" }), msgs: { getModelsArray: () => [] } };
+    const deps = fakeLookup([lid, pnChat], { "5@c.us": "7@lid", "628111@c.us": "9@lid" });
+    assert.strictEqual(s.resolveChat(deps, "9@lid"), lid);
+    assert.strictEqual(s.resolveChat(deps, "7@lid"), pnChat);
+});
+
+test("when no mapping exists, the chat is found by scanning for the message id", () => {
+    const s = load();
+    const a = lidChat("1@lid", ["X1"]);
+    const b = lidChat("2@lid", ["TARGET", "X2"]);
+    const deps = fakeLookup([a, b], {});
+    assert.strictEqual(s.resolveChat(deps, "628999@c.us", "TARGET"), b);
+    assert.strictEqual(s.resolveChat(deps, "628999@c.us"), null);
+    assert.strictEqual(s.resolveChat(deps, "628999@c.us", "NOPE"), null);
+});
+
+test("our own lid/pn map is the last mapping tried, and lookup errors never throw", () => {
+    const s = load();
+    const chat = lidChat("3@lid");
+    const deps = fakeLookup([chat], {});
+    deps.lidPnMap.set("628111@c.us", "3@lid");
+    assert.strictEqual(s.resolveChat(deps, "628111@c.us"), chat);
+    deps.lidUtils.toLid = () => { throw new Error("no mapping"); };
+    assert.strictEqual(s.resolveChat(deps, "628111@c.us"), chat);
+    assert.strictEqual(s.resolveChat({ collection: null }, "x@c.us"), null);
+});
+
+test("chatMatchesJid matches the PN of a LID chat, and the chat context lists the PN form too", () => {
+    const s = load();
+    const chat = Object.assign(lidChat("9@lid"), { accountLid: wid("9@lid"), formattedTitle: "Budi" });
+    s.require = () => ({ toPn: () => wid("628111@c.us") });
+    assert.strictEqual(s.chatMatchesJid(chat, "628111@c.us"), true);
+    assert.strictEqual(s.chatMatchesJid(chat, "9@lid"), true);
+    assert.strictEqual(s.chatMatchesJid(chat, "777@c.us"), false);
+    assert.deepStrictEqual([...s.buildChatMenuContext(chat).jids].sort(), ["628111@c.us", "9@lid"]);
+});

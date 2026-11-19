@@ -258,7 +258,7 @@ async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
         var options = window.WAIncognitoOptions || {};
         if (!options.toastOnDelete) return; // nothing would be shown, skip the lookups
 
-        var chat = await getChatByJID(nameJid || chatJid);
+        var chat = await getChatByJID(nameJid || chatJid, deletedMessageId);
         var preview = "";
         if (chat && chat.msgs && chat.msgs.getModelsArray)
         {
@@ -281,7 +281,7 @@ async function notifyEditedMessage(chatJid, preview, targetId, before, afterKnow
         var options = window.WAIncognitoOptions || {};
         if (!options.toastOnEdit) return;
 
-        var chat = await getChatByJID(chatJid);
+        var chat = await getChatByJID(chatJid, targetId);
         dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview, targetId, afterKnown ? before : null);
     }
     catch (e)
@@ -358,7 +358,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
     }
     else
     {
-        var chat = await getChatByJID(remoteJid);
+        var chat = await getChatByJID(remoteJid, deletedMessageId);
         if (chat)
         {
             if (chat.loadEarlierMsgs)
@@ -444,6 +444,7 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     deletedMsgRecord.type = deletedMessage.type;
     deletedMsgRecord.mediaText = deletedMessage.text;
     deletedMsgRecord.Jid = deletedMessageKey.remoteJid;
+    deletedMsgRecord.chatId = deletedMessage.id && deletedMessage.id.remote ? String(deletedMessage.id.remote) : null; // the resolved chat (PN or LID)
     deletedMsgRecord.lng = deletedMessage.lng;
     deletedMsgRecord.lat = deletedMessage.lat;
     if (kind != "deleted") deletedMsgRecord.kind = kind; // "status": the plaintext `msgs` store holds it too, so keep the kind

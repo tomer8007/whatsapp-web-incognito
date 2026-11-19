@@ -149,10 +149,111 @@ function isChatBlocked(jid)
     return false;
 }
 
-async function getChatByJID(jid)
+//
+// Chat lookup that understands both phone-number (PN) and LID ids. WhatsApp keys most chats by LID now, but incoming nodes
+// are rewritten to the sender's PN, and ChatCollection.get(pnWid) returns nothing for a LID chat (verified on the live build:
+// 0 of 40 found by PN, 40 of 40 through toLid). Order: the JID as given, its LID/PN counterpart (WAWebLidMigrationUtils, then our
+// own lidPnMap), and as a last resort a scan of the loaded chats for the message id (known for edits and revokes).
+//
+// deps: { collection: {get(wid), getModelsArray()}, createWid(jid), lidUtils: {toLid(wid), toPn(wid)}, lidPnMap: Map }
+function lookupCandidateJids(jid, deps)
+{
+    var candidates = [];
+    function add(value)
+    {
+        if (value == null) return;
+        var text = normalizeJID(String(value));
+        if (candidates.indexOf(text) == -1) candidates.push(text);
+    }
+
+    add(jid);
+    var server = String(jid).split("@")[1];
+    try
+    {
+        if (deps.lidUtils && deps.createWid)
+        {
+            var wid = deps.createWid(normalizeJID(String(jid)));
+            if (server == "c.us" || server == "s.whatsapp.net") add(deps.lidUtils.toLid(wid));
+            else if (server == "lid") add(deps.lidUtils.toPn(wid));
+        }
+    }
+    catch (e) { /* no mapping known */ }
+    if (deps.lidPnMap) add(deps.lidPnMap.get(normalizeJID(String(jid))));
+    return candidates;
+}
+
+function resolveChat(deps, jid, messageId)
+{
+    var collection = deps.collection;
+    if (!collection) return null;
+
+    var candidates = lookupCandidateJids(jid, deps);
+    for (var i = 0; i < candidates.length; i++)
+    {
+        try
+        {
+            var chat = collection.get(deps.createWid(candidates[i]));
+            if (chat) return chat;
+        }
+        catch (e) { /* try the next form */ }
+    }
+
+    if (messageId && collection.getModelsArray)
+    {
+        var chats = collection.getModelsArray();
+        for (var c = 0; c < chats.length; c++)
+        {
+            try
+            {
+                var models = chats[c].msgs && chats[c].msgs.getModelsArray ? chats[c].msgs.getModelsArray() : [];
+                for (var m = 0; m < models.length; m++)
+                    if (models[m].id && models[m].id.id == messageId) return chats[c];
+            }
+            catch (e) { /* skip this chat */ }
+        }
+    }
+    return null;
+}
+
+// the live dependencies, or null while WhatsApp is not ready
+function liveChatLookupDeps()
+{
+    if (!window.WhatsAppAPI || !WhatsAppAPI.ChatCollection || !WhatsAppAPI.WAWebWidFactory) return null;
+    var lidUtils = null;
+    try { lidUtils = require("WAWebLidMigrationUtils"); } catch (e) { lidUtils = null; }
+    return {
+        collection: WhatsAppAPI.ChatCollection,
+        createWid: function(jid) { return WhatsAppAPI.WAWebWidFactory.createWid(jid); },
+        lidUtils: lidUtils,
+        lidPnMap: typeof lidPnMap != "undefined" ? lidPnMap : null,
+    };
+}
+
+// The PN form of a chat's id (for LID chats), as a normalized JID, or null
+function chatPnJid(chat)
+{
+    try
+    {
+        if (!chat || !chat.id || chat.id.server != "lid") return null;
+        var lidUtils = require("WAWebLidMigrationUtils");
+        var pn = lidUtils.toPn(chat.id);
+        return pn ? normalizeJID(pn.toString()) : null;
+    }
+    catch (e) { return null; }
+}
+
+// jid: a PN or LID JID. messageId (optional): lets the lookup fall back to scanning the loaded chats.
+async function getChatByJID(jid, messageId)
 {
     if (jid == undefined) waDebugBreak();
     jid = normalizeJID(jid);
+
+    var deps = liveChatLookupDeps();
+    if (deps)
+    {
+        var resolved = resolveChat(deps, jid, messageId);
+        if (resolved) return resolved;
+    }
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
     {
@@ -188,6 +289,19 @@ function getJidOfChat(chat)
 {
     var jid = chat.accountLid ? chat.accountLid.toString() : chat.id.toString();
     return normalizeJID(jid);
+}
+
+// does this chat belong to the JID? Compares every form of the chat (its id, its LID and its PN)
+function chatMatchesJid(chat, jid)
+{
+    if (!chat || !chat.id || jid == null) return false;
+    var wanted = normalizeJID(String(jid));
+    var forms = [chat.id, chat.accountLid, chatPnJid(chat)];
+    for (var i = 0; i < forms.length; i++)
+    {
+        if (forms[i] && normalizeJID(forms[i].toString()) == wanted) return true;
+    }
+    return !!(chat.id.user && chat.id.user == wanted.split("@")[0]);
 }
 
 function normalizeJID(jid)

@@ -448,7 +448,7 @@ NodeHandler.processEdit = async function(edit, remoteJid, options)
     var fromModel = null;
     if (!recalled || edit.newText == null)
     {
-        try { chat = await getChatByJID(remoteJid); fromModel = readOriginalFromChatModel(chat, edit.targetId); }
+        try { chat = await getChatByJID(remoteJid, edit.targetId); fromModel = readOriginalFromChatModel(chat, edit.targetId); }
         catch (e) { fromModel = null; }
     }
     var original = edit.newText == null ? (fromModel ? resolveEditOriginal(null, fromModel) : resolveEditOriginal(recalled, null))

@@ -35,7 +35,7 @@ function buildChatMenuContext(chat)
     if (!chat || !chat.id) return null;
 
     var jids = [];
-    [chat.id, chat.accountLid].forEach(function(wid)
+    [chat.id, chat.accountLid, chatPnJid(chat)].forEach(function(wid)
     {
         if (!wid) return;
         var jid = normalizeJID(wid.toString());
