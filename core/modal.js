@@ -40,6 +40,12 @@ var WAModal = (function()
         return "xl";
     }
 
+    // t() from core/i18n.js when it is loaded; the English fallback keeps this file usable on its own
+    function translate(key, fallback)
+    {
+        return typeof t == "function" ? t(key) : fallback;
+    }
+
     function escapeText(text)
     {
         return String(text == null ? "" : text).replace(/[&<>"']/g, function(c)
@@ -141,7 +147,7 @@ var WAModal = (function()
         title.id = id + "-title";
         var closeButton = make("button", "wam-close");
         closeButton.type = "button";
-        closeButton.setAttribute("aria-label", "Tutup");
+        closeButton.setAttribute("aria-label", translate("common.close", "Close"));
         closeButton.innerHTML = closeIcon();
         header.appendChild(title);
         header.appendChild(closeButton);
@@ -338,14 +344,14 @@ var WAModal = (function()
             var buttons = [];
             if (options.showCancelButton)
             {
-                var cancel = make("button", "wam-btn wam-btn-secondary", options.cancelButtonText || "Batal");
+                var cancel = make("button", "wam-btn wam-btn-secondary", options.cancelButtonText || translate("common.cancel", "Cancel"));
                 cancel.type = "button";
                 cancel.addEventListener("click", function() { finish({ isConfirmed: false, isDenied: false, isDismissed: true, value: undefined }); });
                 buttons.push(cancel);
             }
             if (options.showDenyButton)
             {
-                var deny = make("button", "wam-btn wam-btn-danger", options.denyButtonText || "Tidak");
+                var deny = make("button", "wam-btn wam-btn-danger", options.denyButtonText || translate("common.no", "No"));
                 deny.type = "button";
                 deny.addEventListener("click", function() { finish({ isConfirmed: false, isDenied: true, isDismissed: false, value: undefined }); });
                 buttons.push(deny);
@@ -353,7 +359,7 @@ var WAModal = (function()
             var confirmButton = null;
             if (options.showConfirmButton !== false)
             {
-                confirmButton = make("button", "wam-btn wam-btn-primary", options.confirmButtonText || "OK");
+                confirmButton = make("button", "wam-btn wam-btn-primary", options.confirmButtonText || translate("common.ok", "OK"));
                 confirmButton.type = "button";
                 confirmButton.addEventListener("click", confirm);
                 buttons.push(confirmButton);

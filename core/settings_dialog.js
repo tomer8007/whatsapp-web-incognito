@@ -298,7 +298,7 @@ function openSettingsDialog(initial)
 
     var make = WAModal.make;
     var handle = WAModal.open({
-        title: "WAIncognito",
+        title: "WAIncognito", // the brand name
         size: "xl",
         bodyClass: "wam-settings",
         onClose: function()

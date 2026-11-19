@@ -135,7 +135,7 @@ function listHidetagMembers(chat, selfForms)
         if (!participant || !participant.id) return;
         var forms = participantForms(participant.id);
         if (forms.some(function(form) { return skip[form]; })) return;
-        members.push({ id: forms[0], name: memberDisplayName(participant) });
+        members.push({ id: forms[0], name: memberDisplayName(participant), masked: maskedMemberName(forms[0]) });
     });
     members.sort(function(a, b) { return a.name.localeCompare(b.name); });
     return members;

@@ -75,8 +75,9 @@ var Diagnostics = (function()
             lines.push("[" + r.status + "] " + sanitize(r.feature) + " / " + sanitize(r.kind) + " / " + sanitize(r.id) +
                        (r.detail ? " (" + sanitize(r.detail) + ")" : ""));
         }
-        return "WAIncognito diagnostik: " + counts.ok + " ok, " + counts.missing + " missing, " + counts.unseen + " unseen\n" +
-               lines.join("\n");
+        var header = typeof t == "function" ? t("diag.report", { ok: counts.ok, missing: counts.missing, unseen: counts.unseen })
+                                            : "WAIncognito diagnostics: " + counts.ok + " ok, " + counts.missing + " missing, " + counts.unseen + " unseen";
+        return header + "\n" + lines.join("\n");
     }
 
     return {register: register, run: run, report: report};

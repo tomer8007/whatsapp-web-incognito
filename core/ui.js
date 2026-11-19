@@ -216,7 +216,7 @@ async function addIconIfNeeded()
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
     if (firstMenuItem != undefined)
     {
-        var menuItemElem = await generateSVGElement(extensionUrl("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
+        var menuItemElem = await generateSVGElement(extensionUrl("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, t("nav.title"), 24, "button");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
@@ -523,7 +523,7 @@ document.addEventListener("waIncognitoEdited", function(e)
 
 function formatEditTime(ts)
 {
-    try { return new Date(ts).toLocaleString("id-ID"); }
+    try { return new Date(ts).toLocaleString(typeof getLanguage == "function" ? getLanguage() : undefined); }
     catch (e) { return String(ts); }
 }
 
@@ -729,12 +729,12 @@ function ensureConversationHeaderButton()
     button.className = "incognito-header-button";
     button.title = t("header.button");
     button.setAttribute("aria-label", t("header.button"));
-    var image = document.createElement("img");
-    image.src = extensionUrl("images/incognito_gray_24_hollow_9.svg");
-    image.alt = "";
-    image.width = 22;
-    image.height = 22;
-    button.appendChild(image);
+    // the icon is a mask, so it takes the color of the button (WhatsApp's own header icon color in either theme)
+    var icon = document.createElement("span");
+    icon.className = "incognito-header-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.setProperty("--incognito-icon", 'url("' + extensionUrl("images/incognito_gray_24_hollow_9.svg") + '")');
+    button.appendChild(icon);
     button.addEventListener("click", async function(e)
     {
         e.stopPropagation();
@@ -845,17 +845,17 @@ async function openHidetagModal(context)
     var typed = await WAModal.fire({
         title: t("hidetag.title"),
         html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<div class='wam-segmented wam-hidetag-mode' role='radiogroup' style='margin-top: 10px'>" +
+              "<div class='wam-segmented wam-hidetag-mode' role='radiogroup' aria-label='" + escapeHTML(t("hidetag.mode.label")) + "' style='margin-top: 10px'>" +
               "<button type='button' class='wam-seg' role='radio' data-mode='all'>" + escapeHTML(t("hidetag.mode.all")) + "</button>" +
               "<button type='button' class='wam-seg' role='radio' data-mode='selected'>" + escapeHTML(t("hidetag.mode.selected")) + "</button></div>" +
               "<div class='wam-validation' id='incognito-hidetag-warning' style='margin-top: 10px' role='note'></div>" +
-              "<div id='incognito-hidetag-picker' hidden>" +
-              "<input type='search' id='incognito-hidetag-search' class='wam-input' placeholder='" + escapeHTML(t("hidetag.search")) + "' style='margin-top: 10px'>" +
-              "<div style='display: flex; gap: 8px; margin: 8px 0'><button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-all'>" + escapeHTML(t("hidetag.selectAll")) + "</button>" +
-              "<button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-none'>" + escapeHTML(t("hidetag.clear")) + "</button></div>" +
-              "<div id='incognito-hidetag-list' class='wam-card wam-hidetag-list' role='group'></div></div>" +
-              "<textarea id='incognito-hidetag-text' class='wam-textarea' placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
-              "<div id='incognito-hidetag-count' style='font-size: 13px; opacity: 0.85'></div>" +
+              "<div id='incognito-hidetag-picker' class='wam-picker' hidden>" +
+              "<div class='wam-picker-bar'><input type='search' id='incognito-hidetag-search' class='wam-input' placeholder='" + escapeHTML(t("hidetag.search")) + "' aria-label='" + escapeHTML(t("hidetag.search")) + "'>" +
+              "<div class='wam-picker-actions'><button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-all'>" + escapeHTML(t("hidetag.selectAll")) + "</button>" +
+              "<button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-none'>" + escapeHTML(t("hidetag.clear")) + "</button></div></div>" +
+              "<div id='incognito-hidetag-list' class='wam-picker-list' role='listbox' aria-multiselectable='true' aria-label='" + escapeHTML(t("hidetag.members.label")) + "'></div></div>" +
+              "<textarea id='incognito-hidetag-text' class='wam-textarea' placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' aria-label='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
+              "<div id='incognito-hidetag-count' class='wam-picker-count' role='status'></div>" +
               (plan.big ? "<div class='wam-validation' id='incognito-hidetag-big' style='margin-top: 8px'>" + escapeHTML(t("hidetag.big", { n: plan.count })) + "</div>" : ""),
         width: 560,
         showCancelButton: true,
@@ -870,36 +870,76 @@ async function openHidetagModal(context)
             var count = popup.querySelector("#incognito-hidetag-count");
             var confirm = popup.querySelector(".wam-footer .wam-btn-primary");
             var big = popup.querySelector("#incognito-hidetag-big");
+            var modeButtons = Array.prototype.slice.call(popup.querySelectorAll(".wam-hidetag-mode .wam-seg"));
+            var PAGE = 120; // rows are added in pages while scrolling, so a group of hundreds stays fast
+            var visible = [];
+            var rendered = 0;
 
             function chosenCount() { return Object.keys(chosen).length; }
+
+            function appendRows()
+            {
+                var end = Math.min(rendered + PAGE, visible.length);
+                for (; rendered < end; rendered++)
+                {
+                    var member = visible[rendered];
+                    var row = document.createElement("div");
+                    row.className = "wam-pick" + (chosen[member.id] ? " wam-pick-on" : "");
+                    row.setAttribute("role", "option");
+                    row.setAttribute("aria-selected", chosen[member.id] ? "true" : "false");
+                    row.tabIndex = rendered == 0 ? 0 : -1;
+                    row.dataset.id = member.id;
+                    var avatar = contactAvatar(member.name);
+                    var circle = document.createElement("span");
+                    circle.className = "wam-avatar wam-avatar-small";
+                    circle.textContent = avatar.letter;
+                    circle.style.setProperty("--wam-avatar-hue", String(avatar.hue));
+                    circle.setAttribute("aria-hidden", "true");
+                    var text = document.createElement("span");
+                    text.className = "wam-pick-text";
+                    var name = document.createElement("span");
+                    name.className = "wam-pick-name";
+                    name.textContent = member.name;
+                    var sub = document.createElement("span");
+                    sub.className = "wam-pick-sub";
+                    sub.textContent = member.masked || "";
+                    text.appendChild(name);
+                    text.appendChild(sub);
+                    var check = document.createElement("span");
+                    check.className = "wam-check";
+                    check.setAttribute("aria-hidden", "true");
+                    check.innerHTML = "<svg viewBox='0 0 24 24' width='14' height='14'><polyline points='20 6 9 17 4 12' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>";
+                    row.appendChild(circle);
+                    row.appendChild(text);
+                    row.appendChild(check);
+                    list.appendChild(row);
+                }
+            }
 
             function renderList()
             {
                 list.textContent = "";
-                filterHidetagMembers(members, search.value).forEach(function(member)
-                {
-                    var row = document.createElement("label");
-                    row.className = "wam-row wam-row-toggle wam-hidetag-row";
-                    var box = document.createElement("input");
-                    box.type = "checkbox";
-                    box.className = "wam-checkbox";
-                    box.checked = !!chosen[member.id];
-                    box.addEventListener("change", function() { if (box.checked) chosen[member.id] = true; else delete chosen[member.id]; refresh(); });
-                    var name = document.createElement("span");
-                    name.className = "wam-row-label";
-                    name.textContent = member.name;
-                    row.appendChild(box);
-                    row.appendChild(name);
-                    list.appendChild(row);
-                });
+                visible = filterHidetagMembers(members, search.value);
+                rendered = 0;
+                appendRows();
+            }
+
+            function toggle(row)
+            {
+                var id = row.dataset.id;
+                if (chosen[id]) delete chosen[id]; else chosen[id] = true;
+                row.classList.toggle("wam-pick-on", !!chosen[id]);
+                row.setAttribute("aria-selected", chosen[id] ? "true" : "false");
+                refresh();
             }
 
             function refresh()
             {
-                popup.querySelectorAll(".wam-hidetag-mode .wam-seg").forEach(function(button)
+                modeButtons.forEach(function(button)
                 {
                     var active = button.dataset.mode == mode;
                     button.setAttribute("aria-checked", active ? "true" : "false");
+                    button.tabIndex = active ? 0 : -1;
                     button.classList.toggle("wam-seg-active", active);
                 });
                 picker.hidden = mode != "selected";
@@ -909,10 +949,46 @@ async function openHidetagModal(context)
                 confirm.disabled = mode == "selected" && chosenCount() == 0;
             }
 
-            popup.querySelectorAll(".wam-hidetag-mode .wam-seg").forEach(function(button)
+            function setMode(next)
             {
-                button.addEventListener("click", function() { mode = button.dataset.mode; if (mode == "selected") renderList(); refresh(); });
+                mode = next;
+                if (mode == "selected") renderList();
+                refresh();
+            }
+
+            modeButtons.forEach(function(button, index)
+            {
+                button.addEventListener("click", function() { setMode(button.dataset.mode); });
+                button.addEventListener("keydown", function(e)
+                {
+                    var step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+                    if (!step) return;
+                    e.preventDefault();
+                    var target = modeButtons[(index + step + modeButtons.length) % modeButtons.length];
+                    setMode(target.dataset.mode);
+                    target.focus();
+                });
             });
+
+            list.addEventListener("click", function(e) { var row = e.target.closest(".wam-pick"); if (row) toggle(row); });
+            list.addEventListener("keydown", function(e)
+            {
+                var row = e.target.closest(".wam-pick");
+                if (!row) return;
+                if (e.key == " " || e.key == "Enter") { e.preventDefault(); toggle(row); return; }
+                var rows = Array.prototype.slice.call(list.querySelectorAll(".wam-pick"));
+                var at = rows.indexOf(row);
+                var next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: rows.length - 1 }[e.key];
+                if (next == null) return;
+                e.preventDefault();
+                if (next >= rows.length - 1 && rendered < visible.length) { appendRows(); rows = Array.prototype.slice.call(list.querySelectorAll(".wam-pick")); }
+                var target = rows[Math.max(0, Math.min(next, rows.length - 1))];
+                rows.forEach(function(r) { r.tabIndex = -1; });
+                target.tabIndex = 0;
+                target.focus();
+            });
+            list.addEventListener("scroll", function() { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 80 && rendered < visible.length) appendRows(); });
+
             search.addEventListener("input", renderList);
             popup.querySelector("#incognito-hidetag-all").addEventListener("click", function()
             {
@@ -1561,7 +1637,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
             const aTag = document.createElement("a");
             aTag.download = messageData.fileName;
             aTag.href = "data:" + messageData.mimetype + ";base64," + messageData.body;
-            aTag.textContent = "Download \"" + messageData.fileName + "\"";
+            aTag.textContent = t("restore.download", { name: messageData.fileName });
             messageSubElement.appendChild(aTag);
         }
         else if (messageData.type === "ptt") // audio file
@@ -1590,7 +1666,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
             var name = vcardBody[4].split(";")[0].slice(0, -4);
 
             titleSpan.textContent = t("restore.contact") + "\r\n";
-            textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
+            textSpan.textContent = t("restore.contactName", { name: name }) + "\n" + t("restore.contactNo") + " ";
 
             messageSubElement.appendChild(titleSpan);
             textSpan.appendChild(aTagPhone);
@@ -1609,7 +1685,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
             locationLink.target = "_blank";
             locationLink.rel = "noopener noreferrer";
             locationLink.href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(messageData.lat + " " + messageData.lng);
-            locationLink.textContent = "Google Maps Link";
+            locationLink.textContent = t("restore.maps");
             messageSubElement.appendChild(locationLink);
         }
         else
