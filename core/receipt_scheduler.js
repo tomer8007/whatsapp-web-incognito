@@ -9,14 +9,14 @@ function createChromeListStore(key)
     return {
         get: async function()
         {
-            var stored = await chrome.storage.local.get([key]);
+            var stored = await extensionStorageGet([key]);
             return Array.isArray(stored[key]) ? stored[key] : [];
         },
         set: async function(items)
         {
             var update = {};
             update[key] = items;
-            await chrome.storage.local.set(update);
+            await extensionStorageSet(update);
         },
     };
 }

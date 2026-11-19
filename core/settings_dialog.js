@@ -287,6 +287,7 @@ function openSettingsDialog(initial)
         else if (initialCategory && settingsHandle.select) settingsHandle.select(initialCategory);
         return;
     }
+    if (!ensureExtensionContext()) return; // the extension was reloaded: ask for a tab reload instead of an empty popup
     if (typeof checkInterception == "function" && !checkInterception()) return;
 
     var make = WAModal.make;
@@ -710,7 +711,7 @@ function openSettingsDialog(initial)
         }
         function loadPasscodeState()
         {
-            chrome.storage.local.get(["lockPasscode"]).then(function(stored)
+            extensionStorageGet(["lockPasscode"]).then(function(stored)
             {
                 hasPasscode = !!stored.lockPasscode;
                 passStatus.textContent = hasPasscode ? t("lock.passcodeSet") : t("lock.passcodeNone");
@@ -1154,7 +1155,7 @@ function openSettingsDialog(initial)
     applyDialogDirection(handle.dialog);
     buildNav();
     buildHeaderTools();
-    browser.runtime.sendMessage({ name: "getOptions" }, function(loaded)
+    safeSendMessage({ name: "getOptions" }, function(loaded)
     {
         options = loaded || {};
         if (handle.closed) return;

@@ -215,7 +215,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             render();
         });
 
-        chrome.storage.local.get(["lockPasscode"]).then(function(stored)
+        extensionStorageGet(["lockPasscode"]).then(function(stored)
         {
             passcode = stored.lockPasscode || null;
             ensureLock(false);

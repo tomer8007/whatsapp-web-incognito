@@ -171,7 +171,7 @@ function createDownloadButton(src)
 {
     var a = document.createElement("a");
     a.innerHTML =
-        "<img src='" + chrome.runtime.getURL("images/download.svg") + "' >";
+        "<img src='" + extensionUrl("images/download.svg") + "' >";
     a.className = "download-button-incognito";
     a.href = src;
     a.id = src;

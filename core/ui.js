@@ -81,7 +81,7 @@ function initialize()
 {
     applyLanguage("auto"); // until the saved language arrives
     // load saved settings
-    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    safeSendMessage({ name: "getOptions" }, function (options)
     {
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
         {
@@ -91,7 +91,7 @@ function initialize()
         // ratify it
         var optionsMessage = options;
         optionsMessage.name = "setOptions";
-        browser.runtime.sendMessage(optionsMessage);
+        safeSendMessage(optionsMessage);
     });
 
     loadAndPushContactRules();
@@ -216,12 +216,12 @@ async function addIconIfNeeded()
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
     if (firstMenuItem != undefined)
     {
-        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
+        var menuItemElem = await generateSVGElement(extensionUrl("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
         firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 
-        browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+        safeSendMessage({ name: "getOptions" }, function (options)
         {
             document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
         });
@@ -248,7 +248,7 @@ async function addIconIfNeeded()
 document.addEventListener('onMarkAsReadClick', function (e)
 {
     var data = JSON.parse(e.detail);
-    browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+    safeSendMessage({ name: "getOptions" }, function (options)
     {
         if (options.readConfirmationsHook)
         {
@@ -272,7 +272,7 @@ document.addEventListener('onMarkAsReadClick', function (e)
                         //swal("Sent!", "Messages were marked as read", "success");
 
                         var shouldShowReadWarning = result.value == 0;
-                        browser.runtime.sendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
+                        safeSendMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
                         document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify({ showReadWarning: shouldShowReadWarning }) }));
                     }
                 });
@@ -730,7 +730,7 @@ function ensureConversationHeaderButton()
     button.title = t("header.button");
     button.setAttribute("aria-label", t("header.button"));
     var image = document.createElement("img");
-    image.src = chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg");
+    image.src = extensionUrl("images/incognito_gray_24_hollow_9.svg");
     image.alt = "";
     image.width = 22;
     image.height = 22;
@@ -759,12 +759,12 @@ function pushContactRules(rules)
 
 function loadAndPushContactRules()
 {
-    browser.runtime.sendMessage({ name: "getContactRules" }, function(rules) { pushContactRules(rules); });
+    safeSendMessage({ name: "getContactRules" }, function(rules) { pushContactRules(rules); });
 }
 
 function sendBackgroundMessage(message)
 {
-    return new Promise(function(resolve) { browser.runtime.sendMessage(message, resolve); });
+    return new Promise(function(resolve) { if (!safeSendMessage(message, resolve)) resolve(null); });
 }
 
 // The per-contact settings open as a page inside the big popup (core/settings_dialog.js)
@@ -906,7 +906,7 @@ async function openScheduleReceiptModal(context)
 //
 async function openLockSetupModal()
 {
-    var stored = await chrome.storage.local.get(["lockPasscode"]);
+    var stored = await extensionStorageGet(["lockPasscode"]);
     var hasPasscode = !!stored.lockPasscode;
 
     var result = await WAModal.fire({
@@ -947,7 +947,7 @@ async function savePasscode(code)
     var saltBytes = crypto.getRandomValues(new Uint8Array(16));
     var salt = btoa(String.fromCharCode.apply(null, saltBytes));
     var hash = await hashPasscode(code, salt);
-    await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
+    await extensionStorageSet({ lockPasscode: { salt: salt, hash: hash } });
 }
 
 //
@@ -1063,7 +1063,7 @@ function setOptionFromMenu(key, value)
 {
     var message = { name: "setOptions" };
     message[key] = value;
-    browser.runtime.sendMessage(message);
+    safeSendMessage(message);
 
     var update = {};
     update[key] = value;
@@ -1443,9 +1443,9 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         
         var imageURL = "";
         if (deviceType == "computer")
-            imageURL = chrome.runtime.getURL("images/computer.svg");
+            imageURL = extensionUrl("images/computer.svg");
         else if (deviceType == "phone")
-            imageURL = chrome.runtime.getURL("images/phone.svg");
+            imageURL = extensionUrl("images/phone.svg");
         else
             return;
 
