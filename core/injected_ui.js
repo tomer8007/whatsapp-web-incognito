@@ -441,7 +441,7 @@ document.addEventListener("getDeviceTypeForMessage", async function(e)
     var msgID = data.messageID;
     var deviceType = null;
 
-    if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
+    if (deviceTypesPerMessage[msgID] != undefined && NodeHandler.contactToggle(data.chatJid, "showDeviceTypes", showDeviceTypesEnabled))
         deviceType = deviceTypesPerMessage[msgID];
 
     setTimeout(function()

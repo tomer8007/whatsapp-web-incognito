@@ -215,7 +215,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
 
             // In case the message already appears on screen, mark it in red
             var messageNodes = document.querySelectorAll("[data-id*='" + deletedMessageId + "']");
-            for (var n = 0; n < messageNodes.length; n++) messageNodes[n].setAttribute("data-incognito-deleted", "true"); // red mark, see styles.css
+            if (NodeHandler.contactToggle(remoteJid, "markDeleted", true))
+                for (var n = 0; n < messageNodes.length; n++) messageNodes[n].setAttribute("data-incognito-deleted", "true"); // red mark, see styles.css
 
             notifyDeletedMessage("delete", remoteJid, deletedMessageId);
 
@@ -255,7 +256,7 @@ async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
 {
     try
     {
-        var options = window.WAIncognitoOptions || {};
+        var options = NodeHandler.optionsFor(nameJid || chatJid);
         if (!options.toastOnDelete) return; // nothing would be shown, skip the lookups
 
         var chat = await getChatByJID(nameJid || chatJid, deletedMessageId);
@@ -278,7 +279,7 @@ async function notifyEditedMessage(chatJid, preview, targetId, before, afterKnow
 {
     try
     {
-        var options = window.WAIncognitoOptions || {};
+        var options = NodeHandler.optionsFor(chatJid);
         if (!options.toastOnEdit) return;
 
         var chat = await getChatByJID(chatJid, targetId);

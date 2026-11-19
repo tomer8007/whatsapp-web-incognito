@@ -23,7 +23,7 @@
   	},
   	{
       "matches": ["https://web.whatsapp.com/*"],
-  	  "js": ["core/ui_class_names.js", "core/response_router.js", "core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/diagnostics.js", "core/toast.js", "core/modal.js", "core/privacy_screen.js", "core/receipt_scheduler.js", "core/send_scheduler.js", "core/settings_dialog.js", "core/edit_chain.js", "core/ui.js", "core/status_download.js"],
+  	  "js": ["core/ui_class_names.js", "core/response_router.js", "core/options_schema.js", "core/contact_rules.js", "core/i18n.js", "core/i18n_strings.js", "core/diagnostics.js", "core/toast.js", "core/modal.js", "core/privacy_screen.js", "core/receipt_scheduler.js", "core/send_scheduler.js", "core/settings_dialog.js", "core/edit_chain.js", "core/ui.js", "core/status_download.js"],
   	  "css": ["styles.css"]
   	}
    ],

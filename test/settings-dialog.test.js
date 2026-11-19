@@ -89,3 +89,50 @@ test("contacts: custom-rule indicator and search", () => {
     assert.strictEqual(filterContacts(all, "", 2).shown.length, 2);
     assert.strictEqual(filterContacts(all, "", 2).total, 3);
 });
+
+test("per-contact page: every key has a label and description in all 12 languages and a rule schema entry", () => {
+    const s = load();
+    const rules = loadScripts(createSandbox(), ["core/contact_rules.js"]);
+    const keys = s.contactSectionKeys();
+    assert.deepStrictEqual([...keys].sort(), [...rules.CONTACT_RULE_FIELDS].sort(), "the page covers exactly the schema keys");
+    for (const section of s.CONTACT_SECTIONS) {
+        assert.ok(section.titleKey);
+        for (const item of section.items) {
+            for (const code of s.I18N_LANGUAGES.map((l) => l.code)) {
+                assert.ok(s.I18N_DICT[code][item.labelKey], code + " " + item.labelKey);
+                assert.ok(s.I18N_DICT[code][item.descKey], code + " " + item.descKey);
+                if (item.choiceLabels) for (const k of Object.values(item.choiceLabels)) assert.ok(s.I18N_DICT[code][k], code + " " + k);
+            }
+        }
+    }
+});
+
+test("segmented states map to stored values (read receipts and typing keep block/allow)", () => {
+    const s = load();
+    const block = { kind: "blockAllow" }, onoff = { kind: "onOff" };
+    assert.deepStrictEqual([["default"], ["on"], ["off"]].map(([st]) => s.contactValueOf(block, st)), ["default", "block", "allow"]);
+    assert.deepStrictEqual([["default"], ["on"], ["off"]].map(([st]) => s.contactValueOf(onoff, st)), ["default", "on", "off"]);
+    assert.deepStrictEqual(["default", "block", "allow"].map((v) => s.contactStateOf(block, v)), ["default", "on", "off"]);
+    assert.deepStrictEqual(["default", "on", "off"].map((v) => s.contactStateOf(onoff, v)), ["default", "on", "off"]);
+});
+
+test("contact list: custom first, filters, search, paging, placeholder avatar", () => {
+    const s = load();
+    const rules = loadScripts(createSandbox(), ["core/contact_rules.js"]);
+    Object.assign(s, { countContactRules: rules.countContactRules });
+    const mk = (name, jid, isGroup) => ({ name, jids: [jid], isGroup: !!isGroup });
+    const all = [mk("Ani", "1@c.us"), mk("Budi", "2@c.us"), mk("Kelas", "3@g.us", true), mk("Candra", "4@c.us")];
+    const ruleSet = { "4@c.us": { typing: "block" }, "3@g.us": { saveEdits: "on", toastOnEdit: "on" } };
+    const names = (list) => [...list.shown.map((c) => c.name)];
+    assert.deepStrictEqual(names(s.filterContactList(all, ruleSet, "", "all", 10)), ["Kelas", "Candra", "Ani", "Budi"], "custom first, then WhatsApp order");
+    assert.deepStrictEqual(names(s.filterContactList(all, ruleSet, "", "custom", 10)), ["Kelas", "Candra"]);
+    assert.deepStrictEqual(names(s.filterContactList(all, ruleSet, "", "groups", 10)), ["Kelas"]);
+    assert.deepStrictEqual(names(s.filterContactList(all, ruleSet, "", "people", 10)), ["Candra", "Ani", "Budi"]);
+    assert.deepStrictEqual(names(s.filterContactList(all, ruleSet, " an ", "all", 10)), ["Candra", "Ani"]);
+    const paged = s.filterContactList(all, ruleSet, "", "all", 2);
+    assert.deepStrictEqual([paged.shown.length, paged.total], [2, 4]);
+    assert.strictEqual(s.contactAvatar("budi").letter, "B");
+    assert.strictEqual(s.contactAvatar("budi").hue, s.contactAvatar("budi").hue);
+    assert.strictEqual(s.contactAvatar("").letter, "?");
+    assert.strictEqual(s.contactSummaryCount(all[2], ruleSet), 2);
+});

@@ -37,6 +37,15 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             callback(rules);
         });
     }
+    else if (messageEvent.name == "clearContactRules")
+    {
+        chrome.storage.local.get(["contactRules"]).then(async function(storage)
+        {
+            var rules = clearContactRules(storage.contactRules || {}, messageEvent.jids || []);
+            await chrome.storage.local.set({ contactRules: rules });
+            callback(rules);
+        });
+    }
     else if (messageEvent.name == "getOptions")
     {
         chrome.storage.local.get(Object.keys(DEFAULT_OPTIONS)).then(function(storage)

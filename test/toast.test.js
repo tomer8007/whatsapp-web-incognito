@@ -47,15 +47,14 @@ test("hidePreview shows only the chat name", () => {
     assert.strictEqual(t.body, "Budi");
 });
 
-test("shouldShowToast follows toastOnDelete / toastOnEdit", () => {
-    const { shouldShowToast, defaultOptions } = loadToast();
-    const options = defaultOptions();
-    assert.strictEqual(shouldShowToast("delete", options), false, "off by default");
-    assert.strictEqual(shouldShowToast("delete", { ...options, toastOnDelete: true }), true);
-    assert.strictEqual(shouldShowToast("status-delete", { ...options, toastOnDelete: true }), true);
-    assert.strictEqual(shouldShowToast("edit", { ...options, toastOnDelete: true }), false);
-    assert.strictEqual(shouldShowToast("edit", { ...options, toastOnEdit: true }), true);
+test("shouldShowToast accepts the known kinds (the page world already applied global and per-contact options)", () => {
+    const { shouldShowToast } = loadToast();
+    assert.strictEqual(shouldShowToast("delete", {}), true);
+    assert.strictEqual(shouldShowToast("edit", {}), true);
+    assert.strictEqual(shouldShowToast("status-delete", {}), true);
+    assert.strictEqual(shouldShowToast("other", {}), false);
 });
+
 
 test("hidePreview is on when any blur option is on", () => {
     const { isAnyBlurEnabled, defaultOptions } = loadToast();

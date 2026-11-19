@@ -47,7 +47,7 @@ function keysUsedBySource(schemaKeys) {
         if (!file.endsWith(".js") || file.startsWith("i18n")) continue;
         const code = fs.readFileSync(path.join(dir, file), "utf8");
         for (const m of code.matchAll(/\bt\(\s*"([\w.\-]+)"/g)) keys.add(m[1]);
-        for (const m of code.matchAll(/(?:titleKey|labelKey|descKey|textKey|unitKey)\s*:\s*"([\w.\-]+)"/g)) keys.add(m[1]);
+        for (const m of code.matchAll(/(?:titleKey|labelKey|descKey|textKey|unitKey|noteKey)\s*:\s*"([\w.\-]+)"/g)) keys.add(m[1]);
         for (const m of code.matchAll(/"(toast\.[A-Za-z]+)"/g)) keys.add(m[1]);
     }
     for (const key of schemaKeys) { keys.add("opt." + key); keys.add("opt." + key + ".desc"); }

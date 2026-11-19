@@ -26,6 +26,23 @@ NodeHandler.interceptOutgoingNode = async function (node)
     return [true, node];
 }
 
+// An "onOff" per-contact setting (core/contact_rules.js): the contact's choice, else the global value.
+NodeHandler.contactToggle = function (jid, field, globalValue)
+{
+    if (!jid || typeof resolveToggle != "function") return globalValue;
+    try { return resolveToggle(contactRules, jidCandidates(jid, lidPnMap), field, globalValue); }
+    catch (exception) { return globalValue; }
+}
+
+// WAIncognitoOptions with this contact's overrides applied
+NodeHandler.optionsFor = function (jid)
+{
+    var options = window.WAIncognitoOptions || {};
+    if (!jid || typeof contactOptionsFor != "function") return options;
+    try { return contactOptionsFor(jid, options, contactRules, lidPnMap); }
+    catch (exception) { return options; }
+}
+
 // The global setting, unless a rule for this contact (pn or lid form) says otherwise.
 NodeHandler.isBlockedForContact = function (jid, field, globalBlocked)
 {
@@ -190,7 +207,7 @@ NodeHandler.onOutgoingMessageNode = async function (messageNode)
 // </message>
 NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
-    if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
+    if (remoteJid && isChatBlocked(remoteJid) && NodeHandler.contactToggle(remoteJid, "autoReceiptOnReplay", autoReceiptOnReplay))
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
@@ -377,8 +394,8 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 // Revokes in chats are blocked with "saveDeletedMsgs". Revokes of statuses are blocked with "saveDeletedStatus" or "saveDeletedMsgs".
 NodeHandler.shouldBlockRevoke = function(remoteJid)
 {
-    if (saveDeletedMsgsHookEnabled) return true;
-    return remoteJid == STATUS_BROADCAST_JID && !!(window.WAIncognitoOptions || {}).saveDeletedStatus;
+    if (remoteJid == STATUS_BROADCAST_JID) return saveDeletedMsgsHookEnabled || !!(window.WAIncognitoOptions || {}).saveDeletedStatus;
+    return NodeHandler.contactToggle(remoteJid, "saveDeletedMsgs", saveDeletedMsgsHookEnabled); // a contact can force it on or off
 }
 
 NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid, participant)
@@ -409,7 +426,7 @@ NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
 {
     try
     {
-        var options = window.WAIncognitoOptions || {};
+        var options = NodeHandler.optionsFor(remoteJid);
         if (!options.saveEdits && !options.toastOnEdit) return;
         if (typeof EditTracker == "undefined") return;
 
@@ -512,7 +529,7 @@ NodeHandler.keepEphemeral = function(e2eMessage, messageId, remoteJid, from)
 {
     try
     {
-        if (!(window.WAIncognitoOptions || {}).keepDisappearing) return;
+        if (!NodeHandler.optionsFor(remoteJid).keepDisappearing) return;
         if (typeof isEphemeralMessage == "undefined" || !messageId || !isEphemeralMessage(e2eMessage)) return;
 
         // chats are looked up by their normalized JID (the same form the chat menu context uses)

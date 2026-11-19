@@ -437,6 +437,38 @@ input[type=number]::-webkit-inner-spin-button {
   filter: none;
 }
 
+/* per-contact blur: ui.js puts data-incognito-blur / data-incognito-noblur on #main for the open conversation */
+#main[data-incognito-blur~="messages"] [data-pre-plain-text],
+#main[data-incognito-blur~="messages"] [role="row"] span.selectable-text,
+#main[data-incognito-blur~="media"] [role="row"] img[src^="blob:"],
+#main[data-incognito-blur~="media"] [role="row"] video,
+#main[data-incognito-blur~="avatars"] img[src*=".cdn.whatsapp.net/"],
+#main[data-incognito-blur~="avatars"] header img
+{
+  filter: blur(6px);
+  transition: filter 0.15s;
+}
+
+#main[data-incognito-blur~="messages"] [data-pre-plain-text]:hover,
+#main[data-incognito-blur~="messages"] [role="row"] span.selectable-text:hover,
+#main[data-incognito-blur~="media"] [role="row"] img[src^="blob:"]:hover,
+#main[data-incognito-blur~="media"] [role="row"] video:hover,
+#main[data-incognito-blur~="avatars"] img[src*=".cdn.whatsapp.net/"]:hover,
+#main[data-incognito-blur~="avatars"] header img:hover
+{
+  filter: none;
+}
+
+body #main[data-incognito-noblur~="messages"] [data-pre-plain-text],
+body #main[data-incognito-noblur~="messages"] [role="row"] span.selectable-text,
+body #main[data-incognito-noblur~="media"] [role="row"] img[src^="blob:"],
+body #main[data-incognito-noblur~="media"] [role="row"] video,
+body #main[data-incognito-noblur~="avatars"] img[src*=".cdn.whatsapp.net/"],
+body #main[data-incognito-noblur~="avatars"] header img
+{
+  filter: none !important;
+}
+
 #incognito-lock
 {
   position: fixed;
@@ -886,3 +918,94 @@ input[type=number]::-webkit-inner-spin-button {
 .wam-dialog[dir="rtl"] .wam-switch-track::after { left: auto; right: 3px; }
 .wam-dialog[dir="rtl"] .wam-switch-input:checked + .wam-switch-track::after { transform: translateX(-16px); }
 .wam-dialog[dir="rtl"] .wam-footer { justify-content: flex-start; }
+
+/* per-contact: list, avatar, filters, detail page, segmented control */
+.wam-avatar
+{
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: hsl(var(--wam-avatar-hue, 200), 38%, 32%);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.wam-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px 0; }
+.wam-filter
+{
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--wam-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wam-text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+.wam-filter:hover { background: var(--wam-surface-2); }
+.wam-filter-active, .wam-filter-active:hover { background: rgba(33, 192, 99, 0.18); border-color: var(--wam-accent); color: var(--wam-accent); }
+.wam-contact-count { padding: 6px 4px; }
+.wam-contact-list { max-height: 52vh; overflow-y: auto; }
+.wam-contact-row { padding-block: 10px; }
+.wam-row-desc-accent { color: var(--wam-accent); }
+.wam-more { display: block; margin: 12px auto 4px auto; }
+
+.wam-contact-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.wam-contact-head-text { min-width: 0; }
+.wam-contact-head .wam-panel-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wam-contact-head .wam-panel-intro { margin: 0; }
+.wam-back
+{
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--wam-text);
+  cursor: pointer;
+}
+.wam-back:hover { background: var(--wam-surface-2); }
+.wam-dialog[dir="rtl"] .wam-back svg { transform: scaleX(-1); }
+.wam-summary { margin-top: 12px; }
+
+.wam-row-contact { flex-wrap: wrap; }
+.wam-row-effect { color: var(--wam-accent); }
+.wam-segmented
+{
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--wam-border);
+  border-radius: 999px;
+  background: var(--wam-surface-2);
+}
+.wam-seg
+{
+  min-height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wam-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.wam-seg:hover { color: var(--wam-text); }
+.wam-seg-active, .wam-seg-active:hover { background: var(--wam-accent); color: var(--wam-on-accent); font-weight: 500; }
+.wam-row-contact .wam-select { margin: 0; width: auto; max-width: 220px; }
+@media (max-width: 720px)
+{
+  .wam-row-contact > .wam-segmented, .wam-row-contact > .wam-select { margin-inline-start: 36px; }
+}

@@ -33,6 +33,7 @@ var SETTINGS_ICONS = {
     tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     chevron: '<polyline points="9 18 15 12 9 6"/>',
 };
 
@@ -166,6 +167,103 @@ function filterContacts(contexts, query, limit)
     return { shown: matches.slice(0, limit), total: matches.length };
 }
 
+// The pages of one contact ("Privasi per kontak"). kind: blockAllow (block = "on"), onOff, choice, info.
+// `option` is the global option the "Follow global" state falls back to (see CONTACT_RULE_SCHEMA in core/contact_rules.js).
+var CONTACT_SECTIONS = [
+    { titleKey: "sec.traces", items: [
+        { key: "readReceipts", icon: "check", labelKey: "opt.readConfirmationsHook", descKey: "opt.readConfirmationsHook.desc", option: "readConfirmationsHook" },
+        { key: "typing", icon: "type", labelKey: "opt.typingUpdatesHook", descKey: "opt.typingUpdatesHook.desc", option: "typingUpdatesHook" },
+        { key: null, icon: "eyeOff", labelKey: "copt.online", descKey: "copt.online.desc", info: true },
+    ] },
+    { titleKey: "sec.reading", items: [
+        { key: "showReadWarning", icon: "alert", labelKey: "opt.showReadWarning", descKey: "opt.showReadWarning.desc", option: "showReadWarning" },
+        { key: "autoReceiptOnReplay", icon: "send", labelKey: "opt.autoReceiptOnReplay", descKey: "opt.autoReceiptOnReplay.desc", option: "autoReceiptOnReplay" },
+        { key: "showDeviceTypes", icon: "phone", labelKey: "opt.showDeviceTypes", descKey: "opt.showDeviceTypes.desc", option: "showDeviceTypes" },
+        { key: "autoSchedule", icon: "clock", labelKey: "copt.autoSchedule", descKey: "copt.autoSchedule.desc", choiceLabels: { 15: "rcpt.m15", 60: "rcpt.h1", 180: "rcpt.h3" } },
+    ] },
+    { titleKey: "sec.deleted", items: [
+        { key: "saveDeletedMsgs", icon: "trash", labelKey: "opt.saveDeletedMsgs", descKey: "opt.saveDeletedMsgs.desc", option: "saveDeletedMsgs" },
+        { key: "markDeleted", icon: "alert", labelKey: "copt.markDeleted", descKey: "copt.markDeleted.desc", globalDefault: true },
+    ] },
+    { titleKey: "sec.editsEphemeral", items: [
+        { key: "saveEdits", icon: "edit", labelKey: "opt.saveEdits", descKey: "opt.saveEdits.desc", option: "saveEdits" },
+        { key: "keepDisappearing", icon: "clock", labelKey: "opt.keepDisappearing", descKey: "opt.keepDisappearing.desc", option: "keepDisappearing" },
+    ] },
+    { titleKey: "sec.alerts", items: [
+        { key: "toastOnDelete", icon: "trash", labelKey: "opt.toastOnDelete", descKey: "opt.toastOnDelete.desc", option: "toastOnDelete" },
+        { key: "toastOnEdit", icon: "edit", labelKey: "opt.toastOnEdit", descKey: "opt.toastOnEdit.desc", option: "toastOnEdit" },
+    ] },
+    { titleKey: "sec.blur", noteKey: "copt.blurNote", items: [
+        { key: "blurMessages", icon: "message", labelKey: "opt.blurMessages", descKey: "opt.blurMessages.desc", option: "blurMessages" },
+        { key: "blurMedia", icon: "image", labelKey: "opt.blurMedia", descKey: "opt.blurMedia.desc", option: "blurMedia" },
+        { key: "blurAvatars", icon: "user", labelKey: "opt.blurAvatars", descKey: "opt.blurAvatars.desc", option: "blurAvatars" },
+    ] },
+    { titleKey: "sec.audio", items: [
+        { key: "voiceNoteRate", icon: "mic", labelKey: "opt.voiceNoteRate", descKey: "opt.voiceNoteRate.desc", option: "voiceNoteRate" },
+    ] },
+];
+
+// every per-contact key shown by the detail page
+function contactSectionKeys()
+{
+    var keys = [];
+    CONTACT_SECTIONS.forEach(function(section) { section.items.forEach(function(item) { if (item.key) keys.push(item.key); }); });
+    return keys;
+}
+
+// segmented state <-> stored value. state: "default" | "on" | "off"
+function contactStateOf(entry, storedValue)
+{
+    if (storedValue == "default" || storedValue == null) return "default";
+    if (entry.kind == "blockAllow") return storedValue == "block" ? "on" : "off";
+    return storedValue; // "on" | "off"
+}
+
+function contactValueOf(entry, state)
+{
+    if (state == "default") return "default";
+    if (entry.kind == "blockAllow") return state == "on" ? "block" : "allow";
+    return state;
+}
+
+// the rules summary of one contact
+function contactSummaryCount(context, rules)
+{
+    return typeof countContactRules == "function" ? countContactRules(rules, context.jids) : 0;
+}
+
+// initial letter and a stable color for the placeholder avatar (no photo is fetched)
+function contactAvatar(name)
+{
+    var letter = (Array.from(String(name || "?"))[0] || "?").toUpperCase();
+    var hash = 0;
+    for (var i = 0; i < String(name).length; i++) hash = (hash * 31 + String(name).charCodeAt(i)) >>> 0;
+    return { letter: letter, hue: hash % 360 };
+}
+
+// list order: contacts with custom rules first, then the order WhatsApp gave (newest first)
+function sortContacts(contexts, rules)
+{
+    return contexts.map(function(context, index) { return { context: context, index: index, custom: contactSummaryCount(context, rules) > 0 }; })
+                   .sort(function(a, b) { return (b.custom - a.custom) || (a.index - b.index); })
+                   .map(function(entry) { return entry.context; });
+}
+
+// filters: "all" | "custom" | "groups" | "people"
+function filterContactList(contexts, rules, query, filter, limit)
+{
+    var needle = String(query || "").trim().toLowerCase();
+    var matches = sortContacts(contexts, rules).filter(function(context)
+    {
+        if (needle && context.name.toLowerCase().indexOf(needle) == -1) return false;
+        if (filter == "custom") return contactSummaryCount(context, rules) > 0;
+        if (filter == "groups") return !!context.isGroup;
+        if (filter == "people") return !context.isGroup;
+        return true;
+    });
+    return { shown: matches.slice(0, limit), total: matches.length };
+}
+
 var settingsActions = {
     "vault": function() { openVaultModal(); },
 };
@@ -177,11 +275,15 @@ function applyDialogDirection(element)
     element.setAttribute("dir", (typeof isRtlLanguage == "function" && isRtlLanguage()) ? "rtl" : "ltr");
 }
 
-function openSettingsDialog(initialCategory)
+// initial: a category id, or {category, contact} to open a contact's page
+function openSettingsDialog(initial)
 {
+    var initialCategory = (initial && typeof initial == "object") ? initial.category : initial;
+    var initialContact = (initial && typeof initial == "object") ? initial.contact : null;
     if (settingsHandle && !settingsHandle.closed)
     {
-        if (initialCategory && settingsHandle.select) settingsHandle.select(initialCategory);
+        if (initialContact && settingsHandle.openContact) settingsHandle.openContact(initialContact);
+        else if (initialCategory && settingsHandle.select) settingsHandle.select(initialCategory);
         return;
     }
     if (typeof checkInterception == "function" && !checkInterception()) return;
@@ -229,6 +331,7 @@ function openSettingsDialog(initialCategory)
 
     var options = {};
     var activeId = null;
+    var currentContact = initialContact || null; // the contact whose page is open inside "Privasi per kontak"
 
     function labelFor(item)
     {
@@ -236,9 +339,10 @@ function openSettingsDialog(initialCategory)
         return item.key ? t("opt." + item.key) : "";
     }
 
-    function select(id)
+    function select(id, keepContact)
     {
         activeId = id;
+        if (id != "kontak" || !keepContact) currentContact = null;
         Array.prototype.forEach.call(nav.children, function(tab)
         {
             var selected = tab.dataset.category == id;
@@ -251,6 +355,7 @@ function openSettingsDialog(initialCategory)
         panel.scrollTop = 0;
     }
     handle.select = select;
+    handle.openContact = function(context) { currentContact = context; select("kontak", true); };
 
     function buildNav()
     {
@@ -564,7 +669,18 @@ function openSettingsDialog(initialCategory)
         else WAModal.fire({ title: t("lock.noPasscode"), text: t("lock.noPasscodeText"), icon: "info", confirmButtonText: t("common.ok") });
     }
 
-    // searchable list of the user's chats (names only): each row opens the per-contact settings
+    // "Privasi per kontak": a searchable, filterable, paged list of the user's chats (names only, never messages)
+    var CONTACT_PAGE_SIZE = 60;
+
+    function avatarElement(name)
+    {
+        var avatar = contactAvatar(name);
+        var circle = make("span", "wam-avatar", avatar.letter);
+        circle.style.setProperty("--wam-avatar-hue", String(avatar.hue));
+        circle.setAttribute("aria-hidden", "true");
+        return circle;
+    }
+
     function renderContacts()
     {
         var box = make("div", "wam-contacts");
@@ -572,48 +688,251 @@ function openSettingsDialog(initialCategory)
         search.type = "search";
         search.placeholder = t("contacts.search");
         search.setAttribute("aria-label", t("contacts.search"));
+
+        var filter = "all";
+        var chips = make("div", "wam-filters");
+        chips.setAttribute("role", "radiogroup");
+        var chipButtons = {};
+        [["all", "contacts.filter.all"], ["custom", "contacts.filter.custom"], ["groups", "contacts.filter.groups"], ["people", "contacts.filter.people"]].forEach(function(pair)
+        {
+            var chip = make("button", "wam-filter", t(pair[1]));
+            chip.type = "button";
+            chip.setAttribute("role", "radio");
+            chip.addEventListener("click", function() { filter = pair[0]; limit = CONTACT_PAGE_SIZE; renderList(); });
+            chipButtons[pair[0]] = chip;
+            chips.appendChild(chip);
+        });
+
         var note = make("p", "wam-note", t("contacts.intro"));
-        var list = make("div", "wam-list wam-contact-list");
-        var count = make("p", "wam-note");
+        var count = make("p", "wam-note wam-contact-count");
+        var list = make("div", "wam-card wam-contact-list");
+        var more = make("button", "wam-btn wam-btn-secondary wam-more");
+        more.type = "button";
         var all = null;
+        var limit = CONTACT_PAGE_SIZE;
 
         function renderList()
         {
+            Object.keys(chipButtons).forEach(function(key)
+            {
+                chipButtons[key].setAttribute("aria-checked", key == filter ? "true" : "false");
+                chipButtons[key].classList.toggle("wam-filter-active", key == filter);
+            });
             list.textContent = "";
-            if (all == null) { list.appendChild(make("p", "wam-note", t("contacts.loading"))); return; }
-            var result = filterContacts(all, search.value, 80);
-            count.textContent = result.total > result.shown.length ? t("contacts.showing", { shown: result.shown.length, total: result.total }) : "";
+            more.hidden = true;
+            if (all == null) { list.appendChild(make("p", "wam-note", t("contacts.loading"))); count.textContent = ""; return; }
+            var result = filterContactList(all, contactRulesCache, search.value, filter, limit);
+            count.textContent = t("contacts.count", { n: result.total });
             if (result.shown.length == 0) { list.appendChild(make("p", "wam-note", t("contacts.none"))); return; }
             result.shown.forEach(function(context)
             {
-                var row = make("button", "wam-row wam-row-action");
+                var row = make("button", "wam-row wam-row-action wam-contact-row");
                 row.type = "button";
-                var iconBox = make("span", "wam-row-icon");
-                iconBox.innerHTML = settingsIconSVG(context.isGroup ? "users" : "user");
+                row.appendChild(avatarElement(context.name));
                 var text = make("span", "wam-row-text");
                 text.appendChild(make("span", "wam-row-label", context.name));
-                row.appendChild(iconBox);
+                var rules = contactSummaryCount(context, contactRulesCache);
+                var subtitle = make("span", "wam-row-desc" + (rules > 0 ? " wam-row-desc-accent" : ""), rules > 0 ? t("contacts.rulesCount", { n: rules }) : t("contacts.followGlobal"));
+                text.appendChild(subtitle);
                 row.appendChild(text);
-                if (contactHasCustomRule(context, contactRulesCache))
-                {
-                    row.appendChild(make("span", "wam-chip wam-chip-custom", t("contacts.custom")));
-                }
                 var chevron = make("span", "wam-row-chevron");
                 chevron.innerHTML = settingsIconSVG("chevron");
                 row.appendChild(chevron);
-                row.addEventListener("click", function() { openContactPrivacyModal(context).then(renderList); });
+                row.addEventListener("click", function() { handle.openContact(context); });
                 list.appendChild(row);
             });
+            if (result.total > result.shown.length)
+            {
+                more.textContent = t("contacts.more", { n: result.total - result.shown.length });
+                more.hidden = false;
+            }
         }
 
-        search.addEventListener("input", renderList);
+        more.addEventListener("click", function() { limit += CONTACT_PAGE_SIZE; renderList(); });
+        search.addEventListener("input", function() { limit = CONTACT_PAGE_SIZE; renderList(); });
         box.appendChild(search);
-        box.appendChild(note);
-        box.appendChild(list);
+        box.appendChild(chips);
         box.appendChild(count);
+        box.appendChild(list);
+        box.appendChild(more);
+        box.appendChild(note);
         renderList();
         requestChatContexts().then(function(chats) { all = chats; renderList(); });
         return box;
+    }
+
+    // The page of one contact: back arrow, summary card, then the same cards as "Privasi" with a segmented control per item
+    function stateLabel(on) { return on ? t("state.on") : t("state.off"); }
+
+    function globalValueOf(item)
+    {
+        if (item.option) return optionValue(item.option);
+        return item.globalDefault === true;
+    }
+
+    function segmentedControl(item, entry, context, onChange)
+    {
+        var group = make("span", "wam-segmented");
+        group.setAttribute("role", "radiogroup");
+        group.setAttribute("aria-label", t(item.labelKey));
+        var current = contactStateOf(entry, contactRuleValue(contactRulesCache, context.jids, item.key));
+        var buttons = [];
+        [["default", "seg.global"], ["on", "seg.on"], ["off", "seg.off"]].forEach(function(pair)
+        {
+            var button = make("button", "wam-seg", t(pair[1]));
+            button.type = "button";
+            button.setAttribute("role", "radio");
+            button.dataset.state = pair[0];
+            button.addEventListener("click", async function()
+            {
+                if (button.getAttribute("aria-checked") == "true") return;
+                await setContactRuleForContext(context, item.key, contactValueOf(entry, pair[0]));
+                refresh();
+                onChange();
+            });
+            buttons.push(button);
+            group.appendChild(button);
+        });
+        function refresh()
+        {
+            var state = contactStateOf(entry, contactRuleValue(contactRulesCache, context.jids, item.key));
+            buttons.forEach(function(button)
+            {
+                var active = button.dataset.state == state;
+                button.setAttribute("aria-checked", active ? "true" : "false");
+                button.classList.toggle("wam-seg-active", active);
+            });
+        }
+        refresh();
+        return group;
+    }
+
+    function choiceControl(item, entry, context, onChange)
+    {
+        var control = make("select", "wam-select");
+        control.setAttribute("aria-label", t(item.labelKey));
+        var globalValue = item.option ? optionValue(item.option) : null;
+        var def = make("option", "", t("seg.global") + (globalValue != null ? " (" + globalValue + "x)" : ""));
+        def.value = "default";
+        control.appendChild(def);
+        entry.choices.forEach(function(choice)
+        {
+            var label = item.choiceLabels && item.choiceLabels[choice] ? t(item.choiceLabels[choice]) : choice + "x";
+            var option = make("option", "", label);
+            option.value = String(choice);
+            control.appendChild(option);
+        });
+        var stored = contactRuleValue(contactRulesCache, context.jids, item.key);
+        control.value = String(stored);
+        control.addEventListener("change", async function()
+        {
+            var value = control.value == "default" ? "default" : Number(control.value);
+            await setContactRuleForContext(context, item.key, value);
+            onChange();
+        });
+        return control;
+    }
+
+    function renderContactDetail()
+    {
+        var context = currentContact;
+        var page = make("div", "wam-contact-page");
+
+        var head = make("div", "wam-contact-head");
+        var back = make("button", "wam-back");
+        back.type = "button";
+        back.setAttribute("aria-label", t("contact.back"));
+        back.title = t("contact.back");
+        back.innerHTML = settingsIconSVG("arrowLeft");
+        back.addEventListener("click", function() { select("kontak"); });
+        head.appendChild(back);
+        head.appendChild(avatarElement(context.name));
+        var headText = make("div", "wam-contact-head-text");
+        headText.appendChild(make("h3", "wam-panel-title", context.name));
+        headText.appendChild(make("p", "wam-panel-intro", t(context.isGroup ? "contact.group" : "contact.person")));
+        head.appendChild(headText);
+        page.appendChild(head);
+
+        // summary card
+        var summaryCard = make("div", "wam-card wam-summary");
+        var summaryText = make("span", "wam-row-text");
+        var summaryTitle = make("span", "wam-row-label", "");
+        var summaryDesc = make("span", "wam-row-desc", t("contact.summary.hint"));
+        summaryText.appendChild(summaryTitle);
+        summaryText.appendChild(summaryDesc);
+        var reset = make("button", "wam-btn wam-btn-secondary wam-btn-small", t("contact.reset"));
+        reset.type = "button";
+        var summaryRow = make("div", "wam-row wam-row-static");
+        var summaryIcon = make("span", "wam-row-icon");
+        summaryIcon.innerHTML = settingsIconSVG("shield");
+        summaryRow.appendChild(summaryIcon);
+        summaryRow.appendChild(summaryText);
+        summaryRow.appendChild(reset);
+        summaryCard.appendChild(summaryRow);
+        page.appendChild(summaryCard);
+
+        var effectLines = []; // refreshed whenever a rule changes
+        function refreshSummary()
+        {
+            var n = contactSummaryCount(context, contactRulesCache);
+            summaryTitle.textContent = n > 0 ? t("contact.summary", { n: n }) : t("contact.summary.none");
+            reset.disabled = n == 0;
+            effectLines.forEach(function(update) { update(); });
+        }
+        reset.addEventListener("click", async function()
+        {
+            await resetContactRulesForContext(context);
+            select("kontak", true); // redraw every control
+        });
+
+        CONTACT_SECTIONS.forEach(function(section)
+        {
+            var group = make("section", "wam-section");
+            group.appendChild(make("h4", "wam-section-title", t(section.titleKey)));
+            var card = make("div", "wam-card");
+            section.items.forEach(function(item)
+            {
+                var row = make("div", "wam-row wam-row-contact");
+                var iconBox = make("span", "wam-row-icon");
+                iconBox.innerHTML = settingsIconSVG(item.icon);
+                var text = make("span", "wam-row-text");
+                text.appendChild(make("span", "wam-row-label", t(item.labelKey)));
+                text.appendChild(make("span", "wam-row-desc", t(item.descKey)));
+                row.appendChild(iconBox);
+                row.appendChild(text);
+
+                if (item.info)
+                {
+                    row.appendChild(make("span", "wam-chip wam-chip-unseen", t("contact.globalOnly")));
+                }
+                else
+                {
+                    var entry = contactRuleEntry(item.key);
+                    var effect = make("span", "wam-row-desc wam-row-effect");
+                    text.appendChild(effect);
+                    var describe = function()
+                    {
+                        var stored = contactRuleValue(contactRulesCache, context.jids, item.key);
+                        if (entry.kind == "choice")
+                        {
+                            var globalRate = item.option ? optionValue(item.option) + "x" : t("state.off");
+                            effect.textContent = stored == "default" ? t("contact.globalNow", { state: globalRate }) : t("contact.forThis", { state: item.choiceLabels && item.choiceLabels[stored] ? t(item.choiceLabels[stored]) : stored + "x" });
+                            return;
+                        }
+                        var state = contactStateOf(entry, stored);
+                        effect.textContent = state == "default" ? t("contact.globalNow", { state: stateLabel(globalValueOf(item)) }) : t("contact.forThis", { state: stateLabel(state == "on") });
+                    };
+                    effectLines.push(describe);
+                    row.appendChild(entry.kind == "choice" ? choiceControl(item, entry, context, refreshSummary) : segmentedControl(item, entry, context, refreshSummary));
+                }
+                card.appendChild(row);
+            });
+            if (section.noteKey) card.appendChild(make("p", "wam-note", t(section.noteKey)));
+            group.appendChild(card);
+            page.appendChild(group);
+        });
+        refreshSummary();
+        return page;
     }
 
     function listBlock(emptyText)
@@ -738,19 +1057,25 @@ function openSettingsDialog(initialCategory)
     function renderPanel(category)
     {
         panel.textContent = "";
+        if (category.id == "kontak" && currentContact)
+        {
+            panel.appendChild(renderContactDetail());
+            return;
+        }
         panel.appendChild(make("h3", "wam-panel-title", t("cat." + category.id)));
         panel.appendChild(make("p", "wam-panel-intro", t("cat." + category.id + ".intro")));
         category.sections.forEach(function(section)
         {
             var group = make("section", "wam-section");
             group.appendChild(make("h4", "wam-section-title", t(section.titleKey)));
-            var card = make("div", "wam-card");
+            var bare = section.items.length == 1 && section.items[0].type == "contacts"; // the contact list brings its own card
+            var card = bare ? group : make("div", "wam-card");
             section.items.forEach(function(item)
             {
                 var render = renderers[item.type];
                 if (render) card.appendChild(render(item));
             });
-            group.appendChild(card);
+            if (!bare) group.appendChild(card);
             panel.appendChild(group);
         });
     }

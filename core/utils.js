@@ -229,6 +229,15 @@ function liveChatLookupDeps()
     };
 }
 
+// the other id forms of a JID (LID for a PN, PN for a LID) from WhatsApp's own mapping; [] when unknown
+function liveLidCounterparts(jid)
+{
+    var deps = liveChatLookupDeps();
+    if (!deps) return [];
+    var normalized = normalizeJID(String(jid));
+    return lookupCandidateJids(jid, { lidUtils: deps.lidUtils, createWid: deps.createWid, lidPnMap: null }).filter(function(c) { return c != normalized; });
+}
+
 // The PN form of a chat's id (for LID chats), as a normalized JID, or null
 function chatPnJid(chat)
 {

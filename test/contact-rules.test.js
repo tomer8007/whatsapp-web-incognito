@@ -158,3 +158,74 @@ test("background: getContactRules returns {} by default and setContactRule persi
     assert.deepStrictEqual(JSON.parse(JSON.stringify(bg.store.contactRules)), { "1@c.us": { typing: "block" } });
     assert.deepStrictEqual(JSON.parse(JSON.stringify(await bg.send({ name: "getContactRules" }))), { "1@c.us": { typing: "block" } });
 });
+
+// ---- per-contact settings beyond blue ticks and typing ----
+
+test("the schema covers the 16 per-contact keys with a kind each", () => {
+    const { CONTACT_RULE_SCHEMA } = loadRules();
+    assert.deepStrictEqual([...CONTACT_RULE_SCHEMA.map((e) => e.key)], [
+        "readReceipts", "typing", "showDeviceTypes", "autoReceiptOnReplay", "showReadWarning", "saveDeletedMsgs", "markDeleted",
+        "saveEdits", "toastOnDelete", "toastOnEdit", "keepDisappearing", "blurMessages", "blurMedia", "blurAvatars", "autoSchedule", "voiceNoteRate"]);
+});
+
+test("onOff keys: on/off override the global value, default follows it", () => {
+    const { resolveToggle } = loadRules();
+    const rules = { "1@c.us": { saveEdits: "on", toastOnEdit: "off" }, "9@lid": { keepDisappearing: "on" } };
+    assert.strictEqual(resolveToggle(rules, ["1@c.us"], "saveEdits", false), true, "on beats global off");
+    assert.strictEqual(resolveToggle(rules, ["1@c.us"], "toastOnEdit", true), false, "off beats global on");
+    assert.strictEqual(resolveToggle(rules, ["1@c.us"], "keepDisappearing", true), true, "no rule follows global");
+    assert.strictEqual(resolveToggle(rules, ["1@c.us", "9@lid"], "keepDisappearing", false), true, "found through the LID form");
+    assert.strictEqual(resolveToggle(rules, ["2@c.us"], "saveEdits", false), false, "other contacts follow global");
+    assert.strictEqual(resolveToggle(null, ["1@c.us"], "saveEdits", true), true);
+});
+
+test("a stored value of the wrong kind is ignored (block on an onOff key, on on a blockAllow key)", () => {
+    const { resolveToggle, resolveRule } = loadRules();
+    assert.strictEqual(resolveToggle({ "1@c.us": { saveEdits: "block" } }, ["1@c.us"], "saveEdits", true), true);
+    assert.strictEqual(resolveRule({ "1@c.us": { readReceipts: "on" } }, ["1@c.us"], "readReceipts", false), false);
+});
+
+test("choice keys: a stored number wins, anything else follows global", () => {
+    const { resolveChoice } = loadRules();
+    assert.strictEqual(resolveChoice({ "1@c.us": { voiceNoteRate: 2 } }, ["1@c.us"], "voiceNoteRate", 1.5), 2);
+    assert.strictEqual(resolveChoice({ "1@c.us": { voiceNoteRate: 9 } }, ["1@c.us"], "voiceNoteRate", 1.5), 1.5, "not an allowed rate");
+    assert.strictEqual(resolveChoice({}, ["1@c.us"], "autoSchedule", 0), 0);
+    assert.strictEqual(resolveChoice({ "9@lid": { autoSchedule: 60 } }, ["1@c.us", "9@lid"], "autoSchedule", 0), 60);
+});
+
+test("applyContactRule validates per kind, keeps old rules, drops defaults, and clearContactRules resets", () => {
+    const { applyContactRule, clearContactRules, countContactRules } = loadRules();
+    let rules = { "1@c.us": { readReceipts: "block" } }; // an old-style rule keeps working
+    rules = applyContactRule(rules, "1@c.us", "saveEdits", "on");
+    rules = applyContactRule(rules, "1@c.us", "voiceNoteRate", 1.5);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { readReceipts: "block", saveEdits: "on", voiceNoteRate: 1.5 } });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "saveEdits", "block"))), JSON.parse(JSON.stringify(rules)), "wrong kind ignored");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "voiceNoteRate", 7))), JSON.parse(JSON.stringify(rules)), "rate not allowed");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "nope", "on"))), JSON.parse(JSON.stringify(rules)));
+    assert.strictEqual(countContactRules(rules, ["1@c.us", "9@lid"]), 3);
+    rules["9@lid"] = { saveEdits: "off" };
+    assert.strictEqual(countContactRules(rules, ["1@c.us", "9@lid"]), 3, "the same key under two forms counts once");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(clearContactRules(rules, ["1@c.us", "9@lid"]))), {});
+    let single = applyContactRule({ "1@c.us": { saveEdits: "on" } }, "1@c.us", "saveEdits", "default");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(single)), {});
+});
+
+test("contactOptionsFor applies the toggles of one contact to the options, nothing else", () => {
+    const s = loadRules();
+    const options = { ...s.defaultOptions?.(), saveEdits: false, toastOnEdit: true, keepDisappearing: false, voiceNoteRate: 1.5, language: "id" };
+    const map = new Map([["628@c.us", "9@lid"], ["9@lid", "628@c.us"]]);
+    const rules = { "9@lid": { saveEdits: "on", toastOnEdit: "off" } };
+    const result = s.contactOptionsFor("628@s.whatsapp.net", options, rules, map);
+    assert.strictEqual(result.saveEdits, true);
+    assert.strictEqual(result.toastOnEdit, false);
+    assert.strictEqual(result.keepDisappearing, false);
+    assert.strictEqual(result.voiceNoteRate, 1.5);
+    assert.strictEqual(result.language, "id");
+    assert.strictEqual(options.saveEdits, false, "the global options object is not changed");
+});
+
+test("jidCandidates also uses WhatsApp's own LID mapping when it is available", () => {
+    const s = loadRules();
+    s.liveLidCounterparts = (jid) => (jid == "628@c.us" ? ["9@lid"] : []);
+    assert.deepStrictEqual([...s.jidCandidates("628@c.us", null)], ["628@c.us", "9@lid"]);
+});

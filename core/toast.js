@@ -40,11 +40,10 @@ function formatToast(toast, settings)
     return { title: title, body: chatName + ": " + cut(toast.preview) };
 }
 
+// The page world already applied the global option and the per-contact override before sending the event
 function shouldShowToast(kind, options)
 {
-    if (!options) return false;
-    if (kind == "edit") return options.toastOnEdit === true;
-    return options.toastOnDelete === true; // "delete" and "status-delete"
+    return kind == "edit" || kind == "delete" || kind == "status-delete";
 }
 
 function isAnyBlurEnabled(options)

@@ -252,7 +252,7 @@ document.addEventListener('onMarkAsReadClick', function (e)
     {
         if (options.readConfirmationsHook)
         {
-            if (options.showReadWarning)
+            if (contactToggleFor(data.jid, "showReadWarning", options.showReadWarning))
             {
                 WAModal.fire({
                     title: t("markRead.title"),
@@ -767,47 +767,90 @@ function sendBackgroundMessage(message)
     return new Promise(function(resolve) { browser.runtime.sendMessage(message, resolve); });
 }
 
-function contactRuleOptionsHTML(selected)
+// The per-contact settings open as a page inside the big popup (core/settings_dialog.js)
+function openContactPrivacyModal(context)
 {
-    var labels = { "default": t("contact.rule.default"), "block": t("contact.rule.block"), "allow": t("contact.rule.allow") };
-    return ["default", "block", "allow"].map(function(value)
-    {
-        return "<option value='" + value + "'" + (value == selected ? " selected" : "") + ">" + labels[value] + "</option>";
-    }).join("");
+    openSettingsDialog({ category: "kontak", contact: context });
+    return Promise.resolve();
 }
 
-async function openContactPrivacyModal(context)
+// Stores one rule under every known form of the contact's JID (PN and LID); "default" removes it.
+async function setContactRuleForContext(context, field, value)
 {
-    var current = {};
-    context.jids.forEach(function(jid) { current = Object.assign(current, contactRulesCache[jid] || {}); });
-
-    var result = await WAModal.fire({
-        title: t("contact.title"),
-        html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
-              escapeHTML(t("contact.readReceipts")) + "<br><select id='incognito-contact-read' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
-              escapeHTML(t("contact.typing")) + "<br><select id='incognito-contact-typing' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
-              "<span style='font-size: 12px; opacity: 0.8'>" + escapeHTML(t("contact.onlineNote")) + "</span></div>",
-        showCancelButton: true,
-        confirmButtonText: t("common.save"),
-        cancelButtonText: t("common.cancel"),
-        preConfirm: function()
-        {
-            return { readReceipts: document.getElementById("incognito-contact-read").value, typing: document.getElementById("incognito-contact-typing").value };
-        },
-    });
-    if (!result.isConfirmed) return;
-
-    // stored under every known form of the contact's JID (pn and lid)
     var rules = contactRulesCache;
     for (var i = 0; i < context.jids.length; i++)
-    {
-        for (var field of ["readReceipts", "typing"])
-        {
-            rules = await sendBackgroundMessage({ name: "setContactRule", jid: context.jids[i], field: field, value: result.value[field] });
-        }
-    }
+        rules = await sendBackgroundMessage({ name: "setContactRule", jid: context.jids[i], field: field, value: value });
     pushContactRules(rules);
 }
+
+async function resetContactRulesForContext(context)
+{
+    var rules = await sendBackgroundMessage({ name: "clearContactRules", jids: context.jids });
+    pushContactRules(rules);
+}
+
+// ---- consumers of the per-contact rules in this world ----
+
+function chatJidOfMessageElement(element)
+{
+    var holder = element && element.closest ? element.closest("[data-id]") : null;
+    var parts = holder ? String(holder.getAttribute("data-id")).split("_") : [];
+    return parts.length >= 3 ? parts[1] : null;
+}
+
+function contactToggleFor(jid, field, globalValue)
+{
+    if (!jid || typeof resolveToggle != "function") return globalValue;
+    return resolveToggle(contactRules, jidCandidates(jid, null), field, globalValue);
+}
+
+// A conversation can blur its own messages, media and avatars, or opt out of a global blur: attributes on #main (styles.css)
+var contactBlurTimer = null;
+function applyContactBlur()
+{
+    var main = document.getElementById("main");
+    if (!main) return;
+    if (typeof contactRules == "undefined" || Object.keys(contactRules).length == 0)
+    {
+        main.removeAttribute("data-incognito-blur");
+        main.removeAttribute("data-incognito-noblur");
+        return;
+    }
+    requestActiveChatContext().then(function(context)
+    {
+        var blur = [], noblur = [];
+        if (context)
+        {
+            var candidates = context.jids;
+            [["messages", "blurMessages"], ["media", "blurMedia"], ["avatars", "blurAvatars"]].forEach(function(pair)
+            {
+                var value = contactRuleValue(contactRules, candidates, pair[1]);
+                if (value == "on") blur.push(pair[0]);
+                else if (value == "off") noblur.push(pair[0]);
+            });
+        }
+        main = document.getElementById("main");
+        if (!main) return;
+        if (blur.length) main.setAttribute("data-incognito-blur", blur.join(" ")); else main.removeAttribute("data-incognito-blur");
+        if (noblur.length) main.setAttribute("data-incognito-noblur", noblur.join(" ")); else main.removeAttribute("data-incognito-noblur");
+    });
+}
+setInterval(function() { try { applyContactBlur(); } catch (e) {} }, 1500);
+
+// Blue ticks that were held back are scheduled automatically for contacts with an "autoSchedule" rule
+document.addEventListener("onReadConfirmationBlocked", function(e)
+{
+    try
+    {
+        var jid = String(e.detail);
+        var minutes = Number(resolveChoice(contactRules, jidCandidates(jid, null), "autoSchedule", 0));
+        if (!(minutes > 0)) return;
+        var candidates = jidCandidates(jid, null);
+        var already = receiptScheduler.list().some(function(item) { return candidates.indexOf(item.jid) > -1; });
+        if (!already) receiptScheduler.schedule(jid, Date.now() + minutes * 60 * 1000);
+    }
+    catch (exception) { console.warn("WAIncognito: could not auto-schedule the blue ticks"); }
+});
 
 //
 // Scheduled blue ticks (core/receipt_scheduler.js)
@@ -1187,6 +1230,7 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 function markMessageDeleted(node)
 {
     var row = node.closest ? (node.closest("[data-id]") || node) : node;
+    if (!contactToggleFor(chatJidOfMessageElement(row), "markDeleted", true)) return; // this contact opted out of the red mark
     row.setAttribute("data-incognito-deleted", "true");
 }
 
@@ -1419,7 +1463,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
 
         messageNode.insertBefore(imageElement, messageNode.firstChild);
     });
-    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
+    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID, chatJid: chatJidOfMessageElement(messageNode)})}));
 }
 
 function checkInterception()

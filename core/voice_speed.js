@@ -46,7 +46,25 @@ function installVoiceSpeed(mediaPrototype, getRate)
 
 if (typeof HTMLMediaElement !== "undefined")
 {
-    installVoiceSpeed(HTMLMediaElement.prototype, function() { return (window.WAIncognitoOptions || {}).voiceNoteRate; });
+    installVoiceSpeed(HTMLMediaElement.prototype, function()
+    {
+        var globalRate = (window.WAIncognitoOptions || {}).voiceNoteRate;
+        // a contact can have its own playback speed (core/contact_rules.js): the open chat decides
+        try
+        {
+            if (typeof resolveChoice == "function" && typeof getCurrentChat == "function")
+            {
+                var chat = getCurrentChat();
+                if (chat && chat.id)
+                {
+                    var jids = [chat.id, chat.accountLid, typeof chatPnJid == "function" ? chatPnJid(chat) : null].filter(Boolean).map(function(j) { return normalizeJID(j.toString()); });
+                    return Number(resolveChoice(contactRules, jids, "voiceNoteRate", globalRate));
+                }
+            }
+        }
+        catch (e) { /* use the global speed */ }
+        return globalRate;
+    });
 }
 
 if (typeof Diagnostics !== "undefined")
