@@ -33,6 +33,7 @@ var SETTINGS_ICONS = {
     tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
     arrowLeft: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     chevron: '<polyline points="9 18 15 12 9 6"/>',
 };
@@ -304,28 +305,35 @@ function openSettingsDialog(initial)
     var icon = document.getElementsByClassName("menu-item-incognito")[0];
     if (icon) icon.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito");
 
-    // header tools: language picker and a lock button
-    var tools = make("div", "wam-header-tools");
-    var languageSelect = make("select", "wam-select wam-language");
-    var lockButton = make("button", "wam-btn wam-btn-secondary wam-btn-small");
+    var split = make("div", "wam-split");
+    var side = make("div", "wam-side"); // the category list with the language picker and the lock button pinned below it
+    var nav = make("nav", "wam-nav");
+    nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-orientation", "vertical");
+    var foot = make("div", "wam-side-foot");
+    var languageButton = make("button", "wam-nav-item wam-side-button");
+    languageButton.type = "button";
+    languageButton.setAttribute("aria-haspopup", "listbox");
+    languageButton.setAttribute("aria-expanded", "false");
+    var lockButton = make("button", "wam-nav-item wam-side-button");
     lockButton.type = "button";
     lockButton.addEventListener("click", function()
     {
         if (window.WAIncognitoLock && window.WAIncognitoLock.hasPasscode()) window.WAIncognitoLock.lockNow();
         else select("layar");
     });
-    tools.appendChild(languageSelect);
-    tools.appendChild(lockButton);
-    handle.header.insertBefore(tools, handle.header.lastChild);
-
-    var split = make("div", "wam-split");
-    var nav = make("nav", "wam-nav");
-    nav.setAttribute("role", "tablist");
-    nav.setAttribute("aria-orientation", "vertical");
+    var languageMenu = make("div", "wam-menu");
+    languageMenu.setAttribute("role", "listbox");
+    languageMenu.hidden = true;
+    foot.appendChild(languageMenu);
+    foot.appendChild(languageButton);
+    foot.appendChild(lockButton);
+    side.appendChild(nav);
+    side.appendChild(foot);
     var panel = make("section", "wam-panel");
     panel.setAttribute("role", "tabpanel");
     panel.tabIndex = -1;
-    split.appendChild(nav);
+    split.appendChild(side);
     split.appendChild(panel);
     handle.body.appendChild(split);
 
@@ -385,34 +393,97 @@ function openSettingsDialog(initial)
         });
     }
 
-    function buildHeaderTools()
+    function currentLanguageName()
     {
-        languageSelect.textContent = "";
-        languageSelect.setAttribute("aria-label", t("settings.language"));
-        var auto = make("option", "", t("lang.auto"));
-        auto.value = "auto";
-        languageSelect.appendChild(auto);
-        I18N_LANGUAGES.forEach(function(language)
-        {
-            var option = make("option", "", language.name);
-            option.value = language.code;
-            languageSelect.appendChild(option);
-        });
-        languageSelect.value = options.language || "auto";
-        lockButton.textContent = t("lock.now");
-        lockButton.title = t("lock.shortcut");
+        var code = options.language || "auto";
+        if (code == "auto") return t("lang.auto");
+        var language = I18N_LANGUAGES.find(function(l) { return l.code == code; });
+        return language ? language.name : code;
     }
 
-    languageSelect.addEventListener("change", function()
+    function buildHeaderTools()
     {
-        options.language = languageSelect.value;
-        setOptionFromMenu("language", languageSelect.value);
-        setLanguage(languageSelect.value);
-        applyLanguage(languageSelect.value);
+        languageButton.innerHTML = settingsIconSVG("globe") + "<span class='wam-side-label'></span>";
+        languageButton.lastChild.textContent = currentLanguageName();
+        languageButton.setAttribute("aria-label", t("settings.language") + ": " + currentLanguageName());
+        languageButton.title = t("settings.language");
+        lockButton.innerHTML = settingsIconSVG("lock") + "<span class='wam-side-label'></span>";
+        lockButton.lastChild.textContent = t("lock.now");
+        lockButton.title = t("lock.shortcut");
+        languageMenu.setAttribute("aria-label", t("settings.language"));
+    }
+
+    // the language menu opens upward, is keyboard accessible, and closes on Escape, outside click or choice
+    function chooseLanguage(value)
+    {
+        options.language = value;
+        setOptionFromMenu("language", value);
+        setLanguage(value);
+        applyLanguage(value);
         applyDialogDirection(handle.dialog);
         buildNav();
         buildHeaderTools();
         select(activeId || SETTINGS_CATEGORIES[0].id);
+    }
+
+    function menuOptions() { return Array.prototype.slice.call(languageMenu.querySelectorAll("[role=option]")); }
+
+    function closeLanguageMenu(returnFocus)
+    {
+        if (languageMenu.hidden) return false;
+        languageMenu.hidden = true;
+        languageButton.setAttribute("aria-expanded", "false");
+        document.removeEventListener("mousedown", outsideMenuClick, true);
+        handle.onEscape = null;
+        if (returnFocus) languageButton.focus();
+        return true;
+    }
+
+    function outsideMenuClick(e)
+    {
+        if (!languageMenu.contains(e.target) && !languageButton.contains(e.target)) closeLanguageMenu(false);
+    }
+
+    function openLanguageMenu()
+    {
+        languageMenu.textContent = "";
+        var current = options.language || "auto";
+        [{ code: "auto", name: t("lang.auto") }].concat(I18N_LANGUAGES).forEach(function(language)
+        {
+            var item = make("button", "wam-menu-item");
+            item.type = "button";
+            item.setAttribute("role", "option");
+            item.setAttribute("aria-selected", language.code == current ? "true" : "false");
+            item.dataset.code = language.code;
+            item.tabIndex = -1;
+            item.appendChild(make("span", "wam-menu-check", language.code == current ? "\u2713" : ""));
+            item.appendChild(make("span", "wam-menu-text", language.name));
+            item.addEventListener("click", function() { closeLanguageMenu(false); chooseLanguage(language.code); });
+            languageMenu.appendChild(item);
+        });
+        languageMenu.hidden = false;
+        languageButton.setAttribute("aria-expanded", "true");
+        handle.onEscape = function() { return closeLanguageMenu(true); }; // Escape closes the menu, not the popup
+        document.addEventListener("mousedown", outsideMenuClick, true);
+        var selected = languageMenu.querySelector("[aria-selected=true]") || languageMenu.firstChild;
+        selected.focus();
+        selected.scrollIntoView({ block: "nearest" });
+    }
+
+    languageButton.addEventListener("click", function() { if (languageMenu.hidden) openLanguageMenu(); else closeLanguageMenu(true); });
+    languageButton.addEventListener("keydown", function(e)
+    {
+        if (e.key == "ArrowUp" || e.key == "ArrowDown") { e.preventDefault(); if (languageMenu.hidden) openLanguageMenu(); }
+    });
+    languageMenu.addEventListener("keydown", function(e)
+    {
+        var items = menuOptions();
+        var index = items.indexOf(document.activeElement);
+        if (e.key == "ArrowDown") { e.preventDefault(); items[(index + 1) % items.length].focus(); }
+        else if (e.key == "ArrowUp") { e.preventDefault(); items[(index - 1 + items.length) % items.length].focus(); }
+        else if (e.key == "Home") { e.preventDefault(); items[0].focus(); }
+        else if (e.key == "End") { e.preventDefault(); items[items.length - 1].focus(); }
+        else if (e.key == "Tab") { closeLanguageMenu(false); }
     });
 
     function rowShell(item, tag)

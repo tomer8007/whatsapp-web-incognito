@@ -76,6 +76,7 @@ var WAModal = (function()
         var current = top();
         if (!current || handled) return;
         e.stopPropagation();
+        if (current.onEscape && current.onEscape()) return;
         if (current.closeOnEsc) current.close();
     }
 
@@ -89,6 +90,7 @@ var WAModal = (function()
             escapeHandledOnKeyDown = true;
             e.stopPropagation();
             e.preventDefault();
+            if (current.onEscape && current.onEscape()) return; // a menu inside the popup took it
             if (current.closeOnEsc) current.close();
             return;
         }
