@@ -1074,3 +1074,7 @@ body #main[data-incognito-noblur~="avatars"] header img
 {
   .wam-row-contact > .wam-segmented, .wam-row-contact > .wam-select { margin-inline-start: 36px; }
 }
+
+/* hidetag member picker */
+.wam-hidetag-list { max-height: 220px; overflow-y: auto; }
+.wam-hidetag-row { padding: 8px 14px; gap: 10px; }

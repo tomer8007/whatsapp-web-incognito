@@ -790,6 +790,8 @@ function hidetagErrorText(error)
 {
     if (error == "disabled") return t("hidetag.disabled");
     if (error == "not-a-group") return t("hidetag.notGroup");
+    if (error == "empty-selection" || error == "no-members") return t("hidetag.noneSelected");
+    if (error == "unknown-member") return t("hidetag.unknownMember");
     return String(error || t("sched.unknown"));
 }
 
@@ -801,39 +803,140 @@ async function openHidetagFromActiveChat()
     openHidetagModal(context);
 }
 
+// last selection per group, kept in chrome.storage.local["hidetagSelection"] = {groupJid: [memberId...]}
+async function loadHidetagSelection(groupJid)
+{
+    var stored = await extensionStorageGet(["hidetagSelection"]);
+    var all = stored.hidetagSelection || {};
+    return Array.isArray(all[groupJid]) ? all[groupJid] : [];
+}
+
+async function saveHidetagSelection(groupJid, ids)
+{
+    var stored = await extensionStorageGet(["hidetagSelection"]);
+    var all = stored.hidetagSelection || {};
+    all[groupJid] = ids;
+    await extensionStorageSet({ hidetagSelection: all });
+}
+
+// members filtered by a search text (names only)
+function filterHidetagMembers(members, query)
+{
+    var needle = String(query || "").trim().toLowerCase();
+    return needle ? members.filter(function(member) { return member.name.toLowerCase().indexOf(needle) > -1; }) : members;
+}
+
 async function openHidetagModal(context)
 {
     if (!context || !context.isGroup) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.notGroup"), icon: "info", confirmButtonText: t("common.ok") }); return; }
-    var plan = await requestFromPageWorld(hidetagPlanResponses, "waIncognitoHidetagPlan", "hplan", { ok: false, count: 0, big: false }, { jid: context.primaryJid });
+    var plan = await requestFromPageWorld(hidetagPlanResponses, "waIncognitoHidetagPlan", "hplan", { ok: false, count: 0, big: false }, { jid: context.primaryJid, withMembers: true });
     if (!plan.ok || plan.count == 0)
     {
         WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.none"), icon: "info", confirmButtonText: t("common.ok") });
         return;
     }
+    var members = plan.members || [];
+    var known = {};
+    members.forEach(function(member) { known[member.id] = true; });
+    var chosen = {};
+    (await loadHidetagSelection(context.primaryJid)).forEach(function(id) { if (known[id]) chosen[id] = true; });
+    var mode = "all";
 
     var typed = await WAModal.fire({
         title: t("hidetag.title"),
         html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<div class='wam-validation' style='margin-top: 10px' role='note'>" + escapeHTML(t("hidetag.warning")) + "</div>" +
+              "<div class='wam-segmented wam-hidetag-mode' role='radiogroup' style='margin-top: 10px'>" +
+              "<button type='button' class='wam-seg' role='radio' data-mode='all'>" + escapeHTML(t("hidetag.mode.all")) + "</button>" +
+              "<button type='button' class='wam-seg' role='radio' data-mode='selected'>" + escapeHTML(t("hidetag.mode.selected")) + "</button></div>" +
+              "<div class='wam-validation' id='incognito-hidetag-warning' style='margin-top: 10px' role='note'></div>" +
+              "<div id='incognito-hidetag-picker' hidden>" +
+              "<input type='search' id='incognito-hidetag-search' class='wam-input' placeholder='" + escapeHTML(t("hidetag.search")) + "' style='margin-top: 10px'>" +
+              "<div style='display: flex; gap: 8px; margin: 8px 0'><button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-all'>" + escapeHTML(t("hidetag.selectAll")) + "</button>" +
+              "<button type='button' class='wam-btn wam-btn-secondary wam-btn-small' id='incognito-hidetag-none'>" + escapeHTML(t("hidetag.clear")) + "</button></div>" +
+              "<div id='incognito-hidetag-list' class='wam-card wam-hidetag-list' role='group'></div></div>" +
               "<textarea id='incognito-hidetag-text' class='wam-textarea' placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
-              "<div style='font-size: 13px; opacity: 0.85'>" + escapeHTML(t("hidetag.count", { n: plan.count })) + "</div>" +
-              (plan.big ? "<div class='wam-validation' style='margin-top: 8px'>" + escapeHTML(t("hidetag.big", { n: plan.count })) + "</div>" : ""),
+              "<div id='incognito-hidetag-count' style='font-size: 13px; opacity: 0.85'></div>" +
+              (plan.big ? "<div class='wam-validation' id='incognito-hidetag-big' style='margin-top: 8px'>" + escapeHTML(t("hidetag.big", { n: plan.count })) + "</div>" : ""),
         width: 560,
         showCancelButton: true,
         confirmButtonText: t("hidetag.continue"),
         cancelButtonText: t("common.cancel"),
+        didOpen: function(popup)
+        {
+            var warning = popup.querySelector("#incognito-hidetag-warning");
+            var picker = popup.querySelector("#incognito-hidetag-picker");
+            var list = popup.querySelector("#incognito-hidetag-list");
+            var search = popup.querySelector("#incognito-hidetag-search");
+            var count = popup.querySelector("#incognito-hidetag-count");
+            var confirm = popup.querySelector(".wam-footer .wam-btn-primary");
+            var big = popup.querySelector("#incognito-hidetag-big");
+
+            function chosenCount() { return Object.keys(chosen).length; }
+
+            function renderList()
+            {
+                list.textContent = "";
+                filterHidetagMembers(members, search.value).forEach(function(member)
+                {
+                    var row = document.createElement("label");
+                    row.className = "wam-row wam-row-toggle wam-hidetag-row";
+                    var box = document.createElement("input");
+                    box.type = "checkbox";
+                    box.className = "wam-checkbox";
+                    box.checked = !!chosen[member.id];
+                    box.addEventListener("change", function() { if (box.checked) chosen[member.id] = true; else delete chosen[member.id]; refresh(); });
+                    var name = document.createElement("span");
+                    name.className = "wam-row-label";
+                    name.textContent = member.name;
+                    row.appendChild(box);
+                    row.appendChild(name);
+                    list.appendChild(row);
+                });
+            }
+
+            function refresh()
+            {
+                popup.querySelectorAll(".wam-hidetag-mode .wam-seg").forEach(function(button)
+                {
+                    var active = button.dataset.mode == mode;
+                    button.setAttribute("aria-checked", active ? "true" : "false");
+                    button.classList.toggle("wam-seg-active", active);
+                });
+                picker.hidden = mode != "selected";
+                warning.textContent = mode == "selected" ? t("hidetag.warningSelected") : t("hidetag.warning");
+                count.textContent = mode == "selected" ? t("hidetag.selectedCount", { n: chosenCount(), m: members.length }) : t("hidetag.count", { n: plan.count });
+                if (big) big.hidden = mode == "selected" && chosenCount() <= 256;
+                confirm.disabled = mode == "selected" && chosenCount() == 0;
+            }
+
+            popup.querySelectorAll(".wam-hidetag-mode .wam-seg").forEach(function(button)
+            {
+                button.addEventListener("click", function() { mode = button.dataset.mode; if (mode == "selected") renderList(); refresh(); });
+            });
+            search.addEventListener("input", renderList);
+            popup.querySelector("#incognito-hidetag-all").addEventListener("click", function()
+            {
+                filterHidetagMembers(members, search.value).forEach(function(member) { chosen[member.id] = true; });
+                renderList(); refresh();
+            });
+            popup.querySelector("#incognito-hidetag-none").addEventListener("click", function() { chosen = {}; renderList(); refresh(); });
+            renderList();
+            refresh();
+        },
         preConfirm: function()
         {
             var text = document.getElementById("incognito-hidetag-text").value;
             if (!text.trim()) { WAModal.showValidationMessage(t("hidetag.empty")); return false; }
-            return text;
+            if (mode == "selected" && Object.keys(chosen).length == 0) { WAModal.showValidationMessage(t("hidetag.noneSelected")); return false; }
+            return { text: text, mode: mode, selected: mode == "selected" ? Object.keys(chosen) : null };
         },
     });
     if (!typed.isConfirmed) return;
 
+    var targetCount = typed.value.mode == "selected" ? typed.value.selected.length : plan.count;
     var confirmed = await WAModal.fire({
         title: t("hidetag.confirmTitle"),
-        text: t("hidetag.confirmText", { n: plan.count }),
+        text: typed.value.mode == "selected" ? t("hidetag.confirmTextSelected", { n: targetCount }) : t("hidetag.confirmText", { n: targetCount }),
         icon: "warning",
         showCancelButton: true,
         confirmButtonText: t("hidetag.send"),
@@ -841,9 +944,10 @@ async function openHidetagModal(context)
     });
     if (!confirmed.isConfirmed) return;
 
+    if (typed.value.mode == "selected") saveHidetagSelection(context.primaryJid, typed.value.selected);
     var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagSend", "hsend", { ok: false, error: t("sched.noAnswer") },
-                                            { jid: context.primaryJid, text: typed.value, dryRun: false }, 40000);
-    if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: plan.count }), icon: "success", toast: true, timer: 6000 });
+                                            { jid: context.primaryJid, text: typed.value.text, dryRun: false, selected: typed.value.selected }, 40000);
+    if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || targetCount }), icon: "success", toast: true, timer: 6000 });
     else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
 }
 

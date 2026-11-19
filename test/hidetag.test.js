@@ -93,3 +93,64 @@ test("empty text, no members and a missing sender are refused without sending", 
     assert.strictEqual((await s.sendHidetag(groupWith([]), "x", false)).error, "no-members");
     assert.strictEqual((await s.sendHidetag(groupWith(["1@lid"]), "x", false)).error, "send function not found");
 });
+
+// ---- the "choose members" mode ----
+
+test("selected mode mentions exactly the chosen members (subset, PN/LID mix, deduped)", () => {
+    const s = load();
+    const chat = groupWith(["9@lid", "628111@c.us", "7@lid", "5@lid"]);
+    const plan = s.buildHidetagPlan(chat, ["5@lid"], ["628111@c.us", "7@lid", "7:2@lid", "628111@s.whatsapp.net"]);
+    assert.strictEqual(plan.ok, true);
+    assert.deepStrictEqual([...plan.wids.map((w) => w.toString())], ["628111@c.us", "7@lid"]);
+    assert.strictEqual(plan.count, 2);
+});
+
+test("a chosen id that is not in the group is rejected, and so is an empty or invalid selection", () => {
+    const s = load();
+    const chat = groupWith(["9@lid", "7@lid"]);
+    assert.strictEqual(s.buildHidetagPlan(chat, [], ["9@lid", "555@lid"]).error, "unknown-member");
+    assert.strictEqual(s.buildHidetagPlan(chat, [], []).error, "empty-selection");
+    assert.strictEqual(s.buildHidetagPlan(chat, [], "9@lid").error, "empty-selection");
+    assert.strictEqual(s.buildHidetagPlan(chat, [], null).count, 2, "null means everybody");
+});
+
+test("the user is excluded even when selected; selecting only the user leaves nobody", () => {
+    const s = load();
+    const chat = groupWith(["9@lid", "5@lid"]);
+    const plan = s.buildHidetagPlan(chat, ["5@lid"], ["9@lid", "5@lid"]);
+    assert.deepStrictEqual([...plan.wids.map((w) => w.toString())], ["9@lid"]);
+    assert.strictEqual(s.buildHidetagPlan(chat, ["5@lid"], ["5@lid"]).count, 0);
+});
+
+test("a PN selection matches a LID participant through WhatsApp's mapping", () => {
+    const s = load();
+    s.liveLidCounterparts = (jid) => (jid == "9@lid" ? ["628111@c.us"] : []);
+    const plan = s.buildHidetagPlan(groupWith(["9@lid", "7@lid"]), [], ["628111@c.us"]);
+    assert.deepStrictEqual([...plan.wids.map((w) => w.toString())], ["9@lid"]);
+});
+
+test("the selected send passes only the chosen members and the dry run stays text-free", async () => {
+    const calls = [];
+    const s = load({
+        WAWebSendTextMsgChatAction: { createTextMsgData: async (chat, text, options) => ({ body: text, mentionedJidList: options.mentionedJidList, groupMentions: [] }) },
+        WAWebSendMsgResultAction: { SendMsgResult: { OK: "OK" } },
+    });
+    s.findSendTextFunction = () => async (chat, text, options) => { calls.push(options.mentionedJidList.map((w) => w.toString())); return { messageSendResult: "OK" }; };
+    const chat = groupWith(["1@lid", "2@lid", "3@lid"]);
+    const dry = await s.sendHidetag(chat, "halo", true, ["2@lid"]);
+    assert.strictEqual(dry.dry.mentionedJidListLength, 1);
+    assert.ok(!JSON.stringify(dry).includes("halo"));
+    assert.strictEqual((await s.sendHidetag(chat, "halo", false, ["1@lid", "3@lid"])).ok, true);
+    assert.deepStrictEqual(calls.map((c) => [...c]), [["1@lid", "3@lid"]]);
+    assert.strictEqual((await s.sendHidetag(chat, "halo", false, ["9@lid"])).error, "unknown-member");
+    assert.strictEqual(calls.length, 1);
+});
+
+test("member names: contact name, else the last 4 digits only, never the full number", () => {
+    const s = load({ WAWebContactCollection: { ContactCollection: { get: (w) => (w.toString() == "1@lid" ? { name: "Budi" } : null) } } });
+    const chat = groupWith(["1@lid", "628111222333@c.us", "5@lid"]);
+    const members = [...s.listHidetagMembers(chat, ["5@lid"])];
+    assert.deepStrictEqual(members.map((m) => m.name).sort(), ["...2333", "Budi"]);
+    assert.ok(!JSON.stringify(members.map((m) => m.name)).includes("628111"));
+    assert.strictEqual(s.maskedMemberName("12@c.us"), "...");
+});

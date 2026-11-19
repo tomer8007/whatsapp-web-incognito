@@ -22,8 +22,23 @@ function isGroupChat(chat)
     return !!(chat && chat.id && (chat.id.server == "g.us" || chat.isGroup === true));
 }
 
-// selfForms: normalized JID strings of the user (PN and LID). -> {ok, error?, wids, count, big}
-function buildHidetagPlan(chat, selfForms)
+// every normalized form a participant is known by: its own id, plus the LID/PN counterpart when WhatsApp's mapping knows it
+function participantForms(wid)
+{
+    var forms = [normalizeJID(wid.toString())];
+    if (typeof liveLidCounterparts == "function")
+    {
+        try { liveLidCounterparts(forms[0]).forEach(function(jid) { forms.push(normalizeJID(String(jid))); }); }
+        catch (e) { /* mapping unavailable */ }
+    }
+    return forms;
+}
+
+// selfForms: normalized JID strings of the user (PN and LID).
+// selectedJids (optional): an explicit list of members (PN or LID forms). Every entry must belong to the group, and the mention list
+// is built from exactly that list (deduped, the user excluded). Without it everybody is mentioned.
+// -> {ok, error?, wids, count, big}
+function buildHidetagPlan(chat, selfForms, selectedJids)
 {
     if (!isGroupChat(chat)) return { ok: false, error: "not-a-group", wids: [], count: 0, big: false };
     var participants = groupParticipantsOf(chat);
@@ -32,17 +47,38 @@ function buildHidetagPlan(chat, selfForms)
     var skip = {};
     (selfForms || []).forEach(function(jid) { if (jid) skip[normalizeJID(String(jid))] = true; });
 
+    var wanted = null;
+    if (selectedJids != null)
+    {
+        if (!Array.isArray(selectedJids) || selectedJids.length == 0) return { ok: false, error: "empty-selection", wids: [], count: 0, big: false };
+        wanted = {};
+        selectedJids.forEach(function(jid) { wanted[normalizeJID(String(jid))] = false; }); // false = not matched yet
+    }
+
     var seen = {};
     var wids = [];
     participants.forEach(function(participant)
     {
         var wid = participant && participant.id;
         if (!wid) return;
-        var jid = normalizeJID(wid.toString());
-        if (skip[jid] || seen[jid]) return; // the user already knows; no duplicates
+        var forms = participantForms(wid);
+        var jid = forms[0];
+        var matched = false;
+        if (wanted)
+        {
+            forms.forEach(function(form) { if (form in wanted) { wanted[form] = true; matched = true; } });
+        }
+        if (wanted && !matched) return;
+        if (forms.some(function(form) { return skip[form]; }) || seen[jid]) return; // the user already knows; no duplicates
         seen[jid] = true;
         wids.push(wid);
     });
+
+    if (wanted)
+    {
+        var unknown = Object.keys(wanted).filter(function(jid) { return wanted[jid] === false && !skip[jid]; });
+        if (unknown.length > 0) return { ok: false, error: "unknown-member", wids: [], count: 0, big: false };
+    }
     return { ok: true, wids: wids, count: wids.length, big: wids.length > HIDETAG_BIG_GROUP };
 }
 
@@ -61,6 +97,48 @@ function summarizeMessageData(data, text)
         hasGroupMentions: !!(data && "groupMentions" in data),
         bodyIsText: !!data && data.body === text,
     };
+}
+
+// Display name of a participant: the contact name WhatsApp knows, else the last 4 digits of the number ("...1234"). Never the full number.
+function maskedMemberName(jid)
+{
+    var digits = String(jid).split("@")[0].replace(/\D/g, "");
+    return digits.length >= 4 ? "..." + digits.slice(-4) : "...";
+}
+
+function memberDisplayName(participant)
+{
+    try
+    {
+        var contact = participant.contact;
+        if (!contact && typeof require == "function")
+        {
+            var collection = require("WAWebContactCollection").ContactCollection;
+            contact = collection && collection.get ? collection.get(participant.id) : null;
+        }
+        var name = contact && (contact.name || contact.shortName || contact.pushname || contact.formattedName);
+        if (name && !/^\+?[\d\s()-]{6,}$/.test(String(name))) return String(name); // a bare phone number is not a name
+    }
+    catch (e) { /* fall through to the masked number */ }
+    return maskedMemberName(participant.id.toString());
+}
+
+// [{id, name}] for the member picker (the user excluded). `id` is an opaque key to send back, `name` is what the UI shows.
+function listHidetagMembers(chat, selfForms)
+{
+    var participants = groupParticipantsOf(chat) || [];
+    var skip = {};
+    (selfForms || []).forEach(function(jid) { if (jid) skip[normalizeJID(String(jid))] = true; });
+    var members = [];
+    participants.forEach(function(participant)
+    {
+        if (!participant || !participant.id) return;
+        var forms = participantForms(participant.id);
+        if (forms.some(function(form) { return skip[form]; })) return;
+        members.push({ id: forms[0], name: memberDisplayName(participant) });
+    });
+    members.sort(function(a, b) { return a.name.localeCompare(b.name); });
+    return members;
 }
 
 //
@@ -88,11 +166,11 @@ function findCreateTextMsgData()
 }
 
 // -> {ok, error?, count, big, dry?}. dryRun builds the message with WhatsApp's own function and reports its structure, sends nothing.
-async function sendHidetag(chat, text, dryRun)
+async function sendHidetag(chat, text, dryRun, selectedJids)
 {
     try
     {
-        var plan = buildHidetagPlan(chat, hidetagSelfForms());
+        var plan = buildHidetagPlan(chat, hidetagSelfForms(), selectedJids);
         if (!plan.ok) return { ok: false, error: plan.error, count: 0, big: false };
         if (plan.count == 0) return { ok: false, error: "no-members", count: 0, big: false };
         if (typeof text != "string" || text.trim() == "") return { ok: false, error: "empty-text", count: plan.count, big: plan.big };
@@ -132,8 +210,9 @@ if (typeof document !== "undefined" && document.addEventListener)
         try
         {
             var chat = await getChatByJID(data.jid);
-            var plan = buildHidetagPlan(chat, hidetagSelfForms());
+            var plan = buildHidetagPlan(chat, hidetagSelfForms(), data.selected || null);
             reply = { messageID: data.messageID, ok: plan.ok, error: plan.error, count: plan.count, big: plan.big };
+            if (data.withMembers) reply.members = listHidetagMembers(chat, hidetagSelfForms());
         }
         catch (exception) { /* the default reply says unavailable */ }
         replyHidetag("waIncognitoHidetagPlanResult", reply);
@@ -147,7 +226,7 @@ if (typeof document !== "undefined" && document.addEventListener)
         else
         {
             var chat = await getChatByJID(data.jid);
-            result = await sendHidetag(chat, data.text, !!data.dryRun);
+            result = await sendHidetag(chat, data.text, !!data.dryRun, data.selected || null);
         }
         result.messageID = data.messageID;
         replyHidetag("waIncognitoHidetagResult", result);
