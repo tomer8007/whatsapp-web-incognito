@@ -33,9 +33,11 @@ function formatToast(toast, settings)
 
     if ((settings && settings.hidePreview) || !toast.preview) return { title: title, body: chatName };
 
-    var preview = String(toast.preview);
-    if (preview.length > TOAST_PREVIEW_MAX) preview = preview.slice(0, TOAST_PREVIEW_MAX) + "…";
-    return { title: title, body: chatName + ": " + preview };
+    var cut = function(text) { text = String(text); return text.length > TOAST_PREVIEW_MAX ? text.slice(0, TOAST_PREVIEW_MAX) + "…" : text; };
+    // an edit with both versions known shows "before" and "after"
+    if (toast.kind == "edit" && toast.before)
+        return { title: title, body: chatName + ": " + t("toast.editFromTo", { before: cut(toast.before), after: cut(toast.preview) }) };
+    return { title: title, body: chatName + ": " + cut(toast.preview) };
 }
 
 function shouldShowToast(kind, options)

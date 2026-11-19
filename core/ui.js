@@ -543,13 +543,12 @@ function showEditHistory(messageId)
         }
         else
         {
-            var versions = data.edits.slice().sort(function(a, b) { return a.ts - b.ts; }); // oldest first
-            html = versions.map(function(edit, index)
+            html = buildEditChain(data.edits).map(function(version)
             {
-                var label = index == 0 ? t("edit.versionOriginal", { n: index + 1 }) : t("edit.version", { n: index + 1 });
+                var label = version.current ? t("edit.versionCurrent", { n: version.n }) : (version.n == 1 ? t("edit.versionOriginal", { n: version.n }) : t("edit.version", { n: version.n }));
                 return "<div style='margin-bottom: 12px'><div style='font-weight: 500'>" + escapeHTML(label) + "</div>" +
-                       "<div style='font-size: 12px; opacity: 0.7'>" + escapeHTML(t("edit.replacedAt", { time: formatEditTime(edit.ts) })) + "</div>" +
-                       "<div style='white-space: pre-wrap; margin-top: 2px'>" + escapeHTML(edit.original) + "</div></div>";
+                       (version.replacedAt ? "<div style='font-size: 12px; opacity: 0.7'>" + escapeHTML(t("edit.replacedAt", { time: formatEditTime(version.replacedAt) })) + "</div>" : "") +
+                       "<div style='white-space: pre-wrap; margin-top: 2px'>" + escapeHTML(version.text) + "</div></div>";
             }).join("");
         }
         WAModal.fire({ title: t("edit.title"), html: html, confirmButtonText: t("common.close") });

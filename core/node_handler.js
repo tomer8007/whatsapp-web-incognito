@@ -435,26 +435,24 @@ NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
 NodeHandler.lastEditBefore = new Map();
 var EDIT_DUPLICATE_WINDOW_MS = 5000;
 
+// How long to watch WhatsApp's own message model for the edited text (secret edits carry none)
+NodeHandler.editPoll = { intervalMs: 250, maxMs: 6000, sleep: function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); } };
+
 NodeHandler.processEdit = async function(edit, remoteJid, options)
 {
     // Secret edits carry no text, and WhatsApp has already decrypted the earlier edits itself: its own message model
     // holds the CURRENT body (the version this edit is about to replace). That is the most reliable "before", so it wins
     // when the edit has no text. With text, the cache holds the latest version we saw; the model is the fallback.
     var recalled = EditTracker.recall(edit.targetId);
+    var chat = null;
     var fromModel = null;
     if (!recalled || edit.newText == null)
     {
-        try { fromModel = readOriginalFromChatModel(await getChatByJID(remoteJid), edit.targetId); }
+        try { chat = await getChatByJID(remoteJid); fromModel = readOriginalFromChatModel(chat, edit.targetId); }
         catch (e) { fromModel = null; }
     }
     var original = edit.newText == null ? (fromModel ? resolveEditOriginal(null, fromModel) : resolveEditOriginal(recalled, null))
                                         : resolveEditOriginal(recalled, fromModel);
-
-    if (typeof WAdebugMode != "undefined" && WAdebugMode)
-    {
-        console.log("WAIncognito: edit detected", { hasNewText: edit.newText != null, cacheHit: !!recalled, modelHit: !!fromModel,
-                                                   original: original ? original.source : "unknown", saveEdits: !!options.saveEdits, toastOnEdit: !!options.toastOnEdit });
-    }
 
     var ts = Date.now();
     var previous = NodeHandler.lastEditBefore.get(edit.targetId);
@@ -463,20 +461,48 @@ NodeHandler.processEdit = async function(edit, remoteJid, options)
 
     document.dispatchEvent(new CustomEvent("waIncognitoEdited", { detail: JSON.stringify({ targetId: edit.targetId }) }));
 
-    var samePreview = original && edit.newText != null && edit.newText === original.text; // e.g. a link preview update
+    var newText = edit.newText;
+    var samePreview = original && newText != null && newText === original.text; // e.g. a link preview update
+    var record = null;
 
     if (original && !samePreview && options.saveEdits)
     {
-        var record = { kind: "edit", id: "edit:" + edit.targetId + ":" + ts, targetId: edit.targetId, original: original.text,
-                       newText: edit.newText, ts: ts, originalTs: original.ts, chatJid: remoteJid };
+        record = { kind: "edit", id: "edit:" + edit.targetId + ":" + ts, targetId: edit.targetId, original: original.text,
+                   newText: newText, ts: ts, originalTs: original.ts, chatJid: remoteJid };
         saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not save the original of an edited message"); });
     }
     if (original) NodeHandler.lastEditBefore.set(edit.targetId, { text: original.text, ts: ts });
 
-    // the next edit of the same message starts from this version
-    if (edit.newText != null) EditTracker.remember(edit.targetId, edit.newText, ts);
+    // a secret edit has no text: watch the message model until WhatsApp shows the edited body
+    if (newText == null && original && chat)
+    {
+        var watched = await waitForBodyChange(function()
+        {
+            var model = readOriginalFromChatModel(chat, edit.targetId);
+            return model ? model.text : null;
+        }, original.text, NodeHandler.editPoll);
+        if (watched != null)
+        {
+            newText = watched;
+            if (record)
+            {
+                record.newText = watched;
+                saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not update an edit record"); });
+            }
+        }
+    }
 
-    if (!samePreview) notifyEditedMessage(remoteJid, edit.newText != null ? edit.newText : (original ? original.text : ""), edit.targetId);
+    if (typeof WAdebugMode != "undefined" && WAdebugMode)
+    {
+        console.log("WAIncognito: edit detected", { hasNewText: edit.newText != null, cacheHit: !!recalled, modelHit: !!fromModel,
+                                                   original: original ? original.source : "unknown", afterKnown: newText != null,
+                                                   saveEdits: !!options.saveEdits, toastOnEdit: !!options.toastOnEdit });
+    }
+
+    // the next edit of the same message starts from this version
+    if (newText != null) EditTracker.remember(edit.targetId, newText, Date.now());
+
+    if (!samePreview) notifyEditedMessage(remoteJid, newText != null ? newText : (original ? original.text : ""), edit.targetId, original ? original.text : null, newText != null);
 }
 
 //

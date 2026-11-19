@@ -13,7 +13,8 @@ function load(options) {
     sandbox.saved = [];
     sandbox.saveArchiveRecord = async (record, store) => { sandbox.saved.push({ record, store }); return "legacy"; };
     sandbox.toasts = [];
-    sandbox.notifyEditedMessage = (chatJid, preview) => { sandbox.toasts.push({ chatJid, preview }); };
+    sandbox.notifyEditedMessage = (chatJid, preview, targetId, before, afterKnown) => { sandbox.toasts.push({ chatJid, preview, before, afterKnown }); };
+    sandbox.NodeHandler.editPoll = { intervalMs: 1, maxMs: 3, sleep: async () => {} };
     return sandbox;
 }
 
@@ -66,7 +67,7 @@ test("toastOnEdit alone notifies but saves nothing", () => {
     s.NodeHandler.trackEdits(text("a"), "M1", "111@c.us");
     s.NodeHandler.trackEdits(edit("M1", "b"), "E1", "111@c.us");
     assert.strictEqual(s.saved.length, 0);
-    assert.deepStrictEqual({ ...s.toasts[0] }, { chatJid: "111@c.us", preview: "b" });
+    assert.strictEqual(s.toasts[0].preview, "b");
 });
 
 test("an edit with the same text (link preview update) is ignored", () => {
@@ -135,7 +136,7 @@ test("the toast is shown even when the original is unknown, and nothing is saved
     s.NodeHandler.trackEdits(edit("NOPE", "teks baru"), "E1", "111@c.us");
     await tick(); await tick();
     assert.strictEqual(s.saved.length, 0);
-    assert.deepStrictEqual({ ...s.toasts[0] }, { chatJid: "111@c.us", preview: "teks baru" });
+    assert.strictEqual(s.toasts[0].preview, "teks baru");
 });
 
 test("an edit with no lookup possible at all still toasts", async () => {
@@ -198,4 +199,50 @@ test("the edit packet's own conversation is never remembered as a new original",
     const s = load({ saveEdits: true });
     s.NodeHandler.trackEdits(secretEdit("T3"), "E9", "111@c.us");
     assert.strictEqual(s.EditTracker.recall("E9"), null);
+});
+
+
+// a fake chat whose message body is changed by the test, like WhatsApp applying an edit after our hook ran
+const liveChat = (id, first) => { const m = { id: { id }, body: first, t: 1 }; return { model: m, chat: { msgs: { getModelsArray: () => [m] } } }; };
+
+test("each secret edit stores before AND after, read from the message model (three edits)", async () => {
+    const s = load({ saveEdits: true, toastOnEdit: true });
+    s.NodeHandler.lastEditBefore.clear();
+    const { model, chat } = liveChat("C1", "satu");
+    s.getChatByJID = async () => chat;
+    s.NodeHandler.editPoll = { intervalMs: 1, maxMs: 40, sleep: () => new Promise((r) => setImmediate(r)) }; // polls across macrotasks
+    const afterEdit = ["dua", "tiga", "empat"];
+    for (let i = 0; i < 3; i++) {
+        s.NodeHandler.trackEdits(secretEdit("C1"), "E" + i, "111@c.us");
+        await tick(); // our hook ran, WhatsApp has not applied the edit yet
+        model.body = afterEdit[i]; // now WhatsApp applies it
+        for (let k = 0; k < 8; k++) await tick();
+        s.NodeHandler.lastEditBefore.get("C1").ts -= 10000;
+    }
+    const pairs = [...s.saved.map((x) => [x.record.original, x.record.newText])];
+    // each edit is saved first without the new text, then updated with it (same record id)
+    const finals = [...new Set(s.saved.map((x) => x.record))].map((r) => [r.original, r.newText]);
+    assert.deepStrictEqual(finals, [["satu", "dua"], ["dua", "tiga"], ["tiga", "empat"]]);
+    assert.ok(pairs.length >= 3);
+    assert.deepStrictEqual([...s.toasts.map((t) => [t.before, t.preview, t.afterKnown])], [["satu", "dua", true], ["dua", "tiga", true], ["tiga", "empat", true]]);
+});
+
+test("a secret edit whose body never changes keeps newText null and still toasts", async () => {
+    const s = load({ saveEdits: true, toastOnEdit: true });
+    s.NodeHandler.lastEditBefore.clear();
+    s.getChatByJID = async () => liveChat("C2", "gitu").chat;
+    s.NodeHandler.trackEdits(secretEdit("C2"), "E1", "111@c.us");
+    for (let i = 0; i < 6; i++) await tick();
+    assert.strictEqual(s.saved.at(-1).record.newText, null);
+    assert.strictEqual(s.toasts.length, 1);
+    assert.strictEqual(s.toasts[0].afterKnown, false);
+});
+
+test("waitForBodyChange returns the changed text, or null when nothing changes", async () => {
+    const s = load({});
+    let n = 0;
+    const poll = { intervalMs: 1, maxMs: 5, sleep: async () => { n++; } };
+    assert.strictEqual(await s.waitForBodyChange(() => (n >= 2 ? "baru" : "lama"), "lama", poll), "baru");
+    assert.strictEqual(await s.waitForBodyChange(() => "lama", "lama", poll), null);
+    assert.strictEqual(await s.waitForBodyChange(() => { throw new Error("x"); }, "lama", poll), null);
 });

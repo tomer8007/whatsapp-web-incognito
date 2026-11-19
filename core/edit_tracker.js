@@ -72,6 +72,21 @@ function resolveEditOriginal(recalled, fromModel)
     return null;
 }
 
+// Polls `readBody()` until it returns a text different from `before`, for up to `maxMs`. -> the new text, or null.
+// `sleep(ms)` is injectable so tests do not wait.
+async function waitForBodyChange(readBody, before, poll)
+{
+    var intervalMs = poll.intervalMs, maxMs = poll.maxMs;
+    for (var waited = 0; waited <= maxMs; waited += intervalMs)
+    {
+        var current = null;
+        try { current = readBody(); } catch (e) { current = null; }
+        if (typeof current == "string" && current !== "" && current !== before) return current;
+        await poll.sleep(intervalMs);
+    }
+    return null;
+}
+
 function isEditProtocolType(type)
 {
     return type === PROTOCOL_MESSAGE_TYPE_MESSAGE_EDIT || type === "MESSAGE_EDIT";

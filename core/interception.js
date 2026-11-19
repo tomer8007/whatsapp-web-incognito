@@ -236,9 +236,9 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
 }
 
 // Asks the isolated world (core/toast.js) to show a toast. Best effort: never throws.
-function dispatchIncognitoToast(kind, chatName, preview, targetId)
+function dispatchIncognitoToast(kind, chatName, preview, targetId, before)
 {
-    document.dispatchEvent(new CustomEvent("waIncognitoToast", { detail: JSON.stringify({kind: kind, chatName: chatName, preview: preview || "", targetId: targetId || null}) }));
+    document.dispatchEvent(new CustomEvent("waIncognitoToast", { detail: JSON.stringify({kind: kind, chatName: chatName, preview: preview || "", targetId: targetId || null, before: before || null}) }));
 }
 
 function getChatDisplayName(chat, fallbackJid)
@@ -274,7 +274,7 @@ async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
     }
 }
 
-async function notifyEditedMessage(chatJid, preview, targetId)
+async function notifyEditedMessage(chatJid, preview, targetId, before, afterKnown)
 {
     try
     {
@@ -282,7 +282,7 @@ async function notifyEditedMessage(chatJid, preview, targetId)
         if (!options.toastOnEdit) return;
 
         var chat = await getChatByJID(chatJid);
-        dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview, targetId);
+        dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview, targetId, afterKnown ? before : null);
     }
     catch (e)
     {
