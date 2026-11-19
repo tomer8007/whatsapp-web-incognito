@@ -216,9 +216,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     var keyDistributionMessage = null;
 
     // get the storage
-    if (!window.WhatsAppAPI) exposeWhatsAppAPI();
-
-    var storageModule = window.WhatsAppAPI.SignalStore;
+    var storageModule = requireWhatsAppAPI().SignalStore;
     storage = storageModule.getSignalProtocolStore();
     if (storage == undefined) 
     {
@@ -286,13 +284,51 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 }
 
 //
+// WhatsApp's own API object is created lazily (exposeWhatsAppAPI in interception.js) and its modules may not be loaded yet during the
+// first frames after startup. These helpers never throw a ReferenceError and never leave a half-built API behind.
+//
+var WHATSAPP_API_NOT_READY = "WhatsAppAPI is not ready yet";
+
+// the API, trying to expose it once if needed; null while WhatsApp's modules are not loaded
+function lazyWhatsAppAPI()
+{
+    try
+    {
+        if (window.WhatsAppAPI && window.WhatsAppAPI.Communication) return window.WhatsAppAPI;
+        if (typeof exposeWhatsAppAPI == "function") exposeWhatsAppAPI();
+        return window.WhatsAppAPI && window.WhatsAppAPI.Communication ? window.WhatsAppAPI : null;
+    }
+    catch (e)
+    {
+        window.WhatsAppAPI = undefined; // do not keep a half-built object: the next frame tries again
+        return null;
+    }
+}
+
+// like lazyWhatsAppAPI, but throws the "not ready" error that the packet hooks log once and pass through
+function requireWhatsAppAPI()
+{
+    var api = lazyWhatsAppAPI();
+    if (!api) throw new Error(WHATSAPP_API_NOT_READY);
+    return api;
+}
+
+// true for the errors above (including the ReferenceError of older code paths)
+function isWhatsAppAPINotReady(exception)
+{
+    var text = String(exception && exception.message ? exception.message : exception);
+    return text.indexOf(WHATSAPP_API_NOT_READY) > -1 || /WhatsAppAPI is not defined/.test(text);
+}
+
+//
 // Signal related code
 //
 
 MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, storage, address)
 {
-    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address);
-    var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
+    var api = requireWhatsAppAPI();
+    var widAddress = api.WAWebWidFactory.createDeviceWidOrThrow(address);
+    var lidAddress = api.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
     if (sessionObject == null)
     {
@@ -344,8 +380,9 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
 // decryptPkMsg
 MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMessageBuffer, storage, address)
 {
-    var widAddress = WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address);
-    var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
+    var api = requireWhatsAppAPI();
+    var widAddress = api.WAWebWidFactory.createDeviceWidOrThrow(address);
+    var lidAddress = api.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
 
     var version = (new Uint8Array(prekeyWhisperMessageBuffer))[0];
@@ -433,7 +470,8 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
 
 MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffer, storage, groupId, address, keyDistributionMessage)
 {
-    var widAdress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(WhatsAppAPI.WAWebWidFactory.createDeviceWidOrThrow(address), false);
+    var api = requireWhatsAppAPI();
+    var widAdress = api.WAWebSignalCommonUtils.createSignalAddress(api.WAWebWidFactory.createDeviceWidOrThrow(address), false);
     var senderKeyName = `${groupId}::${widAdress}`; // createSignalLikeSenderKeyName
     var senderKey = await storage.loadSenderKey(senderKeyName);
 
@@ -575,20 +613,21 @@ MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIn
     if (foundCounterIndex == -1)
     {
         // try the one stolen from within WA's javascript state
-        if (WhatsAppAPI.Communication.socket)
+        var api = lazyWhatsAppAPI(); // null this early: skip this fallback quietly, counter detection continues on the next frame
+        if (api && api.Communication.socket)
         {
-            var counter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
+            var counter = isIncoming ? api.Communication.socket.$7 : api.Communication.socket.$8;
             if (MultiDevice.testFrameDecryption(counter, key, currentFrame))
             {
                 // add this counter
                 if (isIncoming) 
                 {
-                    MultiDevice.readCounters.push(WhatsAppAPI.Communication.socket.$7);
+                    MultiDevice.readCounters.push(api.Communication.socket.$7);
                     foundCounterIndex = MultiDevice.readCounters.length - 1;
                 }
                 else
                 {
-                    MultiDevice.writeCounters.push(WhatsAppAPI.Communication.socket.$8);
+                    MultiDevice.writeCounters.push(api.Communication.socket.$8);
                     foundCounterIndex = MultiDevice.writeCounters.length - 1;
                 }
             }

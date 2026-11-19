@@ -20,6 +20,15 @@ var chats = {};
 var blockedChats = {};
 var deviceTypesPerMessage = {};
 
+// the first frames after startup can arrive before WhatsApp's modules are loaded: log that once, as a note, not an error per frame
+var notReadyLogged = false;
+function logNotReadyOnce()
+{
+    if (notReadyLogged) return;
+    notReadyLogged = true;
+    console.log("WhatsIncognito: WhatsApp is still loading, early packets are passed through until the hook is ready.");
+}
+
 // debugging flags
 var WAdebugMode = false;
 var WALogs = true;
@@ -91,6 +100,11 @@ wsHook.before = function (originalData, url)
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
             console.log(exception);
+            return originalData;
+        }
+        if (isWhatsAppAPINotReady(exception))
+        {
+            logNotReadyOnce();
             return originalData;
         }
         
@@ -167,6 +181,11 @@ wsHook.after = function (messageEvent, url)
         if (typeof(exception) == "string" && exception.includes("counter"))
         {
             console.log(exception);
+            return messageEvent;
+        }
+        if (isWhatsAppAPINotReady(exception))
+        {
+            logNotReadyOnce();
             return messageEvent;
         }
 

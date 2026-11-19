@@ -110,7 +110,7 @@ NodeHandler.isSentNodeAllowed = function (node)
                     // why there are read receipts we need to block after sending a message to a lot of people?
                     setTimeout(function()
                     {
-                        if (WhatsAppAPI.Communication)
+                        if (window.WhatsAppAPI && WhatsAppAPI.Communication)
                         {
                             console.log("Clearing ack expections after blocking a receipt.");
                             // clear expectations for acks that will never be received (becase we blocked them earlier)
