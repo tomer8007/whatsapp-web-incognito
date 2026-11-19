@@ -695,15 +695,15 @@ async function openEphemeralModal(context)
 var chatsResponses = createResponseRouter(document, "waIncognitoChatsResult", 8000);
 var activeChatResponses = createResponseRouter(document, "waIncognitoActiveChatResult", 4000);
 
-function requestFromPageWorld(router, requestName, prefix, fallback)
+function requestFromPageWorld(router, requestName, prefix, fallback, extra, timeoutMs)
 {
     return new Promise(function(resolve)
     {
         var requestId = prefix + "-" + Date.now() + "-" + Math.random();
         var done = false;
         router.waitFor(requestId, function(data) { done = true; resolve(data); });
-        setTimeout(function() { if (!done) resolve(fallback); }, 3000);
-        document.dispatchEvent(new CustomEvent(requestName, { detail: JSON.stringify({ messageID: requestId }) }));
+        setTimeout(function() { if (!done) resolve(fallback); }, timeoutMs || 3000);
+        document.dispatchEvent(new CustomEvent(requestName, { detail: JSON.stringify(Object.assign({ messageID: requestId }, extra || {})) }));
     });
 }
 
@@ -745,7 +745,107 @@ function ensureConversationHeaderButton()
     header.appendChild(button);
 }
 
-setInterval(function() { try { ensureConversationHeaderButton(); } catch (e) {} }, 2000);
+setInterval(function() { try { ensureConversationHeaderButton(); ensureHidetagHeaderButton(); } catch (e) {} }, 2000);
+
+//
+// Hidetag (core/hidetag.js in the page world): a message to a group that mentions every member without any "@name" in the text.
+// Opt-in through the option hidetagEnabled; the button only exists in group chats.
+//
+var hidetagPlanResponses = createResponseRouter(document, "waIncognitoHidetagPlanResult", 5000);
+var hidetagSendResponses = createResponseRouter(document, "waIncognitoHidetagResult", 45000);
+var hidetagEnabledCache = false;
+
+document.addEventListener("onOptionsUpdate", function(e)
+{
+    try { var update = JSON.parse(e.detail); if (update && "hidetagEnabled" in update) hidetagEnabledCache = !!update.hidetagEnabled; }
+    catch (exception) {}
+});
+
+function ensureHidetagHeaderButton()
+{
+    var existing = document.querySelector(".incognito-hidetag-button");
+    var header = document.querySelector("#main header");
+    if (!hidetagEnabledCache || !header)
+    {
+        if (existing) existing.remove();
+        return;
+    }
+    requestActiveChatContext().then(function(context)
+    {
+        var button = document.querySelector(".incognito-hidetag-button");
+        header = document.querySelector("#main header");
+        if (!context || !context.isGroup || !header) { if (button) button.remove(); return; }
+        if (button) return;
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "incognito-header-button incognito-hidetag-button";
+        button.textContent = t("hidetag.header");
+        button.title = t("hidetag.title");
+        button.addEventListener("click", function(e) { e.stopPropagation(); openHidetagModal(context); });
+        header.appendChild(button);
+    });
+}
+
+function hidetagErrorText(error)
+{
+    if (error == "disabled") return t("hidetag.disabled");
+    if (error == "not-a-group") return t("hidetag.notGroup");
+    return String(error || t("sched.unknown"));
+}
+
+async function openHidetagFromActiveChat()
+{
+    if (!hidetagEnabledCache) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.disabled"), icon: "info", confirmButtonText: t("common.ok") }); return; }
+    var context = await requestActiveChatContext();
+    if (!context || !context.isGroup) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.notGroup"), icon: "info", confirmButtonText: t("common.ok") }); return; }
+    openHidetagModal(context);
+}
+
+async function openHidetagModal(context)
+{
+    if (!context || !context.isGroup) { WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.notGroup"), icon: "info", confirmButtonText: t("common.ok") }); return; }
+    var plan = await requestFromPageWorld(hidetagPlanResponses, "waIncognitoHidetagPlan", "hplan", { ok: false, count: 0, big: false }, { jid: context.primaryJid });
+    if (!plan.ok || plan.count == 0)
+    {
+        WAModal.fire({ title: t("hidetag.title"), text: t("hidetag.none"), icon: "info", confirmButtonText: t("common.ok") });
+        return;
+    }
+
+    var typed = await WAModal.fire({
+        title: t("hidetag.title"),
+        html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
+              "<div class='wam-validation' style='margin-top: 10px' role='note'>" + escapeHTML(t("hidetag.warning")) + "</div>" +
+              "<textarea id='incognito-hidetag-text' class='wam-textarea' placeholder='" + escapeHTML(t("hidetag.placeholder")) + "' style='margin: 10px 0'></textarea>" +
+              "<div style='font-size: 13px; opacity: 0.85'>" + escapeHTML(t("hidetag.count", { n: plan.count })) + "</div>" +
+              (plan.big ? "<div class='wam-validation' style='margin-top: 8px'>" + escapeHTML(t("hidetag.big", { n: plan.count })) + "</div>" : ""),
+        width: 560,
+        showCancelButton: true,
+        confirmButtonText: t("hidetag.continue"),
+        cancelButtonText: t("common.cancel"),
+        preConfirm: function()
+        {
+            var text = document.getElementById("incognito-hidetag-text").value;
+            if (!text.trim()) { WAModal.showValidationMessage(t("hidetag.empty")); return false; }
+            return text;
+        },
+    });
+    if (!typed.isConfirmed) return;
+
+    var confirmed = await WAModal.fire({
+        title: t("hidetag.confirmTitle"),
+        text: t("hidetag.confirmText", { n: plan.count }),
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: t("hidetag.send"),
+        cancelButtonText: t("common.cancel"),
+    });
+    if (!confirmed.isConfirmed) return;
+
+    var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagSend", "hsend", { ok: false, error: t("sched.noAnswer") },
+                                            { jid: context.primaryJid, text: typed.value, dryRun: false }, 40000);
+    if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: plan.count }), icon: "success", toast: true, timer: 6000 });
+    else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
+}
 
 //
 // Per-contact privacy (core/contact_rules.js). Rules live in chrome.storage.local["contactRules"] (background.js)

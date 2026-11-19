@@ -112,6 +112,11 @@ var SETTINGS_CATEGORIES = [
     { id: "utilitas", icon: "tool",
       sections: [
         { titleKey: "sec.audio", items: [ { type: "select", key: "voiceNoteRate", icon: "mic" } ] },
+        { titleKey: "sec.hidetag", items: [
+            { type: "toggle", key: "hidetagEnabled", icon: "send" },
+            { type: "action", action: "hidetag-open", icon: "users", labelKey: "act.hidetag", descKey: "act.hidetag.desc" },
+            { type: "note", textKey: "note.hidetag" },
+        ] },
         { titleKey: "sec.status", items: [
             { type: "toggle", key: "allowStatusDownload", icon: "download" },
             { type: "note", textKey: "note.statusBulk" },
@@ -267,6 +272,7 @@ function filterContactList(contexts, rules, query, filter, limit)
 
 var settingsActions = {
     "vault": function() { openVaultModal(); },
+    "hidetag-open": function() { openHidetagFromActiveChat(); },
 };
 
 var settingsHandle = null;

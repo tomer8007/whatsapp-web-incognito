@@ -38,6 +38,8 @@ var OPTIONS_SCHEMA = [
     { key: "language", label: "Bahasa", group: "Umum", type: "enum", default: "auto",
       choices: ["auto", "id", "en", "es", "pt-BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh-CN"] },
 
+    { key: "hidetagEnabled", label: "Hidetag", group: "Utilitas", type: "bool", default: false },
+
     { key: "voiceNoteRate", label: "Kecepatan voice note", group: "Utilitas", type: "enum", default: 1, choices: [0.75, 1, 1.25, 1.5, 2, 2.5, 3] },
 ];
 
