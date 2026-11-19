@@ -5,7 +5,7 @@ const path = require("node:path");
 const { createSandbox, loadScripts, ROOT } = require("./helpers/sandbox");
 
 function load() {
-    return loadScripts(createSandbox({ crypto: globalThis.crypto, TextEncoder, atob }), ["core/options_schema.js", "core/privacy_screen.js"]);
+    return loadScripts(createSandbox({ crypto: globalThis.crypto, TextEncoder, atob }), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/privacy_screen.js"]);
 }
 
 function makeLock(overrides = {}) {
@@ -98,7 +98,24 @@ test("every blur selector used for diagnostics is really in styles.css", () => {
     }
 });
 
-test("the lock UI shows the required disclaimer", () => {
-    const { PRIVACY_LOCK_DISCLAIMER } = load();
-    assert.strictEqual(PRIVACY_LOCK_DISCLAIMER, "Kunci ini layar privasi, bukan pengaman data. Untuk melindungi data, gunakan Vault.");
+test("the lock UI shows the required disclaimer (Indonesian)", () => {
+    const s = load();
+    s.setLanguage("id");
+    assert.strictEqual(s.t("lock.disclaimer"), "Kunci ini layar privasi, bukan pengaman data. Untuk melindungi data, gunakan Vault.");
+});
+
+test("shouldLockAfterHidden: only after N minutes, never when disabled", () => {
+    const { shouldLockAfterHidden } = load();
+    assert.strictEqual(shouldLockAfterHidden(0, 119999, 2), false);
+    assert.strictEqual(shouldLockAfterHidden(0, 120000, 2), true);
+    assert.strictEqual(shouldLockAfterHidden(null, 999999, 2), false);
+    assert.strictEqual(shouldLockAfterHidden(0, 999999, 0), false);
+});
+
+test("Ctrl+Alt+L is the lock shortcut", () => {
+    const { isLockShortcut } = load();
+    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, key: "l" }), true);
+    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, key: "L" }), true);
+    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: false, key: "l" }), false);
+    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, shiftKey: true, key: "l" }), false);
 });

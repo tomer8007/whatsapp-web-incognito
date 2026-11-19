@@ -41,12 +41,12 @@ var sendScheduler = createSendScheduler({
     onOverdue: function(items) { askAboutOverdueMessages(items); },
 });
 
-chatMenuEntries.push({ id: "schedule-message", label: "Jadwalkan pesan…", run: function(context) { openScheduleMessageModal(context); } });
+chatMenuEntries.push({ id: "schedule-message", labelKey: "menu.scheduleMessage", run: function(context) { openScheduleMessageModal(context); } });
 
-chatMenuEntries.push({ id: "schedule-receipt", label: "Kirim centang biru nanti…", run: function(context) { openScheduleReceiptModal(context); } });
+chatMenuEntries.push({ id: "schedule-receipt", labelKey: "menu.scheduleReceipt", run: function(context) { openScheduleReceiptModal(context); } });
 
-chatMenuEntries.push({ id: "contact-privacy", label: "Privasi kontak ini…", run: function(context) { openContactPrivacyModal(context); } });
-chatMenuEntries.push({ id: "ephemeral", label: "Pesan sementara tersimpan", run: function(context) { openEphemeralModal(context); } });
+chatMenuEntries.push({ id: "contact-privacy", labelKey: "menu.contactPrivacy", run: function(context) { openContactPrivacyModal(context); } });
+chatMenuEntries.push({ id: "ephemeral", labelKey: "menu.ephemeral", run: function(context) { openEphemeralModal(context); } });
 var editHistoryResponses = createResponseRouter(document, "onEditHistoryReceived", 10000);
 
 registerUIDiagnostics();
@@ -58,8 +58,28 @@ if (chrome != undefined)
 
 initialize();
 
+// The language option: set the active language, the deleted-message label and the text direction of our own UI
+function applyLanguage(preference)
+{
+    setLanguage(preference);
+    document.documentElement.style.setProperty("--incognito-deleted-label", JSON.stringify(t("deleted.label")));
+    var toasts = document.getElementById("incognito-toasts");
+    if (toasts) toasts.setAttribute("dir", isRtlLanguage() ? "rtl" : "ltr");
+}
+
+document.addEventListener("onOptionsUpdate", function(e)
+{
+    try
+    {
+        var update = JSON.parse(e.detail);
+        if (update && "language" in update) applyLanguage(update.language);
+    }
+    catch (exception) {}
+});
+
 function initialize()
 {
+    applyLanguage("auto"); // until the saved language arrives
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
     {
@@ -216,13 +236,11 @@ async function addIconIfNeeded()
     {
         isUIClassesWorking = false;
         WAModal.fire({
-            title: "WAIncognito is temporarily broken",
-            html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. \
-                    <br><Br> Please be patient for a few days until a newer compatible version will be released.',
+            title: t("broken.title"),
+            text: t("broken.body"),
             icon: "warning",
             width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "Got it",
+            confirmButtonText: t("common.gotIt"),
         });
     }
 }
@@ -237,16 +255,15 @@ document.addEventListener('onMarkAsReadClick', function (e)
             if (options.showReadWarning)
             {
                 WAModal.fire({
-                    title: "Mark as read?",
-                    text: data.formattedName + " will be able to tell you read the last " + 
-                            (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
+                    title: t("markRead.title"),
+                    text: data.unreadCount > 1 ? t("markRead.many", { name: data.formattedName, count: data.unreadCount }) : t("markRead.one", { name: data.formattedName }),
                     input: 'checkbox',
                     inputValue: 0,
-                    inputPlaceholder: "Don't show this warning again",
+                    inputPlaceholder: t("markRead.dontShow"),
                     icon: "warning",
                     showCancelButton: true,
-                    confirmButtonColor: "#DD6B55",
-                    confirmButtonText: "Yes, send receipt",
+                    cancelButtonText: t("common.cancel"),
+                    confirmButtonText: t("markRead.confirm"),
                 }).then(result =>
                 {
                     if (result.isConfirmed)
@@ -299,6 +316,8 @@ function registerUIDiagnostics()
     registerSelectorDiagnostic("ui", "message-node", '[data-testid^="conv-msg"]');
     Diagnostics.register("chat-menu", "hook", "chat-menu-entries", function() { return chatMenuEntriesShown; });
     Diagnostics.register("edits", "selector", "edited-label", function() { return document.getElementsByClassName("incognito-edit-original").length; });
+    registerSelectorDiagnostic("contacts", "conversation-header (#main header)", "#main header");
+    Diagnostics.register("contacts", "selector", "incognito-header-button", function() { return document.getElementsByClassName("incognito-header-button").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
 
@@ -338,15 +357,14 @@ function sendVaultCommand(cmd, passphrase)
     });
 }
 
-var VAULT_THREAT_MODEL_TEXT = "Vault mengenkripsi arsip (pesan terhapus, versi asli pesan yang diedit, pesan sementara, status yang dihapus) " +
-    "yang tersimpan di disk/profil browser. Vault <b>tidak</b> melindungi dari WhatsApp Web sendiri, yang memang memegang isi pesan.";
+function vaultThreatModelHTML() { return escapeHTML(t("vault.threat")); }
 
 async function openVaultModal()
 {
     var result = await sendVaultCommand("status");
     if (!result.ok || !result.status)
     {
-        WAModal.fire({ title: "Vault tidak tersedia", text: result.error || "Halaman belum siap.", icon: "error" });
+        WAModal.fire({ title: t("vault.unavailable"), text: result.error || t("vault.pageNotReady"), icon: "error", confirmButtonText: t("common.ok") });
         return;
     }
     var status = result.status;
@@ -354,70 +372,87 @@ async function openVaultModal()
     if (!status.isSetUp)
     {
         var setup = await WAModal.fire({
-            title: "Buat vault",
-            html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
-                  "<b style='color: #d33'>Lupa passphrase berarti data hilang permanen.</b> Tidak ada pemulihan.<br><br>" +
-                  "Arsip lama yang belum terenkripsi akan dipindahkan ke vault.</div>" +
-                  "<input type='password' id='incognito-vault-pass1' class='wam-input' placeholder='Passphrase (min. 8 karakter)'>" +
-                  "<input type='password' id='incognito-vault-pass2' class='wam-input' placeholder='Ulangi passphrase'>",
+            title: t("vault.create.title"),
+            html: "<div style='font-size: 14px'>" + vaultThreatModelHTML() + "<br><br>" +
+                  "<b style='color: var(--wam-danger)'>" + escapeHTML(t("vault.create.warning")) + "</b><br><br>" +
+                  escapeHTML(t("vault.create.migrate")) + "</div>" +
+                  "<input type='password' id='incognito-vault-pass1' class='wam-input' placeholder='" + escapeHTML(t("vault.pass1")) + "'>" +
+                  "<input type='password' id='incognito-vault-pass2' class='wam-input' placeholder='" + escapeHTML(t("vault.pass2")) + "'>",
             showCancelButton: true,
-            confirmButtonText: "Buat vault",
-            cancelButtonText: "Batal",
+            confirmButtonText: t("vault.create.confirm"),
+            cancelButtonText: t("common.cancel"),
             preConfirm: function()
             {
                 var pass1 = document.getElementById("incognito-vault-pass1").value;
                 var pass2 = document.getElementById("incognito-vault-pass2").value;
-                if (pass1.length < 8) { WAModal.showValidationMessage("Passphrase minimal 8 karakter"); return false; }
-                if (pass1 !== pass2) { WAModal.showValidationMessage("Passphrase tidak sama"); return false; }
+                if (pass1.length < 8) { WAModal.showValidationMessage(t("vault.err.short")); return false; }
+                if (pass1 !== pass2) { WAModal.showValidationMessage(t("vault.err.mismatch")); return false; }
                 return pass1;
             },
         });
         if (!setup.isConfirmed) return;
         var setupResult = await sendVaultCommand("setup", setup.value);
         if (setupResult.ok)
-            WAModal.fire({ title: "Vault dibuat", text: setupResult.migrated + " arsip lama dipindahkan ke vault.", icon: "success" });
+            WAModal.fire({ title: t("vault.created.title"), text: t("vault.created.text", { count: setupResult.migrated }), icon: "success", confirmButtonText: t("common.ok") });
         else
-            WAModal.fire({ title: "Gagal membuat vault", text: setupResult.error || "", icon: "error" });
+            WAModal.fire({ title: t("vault.createFailed"), text: setupResult.error || "", icon: "error", confirmButtonText: t("common.ok") });
         return;
     }
 
     if (!status.isUnlocked)
     {
         var unlock = await WAModal.fire({
-            title: "Buka vault",
-            html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "</div>",
+            title: t("vault.unlock.title"),
+            html: "<div style='font-size: 14px'>" + vaultThreatModelHTML() + "</div>",
             input: "password",
-            inputPlaceholder: "Passphrase",
+            inputPlaceholder: t("vault.unlock.placeholder"),
             showCancelButton: true,
-            confirmButtonText: "Buka",
-            cancelButtonText: "Batal",
+            confirmButtonText: t("vault.unlock.confirm"),
+            cancelButtonText: t("common.cancel"),
         });
         if (!unlock.isConfirmed) return;
         var unlockResult = await sendVaultCommand("unlock", unlock.value);
         if (unlockResult.ok)
-            WAModal.fire({ title: "Vault terbuka", text: "Buka ulang chat untuk melihat pesan yang tadi terkunci.", icon: "success", timer: 2500 });
+            WAModal.fire({ title: t("vault.unlocked.title"), text: t("vault.unlocked.text"), icon: "success", timer: 2500, confirmButtonText: t("common.ok") });
         else
-            WAModal.fire({ title: "Passphrase salah", icon: "error" });
+            WAModal.fire({ title: t("vault.wrong"), icon: "error", confirmButtonText: t("common.ok") });
         return;
     }
 
     var info = await WAModal.fire({
-        title: "Vault terbuka",
-        html: "<div style='text-align: left; font-size: 14px'>" + VAULT_THREAT_MODEL_TEXT + "<br><br>" +
-              "Isi: " + status.count + " arsip, " + (status.bytes / (1024 * 1024)).toFixed(2) + " MB.</div>",
+        title: t("vault.unlocked.title"),
+        html: "<div style='font-size: 14px'>" + vaultThreatModelHTML() + "<br><br>" +
+              escapeHTML(t("vault.contents", { count: status.count, size: (status.bytes / (1024 * 1024)).toFixed(2) })) + "</div>",
         showCancelButton: true,
-        confirmButtonText: "Kunci vault",
-        cancelButtonText: "Tutup",
+        confirmButtonText: t("vault.lock"),
+        cancelButtonText: t("common.close"),
     });
     if (info.isConfirmed) await sendVaultCommand("lock");
 }
 
 //
-// Edit history (core/edit_tracker.js): a small "↺ asli" button next to WhatsApp's "Edited" label
+// Edit history (core/edit_tracker.js): a small "Original" button next to WhatsApp's "Edited" label
 //
+// WhatsApp's own "Edited" label in the languages of this extension (its text varies, so the primary hook is the id set below)
+var EDITED_LABEL_WORDS = ["edited", "diedit", "editado", "modifié", "bearbeitet", "изменено", "düzenlendi", "تم التعديل", "संपादित", "編集済み", "已编辑", "已編輯"];
+
 function isEditedLabelText(text)
 {
-    return /^\s*(edited|diedit)\s*$/i.test(text || "");
+    var value = String(text || "").trim().toLowerCase();
+    return value != "" && EDITED_LABEL_WORDS.indexOf(value) > -1;
+}
+
+// ids of messages the page world saw being edited (text independent hook)
+var editedMessageIds = new Set();
+
+function messageIdOfElement(element)
+{
+    var holder = element.closest ? element.closest("[data-id], [data-testid^='conv-msg']") : null;
+    if (!holder) return null;
+    var dataId = holder.getAttribute("data-id") || String(holder.getAttribute("data-testid") || "").replace(/^conv-msg-/, "");
+    if (!dataId) return null;
+    var parts = dataId.split("_");
+    return { holder: holder, id: parts.length >= 3 ? parts[2] : dataId };
 }
 
 function scanForEditedLabels(root)
@@ -431,27 +466,60 @@ function scanForEditedLabels(root)
         if (!isEditedLabelText(label.textContent)) continue;
         addOriginalButton(label);
     }
+
+    // messages known to be edited get the button even when WhatsApp's label is in a language we do not know
+    if (editedMessageIds.size > 0)
+    {
+        var rows = root.matches && root.matches("[data-id], [data-testid^='conv-msg']") ? [root] : Array.from(root.querySelectorAll("[data-id], [data-testid^='conv-msg']"));
+        rows.forEach(function(row)
+        {
+            var info = messageIdOfElement(row);
+            if (info && editedMessageIds.has(info.id)) addOriginalButtonToMessage(info);
+        });
+    }
+}
+
+function makeOriginalButton(messageId)
+{
+    var button = document.createElement("span");
+    button.className = "incognito-edit-original";
+    button.setAttribute("role", "button");
+    button.tabIndex = 0;
+    button.textContent = t("edit.original");
+    button.title = t("edit.originalHint");
+    function open(e) { e.stopPropagation(); e.preventDefault(); showEditHistory(messageId); }
+    button.addEventListener("click", open);
+    button.addEventListener("keydown", function(e) { if (e.key == "Enter" || e.key == " ") open(e); });
+    return button;
 }
 
 function addOriginalButton(label)
 {
-    var messageElement = label.closest("[data-id]");
-    if (!messageElement) return;
-    var dataId = messageElement.getAttribute("data-id");
-    var messageId = dataId.includes("_") ? dataId.split("_")[2] : dataId;
-
+    var info = messageIdOfElement(label);
+    if (!info || info.holder.dataset.incognitoEditBtn) return;
+    info.holder.dataset.incognitoEditBtn = "true";
     label.dataset.incognitoEditBtn = "true";
-    var button = document.createElement("span");
-    button.className = "incognito-edit-original";
-    button.textContent = "↺ asli";
-    button.title = "Lihat versi asli sebelum diedit";
-    button.addEventListener("click", function(e)
-    {
-        e.stopPropagation();
-        showEditHistory(messageId);
-    });
-    label.parentNode.insertBefore(button, label.nextSibling);
+    label.parentNode.insertBefore(makeOriginalButton(info.id), label.nextSibling);
 }
+
+// no label found: put the button in the message's meta row (time + ticks), else at the end of the bubble
+function addOriginalButtonToMessage(info)
+{
+    if (info.holder.dataset.incognitoEditBtn) return;
+    info.holder.dataset.incognitoEditBtn = "true";
+    var meta = info.holder.querySelector("[data-testid='msg-meta']");
+    var button = makeOriginalButton(info.id);
+    if (meta) meta.insertBefore(button, meta.firstChild);
+    else info.holder.appendChild(button);
+}
+
+document.addEventListener("waIncognitoEdited", function(e)
+{
+    var data = JSON.parse(e.detail);
+    if (!data.targetId) return;
+    editedMessageIds.add(data.targetId);
+    scanForEditedLabels(document.body);
+});
 
 function formatEditTime(ts)
 {
@@ -465,23 +533,26 @@ function showEditHistory(messageId)
     {
         if (data.locked)
         {
-            WAModal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat versi asli.", icon: "info" });
+            WAModal.fire({ title: t("vault.locked"), text: t("edit.locked"), icon: "info", confirmButtonText: t("common.ok") });
             return;
         }
         var html;
         if (!data.edits || data.edits.length == 0)
         {
-            html = "Versi asli tidak tertangkap (pesan diterima sebelum tab dibuka).";
+            html = escapeHTML(t("edit.noData"));
         }
         else
         {
-            html = data.edits.map(function(edit)
+            var versions = data.edits.slice().sort(function(a, b) { return a.ts - b.ts; }); // oldest first
+            html = versions.map(function(edit, index)
             {
-                return "<div style='text-align: left; margin-bottom: 10px'><div style='font-size: 11px; opacity: 0.7'>Versi sebelum diedit pada " +
-                       escapeHTML(formatEditTime(edit.ts)) + "</div><div style='white-space: pre-wrap'>" + escapeHTML(edit.original) + "</div></div>";
+                var label = index == 0 ? t("edit.versionOriginal", { n: index + 1 }) : t("edit.version", { n: index + 1 });
+                return "<div style='margin-bottom: 12px'><div style='font-weight: 500'>" + escapeHTML(label) + "</div>" +
+                       "<div style='font-size: 12px; opacity: 0.7'>" + escapeHTML(t("edit.replacedAt", { time: formatEditTime(edit.ts) })) + "</div>" +
+                       "<div style='white-space: pre-wrap; margin-top: 2px'>" + escapeHTML(edit.original) + "</div></div>";
             }).join("");
         }
-        WAModal.fire({ title: "Versi asli", html: html, confirmButtonText: "Tutup" });
+        WAModal.fire({ title: t("edit.title"), html: html, confirmButtonText: t("common.close") });
     });
     document.dispatchEvent(new CustomEvent("getEditHistory", { detail: JSON.stringify({ messageID: messageId }) }));
 }
@@ -508,7 +579,7 @@ function appendChatMenuEntries(context)
         var item = document.createElement("div");
         item.className = UIClassNames.DROPDOWN_ENTRY_CLASS + " incognito-chat-menu-entry";
         item.setAttribute("role", "button");
-        item.textContent = entry.label;
+        item.textContent = t(entry.labelKey);
         item.addEventListener("click", function(e)
         {
             e.stopPropagation();
@@ -573,33 +644,32 @@ async function openEphemeralModal(context)
     var data = await requestEphemeralForChat(context);
     if (data.locked)
     {
-        WAModal.fire({ title: "Vault terkunci", text: "Buka vault untuk melihat pesan sementara yang tersimpan.", icon: "info" });
+        WAModal.fire({ title: t("vault.locked"), text: t("eph.locked"), icon: "info", confirmButtonText: t("common.ok") });
         return;
     }
 
     var html;
     if (!data.items || data.items.length == 0)
     {
-        html = "Belum ada pesan sementara yang tersimpan untuk chat ini. Aktifkan \"" + getOptionSchemaEntry("keepDisappearing").label +
-               "\" di menu Incognito; hanya pesan yang diterima setelah itu yang tersimpan.";
+        html = escapeHTML(t("eph.empty", { option: t("opt.keepDisappearing") }));
     }
     else
     {
         html = "<div style='max-height: 50vh; overflow-y: auto; text-align: left'>" + data.items.map(function(item)
         {
-            var body = item.text ? "<div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div>" : "<i>(tanpa teks)</i>";
+            var body = item.text ? "<div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div>" : "<i>" + escapeHTML(t("eph.noText")) + "</i>";
             var button = item.hasMedia ?
                 "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-top: 6px' data-eph-id='" + escapeHTML(item.id) + "' data-eph-mime='" +
-                escapeHTML(item.mimetype || "") + "'>⬇ unduh media (" + escapeHTML(item.mediaType) + ")</button>" : "";
+                escapeHTML(item.mimetype || "") + "'>" + escapeHTML(t("eph.download", { type: item.mediaType })) + "</button>" : "";
             return "<div style='margin-bottom: 12px'><div style='font-size: 11px; opacity: 0.7'>" + escapeHTML(formatEditTime(item.ts)) + "</div>" + body + button + "</div>";
         }).join("") + "</div>";
     }
 
     WAModal.fire({
-        title: "Pesan sementara: " + (context.name || ""),
+        title: t("eph.title", { name: context.name || "" }),
         html: html,
         width: 600,
-        confirmButtonText: "Tutup",
+        confirmButtonText: t("common.close"),
         didOpen: function(popup)
         {
             popup.addEventListener("click", function(e)
@@ -611,7 +681,7 @@ async function openEphemeralModal(context)
                 ephemeralMediaResponses.waitFor(requestId, function(reply)
                 {
                     target.disabled = false;
-                    if (!reply.ok) { target.textContent = "⚠ " + (reply.error || "gagal"); return; }
+                    if (!reply.ok) { target.textContent = t("eph.failed", { error: reply.error || "" }); return; }
                     downloadBase64AsFile(reply.b64, reply.mimetype, "pesan-sementara_" + Date.now() + "." + mimeToExtension(reply.mimetype));
                 });
                 document.dispatchEvent(new CustomEvent("downloadEphemeralMedia", { detail: JSON.stringify({ messageID: requestId, id: target.dataset.ephId }) }));
@@ -619,6 +689,64 @@ async function openEphemeralModal(context)
         },
     });
 }
+
+//
+// Chats for the per-contact list, and the open chat (core/chat_menu_context.js answers; names only, never messages)
+//
+var chatsResponses = createResponseRouter(document, "waIncognitoChatsResult", 8000);
+var activeChatResponses = createResponseRouter(document, "waIncognitoActiveChatResult", 4000);
+
+function requestFromPageWorld(router, requestName, prefix, fallback)
+{
+    return new Promise(function(resolve)
+    {
+        var requestId = prefix + "-" + Date.now() + "-" + Math.random();
+        var done = false;
+        router.waitFor(requestId, function(data) { done = true; resolve(data); });
+        setTimeout(function() { if (!done) resolve(fallback); }, 3000);
+        document.dispatchEvent(new CustomEvent(requestName, { detail: JSON.stringify({ messageID: requestId }) }));
+    });
+}
+
+function requestChatContexts()
+{
+    return requestFromPageWorld(chatsResponses, "waIncognitoChatsRequest", "chats", { chats: [] }).then(function(data) { return data.chats || []; });
+}
+
+function requestActiveChatContext()
+{
+    return requestFromPageWorld(activeChatResponses, "waIncognitoActiveChatRequest", "active", { context: null }).then(function(data) { return data.context || null; });
+}
+
+// An "Incognito" button in the header of the open conversation: opens the privacy settings of that contact.
+// Hook: the <header> inside #main (verified on the live DOM structure), added once per header element.
+function ensureConversationHeaderButton()
+{
+    var header = document.querySelector("#main header");
+    if (!header || header.querySelector(".incognito-header-button")) return;
+
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "incognito-header-button";
+    button.title = t("header.button");
+    button.setAttribute("aria-label", t("header.button"));
+    var image = document.createElement("img");
+    image.src = chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg");
+    image.alt = "";
+    image.width = 22;
+    image.height = 22;
+    button.appendChild(image);
+    button.addEventListener("click", async function(e)
+    {
+        e.stopPropagation();
+        var context = await requestActiveChatContext();
+        if (context) openContactPrivacyModal(context);
+        else WAModal.fire({ title: t("header.noChat"), icon: "info", confirmButtonText: t("common.ok") });
+    });
+    header.appendChild(button);
+}
+
+setInterval(function() { try { ensureConversationHeaderButton(); } catch (e) {} }, 2000);
 
 //
 // Per-contact privacy (core/contact_rules.js). Rules live in chrome.storage.local["contactRules"] (background.js)
@@ -642,7 +770,7 @@ function sendBackgroundMessage(message)
 
 function contactRuleOptionsHTML(selected)
 {
-    var labels = { "default": "Default (ikut pengaturan global)", "block": "Blokir", "allow": "Izinkan" };
+    var labels = { "default": t("contact.rule.default"), "block": t("contact.rule.block"), "allow": t("contact.rule.allow") };
     return ["default", "block", "allow"].map(function(value)
     {
         return "<option value='" + value + "'" + (value == selected ? " selected" : "") + ">" + labels[value] + "</option>";
@@ -655,14 +783,14 @@ async function openContactPrivacyModal(context)
     context.jids.forEach(function(jid) { current = Object.assign(current, contactRulesCache[jid] || {}); });
 
     var result = await WAModal.fire({
-        title: "Privasi kontak ini",
-        html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
-              "Centang biru<br><select id='incognito-contact-read' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
-              "Status mengetik<br><select id='incognito-contact-typing' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
-              "<span style='font-size: 12px; opacity: 0.8'>Status online tidak bisa diatur per kontak: WhatsApp tidak punya status online per kontak, jadi tetap mengikuti pengaturan global.</span></div>",
+        title: t("contact.title"),
+        html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
+              escapeHTML(t("contact.readReceipts")) + "<br><select id='incognito-contact-read' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.readReceipts || "default") + "</select><br>" +
+              escapeHTML(t("contact.typing")) + "<br><select id='incognito-contact-typing' class='wam-select' style='margin: 4px 0 12px 0'>" + contactRuleOptionsHTML(current.typing || "default") + "</select><br>" +
+              "<span style='font-size: 12px; opacity: 0.8'>" + escapeHTML(t("contact.onlineNote")) + "</span></div>",
         showCancelButton: true,
-        confirmButtonText: "Simpan",
-        cancelButtonText: "Batal",
+        confirmButtonText: t("common.save"),
+        cancelButtonText: t("common.cancel"),
         preConfirm: function()
         {
             return { readReceipts: document.getElementById("incognito-contact-read").value, typing: document.getElementById("incognito-contact-typing").value };
@@ -697,19 +825,19 @@ async function openScheduleReceiptModal(context)
     var existing = receiptScheduler.list().find(function(item) { return item.jid == jid; });
 
     var result = await WAModal.fire({
-        title: "Kirim centang biru nanti",
-        html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
-              (existing ? "Sudah dijadwalkan pada " + escapeHTML(formatEditTime(existing.dueAt)) + ". Memilih lagi akan menimpa jadwal itu.<br><br>" : "") +
+        title: t("rcpt.title"),
+        html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
+              (existing ? escapeHTML(t("rcpt.existing", { time: formatEditTime(existing.dueAt) })) + "<br><br>" : "") +
               "<select id='incognito-receipt-choice' class='wam-select' style='margin: 0 0 8px 0'>" +
-              "<option value='15m'>15 menit lagi</option><option value='1h'>1 jam lagi</option><option value='3h'>3 jam lagi</option>" +
-              "<option value='time'>Jam tertentu…</option></select><br>" +
+              "<option value='15m'>" + escapeHTML(t("rcpt.m15")) + "</option><option value='1h'>" + escapeHTML(t("rcpt.h1")) + "</option><option value='3h'>" + escapeHTML(t("rcpt.h3")) + "</option>" +
+              "<option value='time'>" + escapeHTML(t("rcpt.time")) + "</option></select><br>" +
               "<input type='time' id='incognito-receipt-time' class='wam-input' style='margin: 0; display: none'><br>" +
-              "<span style='font-size: 12px; opacity: 0.8'>Tab WhatsApp Web harus tetap terbuka. Kalau jadwal terlewat saat tab tertutup, centang biru dikirim begitu tab dibuka lagi.</span></div>",
+              "<span style='font-size: 12px; opacity: 0.8'>" + escapeHTML(t("rcpt.note")) + "</span></div>",
         showCancelButton: true,
         showDenyButton: !!existing,
-        denyButtonText: "Batalkan jadwal",
-        confirmButtonText: "Jadwalkan",
-        cancelButtonText: "Tutup",
+        denyButtonText: t("rcpt.cancelSchedule"),
+        confirmButtonText: t("rcpt.confirm"),
+        cancelButtonText: t("common.close"),
         didOpen: function()
         {
             var choice = document.getElementById("incognito-receipt-choice");
@@ -722,7 +850,7 @@ async function openScheduleReceiptModal(context)
         {
             var dueAt = resolveScheduleChoice(document.getElementById("incognito-receipt-choice").value, Date.now(),
                                               document.getElementById("incognito-receipt-time").value);
-            if (dueAt == null) { WAModal.showValidationMessage("Pilih jam yang valid"); return false; }
+            if (dueAt == null) { WAModal.showValidationMessage(t("rcpt.invalidTime")); return false; }
             return dueAt;
         },
     });
@@ -740,23 +868,23 @@ async function openLockSetupModal()
     var hasPasscode = !!stored.lockPasscode;
 
     var result = await WAModal.fire({
-        title: hasPasscode ? "Kunci layar" : "Buat passcode",
-        html: "<div style='text-align: left; font-size: 14px'>" + escapeHTML(PRIVACY_LOCK_DISCLAIMER) + "<br><br>" +
-              "Aktifkan opsi \"" + escapeHTML(getOptionSchemaEntry("lockEnabled").label) + "\" di menu ini supaya kunci dipakai." +
-              (hasPasscode ? "<br><br>Passcode sudah dibuat. Isi di bawah untuk menggantinya." : "") + "</div>" +
-              "<input type='password' id='incognito-lock-pass1' class='wam-input' placeholder='Passcode baru (min. 4 karakter)'>" +
-              "<input type='password' id='incognito-lock-pass2' class='wam-input' placeholder='Ulangi passcode'>",
+        title: hasPasscode ? t("lock.title") : t("lock.createTitle"),
+        html: "<div style='font-size: 14px'>" + escapeHTML(t("lock.disclaimer")) + "<br><br>" +
+              escapeHTML(t("lock.enableHint", { option: t("opt.lockEnabled") })) +
+              (hasPasscode ? "<br><br>" + escapeHTML(t("lock.existing")) : "") + "</div>" +
+              "<input type='password' id='incognito-lock-pass1' class='wam-input' placeholder='" + escapeHTML(t("lock.pass1")) + "'>" +
+              "<input type='password' id='incognito-lock-pass2' class='wam-input' placeholder='" + escapeHTML(t("lock.pass2")) + "'>",
         showCancelButton: true,
         showDenyButton: hasPasscode,
-        denyButtonText: "Kunci sekarang",
-        confirmButtonText: "Simpan passcode",
-        cancelButtonText: "Tutup",
+        denyButtonText: t("lock.now"),
+        confirmButtonText: t("lock.saveBtn"),
+        cancelButtonText: t("common.close"),
         preConfirm: function()
         {
             var pass1 = document.getElementById("incognito-lock-pass1").value;
             var pass2 = document.getElementById("incognito-lock-pass2").value;
-            if (pass1.length < 4) { WAModal.showValidationMessage("Passcode minimal 4 karakter"); return false; }
-            if (pass1 !== pass2) { WAModal.showValidationMessage("Passcode tidak sama"); return false; }
+            if (pass1.length < 4) { WAModal.showValidationMessage(t("lock.err.short")); return false; }
+            if (pass1 !== pass2) { WAModal.showValidationMessage(t("lock.err.mismatch")); return false; }
             return pass1;
         },
     });
@@ -767,12 +895,17 @@ async function openLockSetupModal()
     }
     else if (result.isConfirmed)
     {
-        var saltBytes = crypto.getRandomValues(new Uint8Array(16));
-        var salt = btoa(String.fromCharCode.apply(null, saltBytes));
-        var hash = await hashPasscode(result.value, salt);
-        await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
-        WAModal.fire({ title: "Passcode disimpan", icon: "success", timer: 2000 });
+        await savePasscode(result.value);
+        WAModal.fire({ title: t("lock.saved"), icon: "success", timer: 2000, confirmButtonText: t("common.ok") });
     }
+}
+
+async function savePasscode(code)
+{
+    var saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    var salt = btoa(String.fromCharCode.apply(null, saltBytes));
+    var hash = await hashPasscode(code, salt);
+    await chrome.storage.local.set({ lockPasscode: { salt: salt, hash: hash } });
 }
 
 //
@@ -793,11 +926,11 @@ function sendTextViaPageWorld(message)
         {
             if (finished) return;
             finished = true;
-            if (!result.ok) showScheduleToast("Pesan terjadwal gagal dikirim: " + (result.error || "tidak diketahui") + " (lihat Diagnostik)", "error");
+            if (!result.ok) showScheduleToast(t("sched.failed", { error: result.error || t("sched.unknown") }), "error");
             resolve(result);
         }
         sendTextResponses.waitFor(requestId, finish);
-        setTimeout(function() { finish({ ok: false, error: "tidak ada jawaban dari halaman" }); }, 30000);
+        setTimeout(function() { finish({ ok: false, error: t("sched.noAnswer") }); }, 30000);
         document.dispatchEvent(new CustomEvent("waIncognitoSendText", { detail: JSON.stringify({ id: requestId, jid: message.jid, text: message.text }) }));
     });
 }
@@ -812,12 +945,12 @@ function toDateTimeLocalValue(ms)
 function scheduledMessagesHTML(items)
 {
     if (items.length == 0) return "";
-    return "<div style='margin-top: 12px; font-size: 13px'><b>Jadwal chat ini</b>" + items.map(function(item)
+    return "<div style='margin-top: 12px; font-size: 13px'><b>" + escapeHTML(t("sched.list")) + "</b>" + items.map(function(item)
     {
-        var status = item.status == "error" ? " ⚠ " + escapeHTML(item.error || "gagal") : (item.status == "overdue" ? " ⏰ terlewat" : "");
+        var status = item.status == "error" ? " " + escapeHTML(t("sched.error", { error: item.error || "" })) : (item.status == "overdue" ? " " + escapeHTML(t("sched.overdueTag")) : "");
         return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + status + "<br><span style='opacity: 0.8'>" +
                escapeHTML(item.text.length > 60 ? item.text.slice(0, 60) + "…" : item.text) + "</span> " +
-               "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-left: 8px' data-sched-cancel='" + escapeHTML(item.id) + "'>Batal</button></div>";
+               "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-left: 8px' data-sched-cancel='" + escapeHTML(item.id) + "'>" + escapeHTML(t("common.cancel")) + "</button></div>";
     }).join("") + "</div>";
 }
 
@@ -826,16 +959,16 @@ async function openScheduleMessageModal(context)
     var mine = sendScheduler.list().filter(function(item) { return context.jids.indexOf(item.jid) > -1; });
 
     await WAModal.fire({
-        title: "Jadwalkan pesan",
+        title: t("sched.title"),
         html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<textarea id='incognito-sched-text' class='wam-textarea' placeholder='Isi pesan' style='margin: 8px 0'></textarea>" +
+              "<textarea id='incognito-sched-text' class='wam-textarea' placeholder='" + escapeHTML(t("sched.placeholder")) + "' style='margin: 8px 0'></textarea>" +
               "<input type='datetime-local' id='incognito-sched-time' class='wam-input' style='margin: 0' value='" + toDateTimeLocalValue(Date.now() + 10 * 60 * 1000) + "'>" +
-              "<div style='text-align: left; font-size: 12px; opacity: 0.8; margin-top: 8px'>Tab WhatsApp Web harus tetap terbuka. Pesan disimpan di browser ini tanpa enkripsi sampai terkirim.</div>" +
+              "<div style='font-size: 12px; opacity: 0.8; margin-top: 8px'>" + escapeHTML(t("sched.note")) + "</div>" +
               "<div id='incognito-sched-list'>" + scheduledMessagesHTML(mine) + "</div>",
         width: 560,
         showCancelButton: true,
-        confirmButtonText: "Jadwalkan",
-        cancelButtonText: "Tutup",
+        confirmButtonText: t("rcpt.confirm"),
+        cancelButtonText: t("common.close"),
         didOpen: function(popup)
         {
             popup.addEventListener("click", async function(e)
@@ -850,15 +983,15 @@ async function openScheduleMessageModal(context)
         {
             var text = document.getElementById("incognito-sched-text").value;
             var dueAt = new Date(document.getElementById("incognito-sched-time").value).getTime();
-            if (!text.trim()) { WAModal.showValidationMessage("Isi pesan tidak boleh kosong"); return false; }
-            if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { WAModal.showValidationMessage("Pilih waktu di masa depan"); return false; }
+            if (!text.trim()) { WAModal.showValidationMessage(t("sched.err.empty")); return false; }
+            if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { WAModal.showValidationMessage(t("sched.err.future")); return false; }
             return { text: text, dueAt: dueAt };
         },
     }).then(async function(result)
     {
         if (!result.isConfirmed) return;
         await sendScheduler.add(context.primaryJid, result.value.text, result.value.dueAt, context.name);
-        showScheduleToast("Pesan dijadwalkan pada " + formatEditTime(result.value.dueAt), "success");
+        showScheduleToast(t("sched.done", { time: formatEditTime(result.value.dueAt) }), "success");
     });
 }
 
@@ -869,14 +1002,14 @@ async function askAboutOverdueMessages(items)
     {
         var item = items[i];
         var answer = await WAModal.fire({
-            title: "Pesan terjadwal terlewat",
-            html: "<div style='text-align: left; font-size: 14px'>Seharusnya terkirim pada " + escapeHTML(formatEditTime(item.dueAt)) +
-                  (item.name ? " ke <b>" + escapeHTML(item.name) + "</b>" : "") + ":<br><br><div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div></div>",
+            title: t("overdue.title"),
+            html: "<div style='font-size: 14px'>" + escapeHTML(t("overdue.body", { time: formatEditTime(item.dueAt) })) +
+                  (item.name ? " " + escapeHTML(t("overdue.to")) + " <b>" + escapeHTML(item.name) + "</b>" : "") + ":<br><br><div style='white-space: pre-wrap'>" + escapeHTML(item.text) + "</div></div>",
             showCancelButton: true,
             showDenyButton: true,
-            confirmButtonText: "Kirim sekarang",
-            denyButtonText: "Batalkan",
-            cancelButtonText: "Nanti",
+            confirmButtonText: t("overdue.sendNow"),
+            denyButtonText: t("common.cancel"),
+            cancelButtonText: t("overdue.later"),
             allowOutsideClick: false,
         });
         if (answer.isConfirmed) await sendScheduler.sendNow(item.id);
@@ -1030,17 +1163,14 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
                     // give it the class of incognito-view-once-learn-more so styles can be applied
                     learnMore.className = "incognito-view-once-learn-more";
                     learnMore.href = "#";
-                    learnMore.innerHTML = "Sent as view once: Learn more";
+                    learnMore.textContent = t("viewonce.learn");
                     learnMore.addEventListener("click", function () {
                         WAModal.fire({
-                            title: "View-once message",
-                            html: 'This message was sent as a view-once. \
-                            <br><br> Note that the recipient\'s device will show this as unopened \
-                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+                            title: t("viewonce.title"),
+                            text: t("viewonce.body"),
                             icon: "info",
                             width: 600,
-                            confirmButtonColor: "#000",
-                            confirmButtonText: "Got it",
+                            confirmButtonText: t("common.gotIt"),
                         });
                     });
                     viewOnceExplanation.appendChild(learnMore);
@@ -1053,6 +1183,14 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 // This function gets called on every new message node that gets added to the screen,
 // and takes care of "deleted" messages - 
 // attempts to syntethise a message that was deleted from our DB / just mark it in red
+// Red tint, left border and a "Dihapus" label (styles.css) on the message row. The row is the element with data-id: that hook
+// is stable, unlike the bubble's classes. The label text comes from the --incognito-deleted-label variable (see applyLanguage).
+function markMessageDeleted(node)
+{
+    var row = node.closest ? (node.closest("[data-id]") || node) : node;
+    row.setAttribute("data-incognito-deleted", "true");
+}
+
 function restoreDeletedMessageIfNeeded(messageNode, msgID) 
 {
     deletedMessageResponses.waitFor(msgID, function(data)
@@ -1062,16 +1200,15 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         if (data.locked)
         {
             // archived in the vault, but the vault is locked: show that instead of the content
-            var lockedBubble = messageNode.querySelector(':scope [data-testid] > div');
-            if (lockedBubble) lockedBubble.setAttribute("deleted-message", "true");
+            markMessageDeleted(messageNode);
             if (!messageNode.textContent.includes("message was deleted")) return;
 
             var lockedSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0];
             if (!lockedSubElement) return;
-            lockedSubElement.textContent = "🔒 Pesan dihapus. Buka vault untuk melihat. ";
+            lockedSubElement.textContent = t("restore.locked") + " ";
             var unlockButton = document.createElement("button");
             unlockButton.className = "incognito-vault-unlock-button";
-            unlockButton.textContent = "Buka vault";
+            unlockButton.textContent = t("vault.unlock.title");
             unlockButton.addEventListener("click", function(e) { e.stopPropagation(); openVaultModal(); });
             lockedSubElement.appendChild(unlockButton);
             return;
@@ -1093,8 +1230,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         if (didFindInDeletedMessagesDB)
         {
             // This message was deleted and we have the original data.
-            var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
-            if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
+            markMessageDeleted(messageNode); // mark the message in red
             
             if (!shouldTryToSyntehesizeMessage)
             {
@@ -1109,11 +1245,10 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
         {
             messageSubElement.textContent = "";
-            textSpan.textContent = "Failed to restore message";
+            textSpan.textContent = t("restore.failed");
             messageSubElement.appendChild(textSpan);
             messageSubElement.appendChild(span);
-            if (messageNode.parentNode)
-                messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
+            markMessageDeleted(messageNode); // mark the message in red
             return;
         }
 
@@ -1144,7 +1279,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
     titleSpan.style.cssText = titleSpanStyle;
     if (messageData.isMedia)
     {
-        titleSpan.textContent = "Restored media: \n";
+        titleSpan.textContent = t("restore.media") + "\n";
         messageSubElement.appendChild(titleSpan); // Top title span
 
         if (messageData.mediaText) textSpan.textContent = "\n" + messageData.mediaText; //caption text span
@@ -1207,7 +1342,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
             aTagPhone.rel = "noopener noreferrer";
             var name = vcardBody[4].split(";")[0].slice(0, -4);
 
-            titleSpan.textContent = "Restored contact card: \r\n";
+            titleSpan.textContent = t("restore.contact") + "\r\n";
             textSpan.textContent = "Name: " + name + "\n" + "Contact No.: ";
 
             messageSubElement.appendChild(titleSpan);
@@ -1216,7 +1351,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
         }
         else if (messageData.type === "location")
         {
-            titleSpan.textContent = "Restored location: \n";
+            titleSpan.textContent = t("restore.location") + "\n";
             var imgTag = document.createElement("img");
             imgTag.style.cssText = "width: 100%;";
             //imgTag.className = UIClassNames.IMAGE_IMESSAGE_IMG;
@@ -1232,7 +1367,7 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
         }
         else
         {
-            titleSpan.textContent = "Restored message: \n";
+            titleSpan.textContent = t("restore.message") + "\n";
             textSpan.textContent = messageData.body;
             messageSubElement.appendChild(titleSpan);
         }
@@ -1271,7 +1406,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         else
             return;
 
-        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
+        var imageElement = await generateSVGElement(imageURL, "", t("device.title", { device: t(deviceType == "computer" ? "device.computer" : "device.phone") }), 19);
         imageElement.className = "device-type-image";
 
         var topMessageNode = messageNode.parentNode.parentNode.parentNode;
@@ -1293,13 +1428,11 @@ function checkInterception()
     if (!isInterceptionWorking)
     {
         WAModal.fire({
-            title: "Oops...",
-            html: "WhatsApp Web Incognito has detected that interception is not working. \
-                   Please try refreshing this page, or, if the problem presists, writing back to the developer.",
+            title: t("intercept.title"),
+            text: t("intercept.body"),
             icon: "error",
             width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "OK",
+            confirmButtonText: t("common.ok"),
         });
         return false;
     }

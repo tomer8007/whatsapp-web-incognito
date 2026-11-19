@@ -44,3 +44,24 @@ test("buildChatMenuContext never throws on odd input", () => {
     assert.strictEqual(buildChatMenuContext(null), null);
     assert.strictEqual(buildChatMenuContext({}), null);
 });
+
+test("listChatContexts lists chats newest first, names only, and skips unnamed ones", () => {
+    const s = load();
+    const chats = [
+        { id: wid("1@c.us"), formattedTitle: "Lama", t: 10, msgs: "secret" },
+        { id: wid("2@c.us"), formattedTitle: "Baru", t: 99 },
+        { id: wid("3@c.us"), t: 50 },
+    ];
+    s.WhatsAppAPI = { ChatCollection: { getModelsArray: () => chats } };
+    const list = [...s.listChatContexts()];
+    assert.deepStrictEqual(list.map((c) => c.name), ["Baru", "Lama"]);
+    assert.ok(!JSON.stringify(list).includes("secret"));
+    s.WhatsAppAPI = {};
+    assert.deepStrictEqual([...s.listChatContexts()], []);
+});
+
+test("a group is recognised from the jid server too", () => {
+    const { buildChatMenuContext } = load();
+    const context = buildChatMenuContext({ id: Object.assign(wid("1203@g.us"), { server: "g.us" }), formattedTitle: "G" });
+    assert.strictEqual(context.isGroup, true);
+});

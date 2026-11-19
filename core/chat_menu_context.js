@@ -43,7 +43,7 @@ function buildChatMenuContext(chat)
     });
 
     var name = chat.formattedTitle || chat.name || (chat.contact && (chat.contact.name || chat.contact.pushname)) || "";
-    return { jids: jids, primaryJid: jids[0], name: String(name), isGroup: !!chat.isGroup };
+    return { jids: jids, primaryJid: jids[0], name: String(name), isGroup: !!chat.isGroup || chat.id.server == "g.us" };
 }
 
 document.addEventListener("onDropdownOpened", function()
@@ -61,5 +61,49 @@ document.addEventListener("onDropdownOpened", function()
     document.dispatchEvent(new CustomEvent("waIncognitoChatMenuContext", { detail: JSON.stringify({ context: context }) }));
 });
 
+//
+// The user's chats (names only, never messages) for the "Privasi per kontak" list, and the chat that is open right now.
+//   waIncognitoChatsRequest {messageID}      -> waIncognitoChatsResult {messageID, chats: [context...]}, newest first
+//   waIncognitoActiveChatRequest {messageID} -> waIncognitoActiveChatResult {messageID, context | null}
+//
+function listChatContexts()
+{
+    var collection = window.WhatsAppAPI && WhatsAppAPI.ChatCollection;
+    if (!collection || !collection.getModelsArray) return [];
+    var chats = collection.getModelsArray().slice();
+    chats.sort(function(a, b) { return (b.t || 0) - (a.t || 0); });
+    var contexts = [];
+    for (var i = 0; i < chats.length; i++)
+    {
+        var context = buildChatMenuContext(chats[i]);
+        if (context && context.name) contexts.push(context);
+    }
+    return contexts;
+}
+
+function activeChatContext()
+{
+    try { return buildChatMenuContext(getCurrentChat()); }
+    catch (exception) { return null; }
+}
+
+function answerWithMessageID(request, reply, build)
+{
+    document.addEventListener(request, function(e)
+    {
+        var messageID = null;
+        var payload = {};
+        try { messageID = JSON.parse(e.detail).messageID; payload = build(); }
+        catch (exception) { console.warn("WAIncognito: " + request + " failed"); }
+        payload.messageID = messageID;
+        document.dispatchEvent(new CustomEvent(reply, { detail: JSON.stringify(payload) }));
+    });
+}
+
+answerWithMessageID("waIncognitoChatsRequest", "waIncognitoChatsResult", function() { return { chats: listChatContexts() }; });
+answerWithMessageID("waIncognitoActiveChatRequest", "waIncognitoActiveChatResult", function() { return { context: activeChatContext() }; });
+
 if (typeof Diagnostics != "undefined")
     Diagnostics.register("chat-menu", "hook", "chat-menu-context", function() { return chatMenuContextCount; });
+if (typeof Diagnostics != "undefined")
+    Diagnostics.register("contacts", "hook", "chat-list-source", function() { return listChatContexts().length; });

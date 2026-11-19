@@ -214,13 +214,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
             }
 
             // In case the message already appears on screen, mark it in red
-            var messageNode = document.querySelector("[data-id*='" + deletedMessageId + "']");
-
-            if (messageNode)
-            {
-                var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
-                if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
-            }
+            var messageNodes = document.querySelectorAll("[data-id*='" + deletedMessageId + "']");
+            for (var n = 0; n < messageNodes.length; n++) messageNodes[n].setAttribute("data-incognito-deleted", "true"); // red mark, see styles.css
 
             notifyDeletedMessage("delete", remoteJid, deletedMessageId);
 
@@ -241,9 +236,9 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
 }
 
 // Asks the isolated world (core/toast.js) to show a toast. Best effort: never throws.
-function dispatchIncognitoToast(kind, chatName, preview)
+function dispatchIncognitoToast(kind, chatName, preview, targetId)
 {
-    document.dispatchEvent(new CustomEvent("waIncognitoToast", { detail: JSON.stringify({kind: kind, chatName: chatName, preview: preview || ""}) }));
+    document.dispatchEvent(new CustomEvent("waIncognitoToast", { detail: JSON.stringify({kind: kind, chatName: chatName, preview: preview || "", targetId: targetId || null}) }));
 }
 
 function getChatDisplayName(chat, fallbackJid)
@@ -279,7 +274,7 @@ async function notifyDeletedMessage(kind, chatJid, deletedMessageId, nameJid)
     }
 }
 
-async function notifyEditedMessage(chatJid, preview)
+async function notifyEditedMessage(chatJid, preview, targetId)
 {
     try
     {
@@ -287,7 +282,7 @@ async function notifyEditedMessage(chatJid, preview)
         if (!options.toastOnEdit) return;
 
         var chat = await getChatByJID(chatJid);
-        dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview);
+        dispatchIncognitoToast("edit", getChatDisplayName(chat, chatJid), preview, targetId);
     }
     catch (e)
     {

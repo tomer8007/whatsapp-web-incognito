@@ -8,7 +8,7 @@ var statusCheckResponses = createResponseRouter(document, "waIncognitoStatusChec
 Diagnostics.register("status", "hook", "download-all-button", function() { return document.getElementsByClassName("download-all-button-incognito").length; });
 Diagnostics.register("status", "selector", "status-viewer", function() { return document.querySelectorAll("[data-animate-status-viewer]").length; });
 
-// "🗑️ Dihapus pengirim": shown while a status is on screen that the sender deleted and we archived
+// "Deleted by sender" label: shown while a status is on screen that the sender deleted and we archived
 function checkDeletedStatusLabel()
 {
     setTimeout(function()
@@ -19,7 +19,7 @@ function checkDeletedStatusLabel()
             if (!data.archived || document.getElementsByClassName("incognito-status-deleted-label").length > 0) return;
             var label = document.createElement("div");
             label.className = "incognito-status-deleted-label";
-            label.textContent = "🗑️ Dihapus pengirim";
+            label.textContent = t("status.deletedBySender");
             document.body.appendChild(label);
         });
         document.dispatchEvent(new CustomEvent("waIncognitoStatusCheck", { detail: JSON.stringify({ messageID: requestId }) }));
@@ -27,7 +27,7 @@ function checkDeletedStatusLabel()
 }
 
 //
-// "⬇ Semua": downloads every media status of the contact on screen (core/status_bulk.js does the work in the page world).
+// "Download all": downloads every media status of the contact on screen (core/status_bulk.js does the work in the page world).
 // Files are saved one by one, 300 ms apart, through ordinary anchor downloads (no extra permission).
 //
 var statusBulkQueue = [];
@@ -47,13 +47,13 @@ function ensureDownloadAllButton()
     var button = document.createElement("button");
     button.id = "incognito-download-all";
     button.className = "download-all-button-incognito";
-    button.textContent = "⬇ Semua";
-    button.title = "Unduh semua status kontak ini";
+    button.textContent = t("status.downloadAll");
+    button.title = t("status.downloadAllHint");
     button.addEventListener("click", function()
     {
         if (statusBulkBusy) return;
         statusBulkBusy = true;
-        setDownloadAllLabel("⏳ ...");
+        setDownloadAllLabel(t("status.working"));
         document.dispatchEvent(new CustomEvent("getStatusMediaForContact", { detail: JSON.stringify({}) }));
     });
     document.body.appendChild(button);
@@ -75,7 +75,7 @@ async function saveQueuedStatusItems()
         var item = statusBulkQueue.shift();
         try { downloadBase64AsFile(item.b64, item.mimetype, item.name); }
         catch (e) { console.warn("WAIncognito: could not save a status file"); }
-        setDownloadAllLabel("⬇ " + item.index + "/" + item.total);
+        setDownloadAllLabel(t("status.progress", { index: item.index, total: item.total }));
         await new Promise(function(resolve) { setTimeout(resolve, STATUS_BULK_SAVE_DELAY_MS); });
     }
     statusBulkSaving = false;
@@ -92,13 +92,13 @@ document.addEventListener("onStatusMediaDone", async function(e)
     var result = JSON.parse(e.detail);
     while (statusBulkQueue.length > 0 || statusBulkSaving) await new Promise(function(resolve) { setTimeout(resolve, 100); });
 
-    if (result.error) setDownloadAllLabel("⚠ " + result.error);
-    else if (result.total == 0) setDownloadAllLabel("Tidak ada media");
-    else if (result.failed > 0) setDownloadAllLabel("⚠ " + result.failed + " gagal");
-    else setDownloadAllLabel("✔ " + result.total + " file");
+    if (result.error) setDownloadAllLabel(t("status.failedWith", { error: result.error }));
+    else if (result.total == 0) setDownloadAllLabel(t("status.noMedia"));
+    else if (result.failed > 0) setDownloadAllLabel(t("status.someFailed", { n: result.failed }));
+    else setDownloadAllLabel(t("status.done", { n: result.total }));
 
     statusBulkBusy = false;
-    setTimeout(function() { setDownloadAllLabel("⬇ Semua"); }, 4000);
+    setTimeout(function() { setDownloadAllLabel(t("status.downloadAll")); }, 4000);
 });
 
 function removeDeletedStatusLabel()
@@ -160,7 +160,7 @@ function destroyOldButton(src)
 function createFailNotice(src)
 {
     var a = document.createElement("div");
-    a.innerHTML = "Please re-open the status to download.";
+    a.textContent = t("status.reopen");
     a.className = "download-button-incognito";
     a.id = "status-download-fail-button";
     a.download = "failstatus";
@@ -175,7 +175,7 @@ function createDownloadButton(src)
     a.className = "download-button-incognito";
     a.href = src;
     a.id = src;
-    a.title = "Download this status!";
+    a.title = t("status.download");
     a.download = "status";
     document.body.appendChild(a);
 }

@@ -483,12 +483,12 @@ function markChatAsPendingReciptsSending(chat)
         // make a warning message at the chat panel
         var warningMessage = document.createElement('div');
         warningMessage.setAttribute('class', 'incognito-message middle');
-        warningMessage.innerHTML = "Sending read receipts in " + seconds + " seconds...";
+        warningMessage.textContent = t("receipt.sending", { n: seconds });
         warningMessage.messageID = messageID;
 
         var cancelButton = document.createElement('div');
         cancelButton.setAttribute('class', 'incognito-cancel-button');
-        cancelButton.innerHTML = "Cancel";
+        cancelButton.textContent = t("common.cancel");
         warningMessage.appendChild(cancelButton);
 
         // insert it under the unread counter, or at the end of the chat panel
@@ -532,7 +532,7 @@ function markChatAsPendingReciptsSending(chat)
             seconds--;
             if (seconds > 0)
             {
-                warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
+                warningMessage.firstChild.textContent = t("receipt.sending", { n: seconds });
                 blinkingChats[chat.id] = { timerID: id, time: seconds, chat: chat };
             }
             else
@@ -582,17 +582,17 @@ function markChatAsBlocked(chat)
         {
             warningMessage = document.createElement('div');
             warningMessage.setAttribute('class', 'incognito-message middle');
-            warningMessage.innerHTML = "Read receipts were blocked.";
+            warningMessage.textContent = t("receipt.blocked");
 
             var sendButton = document.createElement('div');
             sendButton.setAttribute('class', 'incognito-send-button');
-            sendButton.innerHTML = "Mark as read";
+            sendButton.textContent = t("receipt.markRead");
             warningMessage.appendChild(sendButton);
 
             // "Kirim centang biru nanti…": inserted BEFORE the send button, because the send button must stay the last child
             var scheduleButton = document.createElement('div');
             scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
-            scheduleButton.innerHTML = "Kirim nanti…";
+            scheduleButton.textContent = t("receipt.later");
             warningMessage.insertBefore(scheduleButton, sendButton);
         }
         else
@@ -612,7 +612,7 @@ function markChatAsBlocked(chat)
 
         var sendButton = warningMessage.lastChild;
         sendButton.setAttribute('class', 'incognito-send-button');
-        sendButton.innerHTML = "Mark as read";
+        sendButton.textContent = t("receipt.markRead");
         sendButton.onclick = function ()
         {
             var data = {
@@ -672,7 +672,7 @@ function markChatAsBlocked(chat)
         Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
     if (warningMessage)
-        warningMessage.firstChild.textContent = "Read receipts were blocked.";
+        warningMessage.firstChild.textContent = t("receipt.blocked");
 }
 
 function setGlobalColorVaraibleString(variable, colorString)

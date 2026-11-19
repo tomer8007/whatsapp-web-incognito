@@ -86,3 +86,17 @@ function t(key, params)
     }
     return text;
 }
+
+// Both worlds read the `language` option from the same onOptionsUpdate event the rest of the extension uses.
+if (typeof document != "undefined" && document.addEventListener)
+{
+    document.addEventListener("onOptionsUpdate", function(e)
+    {
+        try
+        {
+            var update = JSON.parse(e.detail);
+            if (update && "language" in update) setLanguage(update.language);
+        }
+        catch (exception) {}
+    });
+}

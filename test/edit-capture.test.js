@@ -163,3 +163,39 @@ test("an edit inside an ephemeral wrapper, or with a string enum type, is detect
     const str = { protocolMessage: { type: "MESSAGE_EDIT", key: { id: "M8" }, editedMessage: { conversation: "q" } } };
     assert.deepStrictEqual({ ...s.EditTracker.detectEdit(str) }, { targetId: "M8", newText: "q" });
 });
+
+const secretEdit = (id) => ({ conversation: "ignored", secretEncryptedMessage: { secretEncType: 2, targetMessageKey: { id } } });
+
+test("three consecutive secret edits each store the body WhatsApp held just before them", async () => {
+    const s = load({ saveEdits: true });
+    s.NodeHandler.lastEditBefore.clear();
+    s.EditTracker.remember("T1", "versi 1", 1); // stale cache from the original packet
+    const bodies = ["versi 1", "versi 2", "versi 3"];
+    let n = 0;
+    s.getChatByJID = async () => chatWith("T1", bodies[n]);
+    for (; n < 3; n++) {
+        s.NodeHandler.trackEdits(secretEdit("T1"), "E" + n, "111@c.us");
+        await tick(); await tick();
+        s.NodeHandler.lastEditBefore.get("T1").ts -= 10000; // not a duplicate packet any more
+    }
+    assert.deepStrictEqual([...s.saved.map((x) => x.record.original)], ["versi 1", "versi 2", "versi 3"]);
+    assert.ok(s.saved.every((x) => x.record.newText === null));
+});
+
+test("a duplicate packet of the same edit within seconds is dropped", async () => {
+    const s = load({ saveEdits: true, toastOnEdit: true });
+    s.NodeHandler.lastEditBefore.clear();
+    s.getChatByJID = async () => chatWith("T2", "teks");
+    s.NodeHandler.trackEdits(secretEdit("T2"), "E1", "111@c.us");
+    await tick(); await tick();
+    s.NodeHandler.trackEdits(secretEdit("T2"), "E1b", "111@c.us");
+    await tick(); await tick();
+    assert.strictEqual(s.saved.length, 1);
+    assert.strictEqual(s.toasts.length, 1);
+});
+
+test("the edit packet's own conversation is never remembered as a new original", () => {
+    const s = load({ saveEdits: true });
+    s.NodeHandler.trackEdits(secretEdit("T3"), "E9", "111@c.us");
+    assert.strictEqual(s.EditTracker.recall("E9"), null);
+});

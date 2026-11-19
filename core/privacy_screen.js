@@ -3,7 +3,6 @@
 // This is a privacy screen, not data security: use the Vault to protect data.
 //
 
-var PRIVACY_LOCK_DISCLAIMER = "Kunci ini layar privasi, bukan pengaman data. Untuk melindungi data, gunakan Vault.";
 
 // What each blur option targets.
 // `selector` is what the diagnostics count; every entry of `selectors` must appear in styles.css (a test checks it).
@@ -18,6 +17,19 @@ var PRIVACY_BLUR_TARGETS = {
     blurAvatars:  { cls: "incognito-blur-avatars",  selector: 'img[src*=".cdn.whatsapp.net/"]',
         selectors: ['img[src*=".cdn.whatsapp.net/"]', 'img[src*="pps.whatsapp.net/"]', '#pane-side [data-testid="cell-frame-container"] > div:first-child img'] },
 };
+
+// true when the tab was hidden for at least `minutes` (0 or less disables the check). Pure, unit-tested.
+function shouldLockAfterHidden(hiddenAtMs, nowMs, minutes)
+{
+    if (hiddenAtMs == null || !(minutes > 0)) return false;
+    return nowMs - hiddenAtMs >= minutes * 60 * 1000;
+}
+
+// Ctrl+Alt+L
+function isLockShortcut(e)
+{
+    return !!e && e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && String(e.key).toLowerCase() == "l";
+}
 
 function blurClassesFor(options)
 {
@@ -100,12 +112,15 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             });
         }
 
+        var manualLock = false; // "lock now" / Ctrl+Alt+L work whenever a passcode exists, even with the idle lock off
+
         function lockIsActive()
         {
+            if (manualLock) return !!passcode;
             if (!options.lockEnabled) return false;
             if (!passcode)
             {
-                if (!warnedNoPasscode) { warnedNoPasscode = true; console.warn("WAIncognito: lock is on but no passcode is set (menu: Kunci layar…)"); }
+                if (!warnedNoPasscode) { warnedNoPasscode = true; console.warn("WAIncognito: lock is on but no passcode is set (settings: Layar & Kunci)"); }
                 return false;
             }
             return true;
@@ -122,16 +137,17 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             box.className = "incognito-lock-box";
             var title = document.createElement("div");
             title.className = "incognito-lock-title";
-            title.textContent = "WhatsApp terkunci";
+            title.textContent = t("lock.screenTitle");
             var input = document.createElement("input");
             input.type = "password";
-            input.placeholder = "Passcode";
+            input.placeholder = t("lock.placeholder");
+            input.setAttribute("aria-label", t("lock.placeholder"));
             input.autocomplete = "off";
             var error = document.createElement("div");
             error.className = "incognito-lock-error";
             var note = document.createElement("div");
             note.className = "incognito-lock-note";
-            note.textContent = PRIVACY_LOCK_DISCLAIMER;
+            note.textContent = t("lock.disclaimer");
             box.appendChild(title);
             box.appendChild(input);
             box.appendChild(error);
@@ -143,8 +159,8 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
                 if (e.key != "Enter") return;
                 var ok = await lock.unlock(input.value);
                 input.value = "";
-                if (ok) render();
-                else error.textContent = "Passcode salah";
+                if (ok) { manualLock = false; render(); }
+                else error.textContent = t("lock.wrong");
             });
             document.body.appendChild(element);
             return element;
@@ -225,8 +241,37 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             document.addEventListener(name, function() { if (lock) lock.activity(); }, true);
         });
 
+        // lock after the tab was hidden for N minutes (option lockOnHidden)
+        var hiddenAt = null;
+        function checkHiddenLock()
+        {
+            if (!options.lockOnHidden || !lockIsActive()) return;
+            if (shouldLockAfterHidden(hiddenAt, Date.now(), options.lockOnHiddenMinutes))
+            {
+                ensureLock(false).lockNow();
+                render();
+            }
+        }
+        document.addEventListener("visibilitychange", function()
+        {
+            if (document.hidden) { hiddenAt = Date.now(); return; }
+            checkHiddenLock();
+            hiddenAt = null;
+        });
+
+        // Ctrl+Alt+L locks now (or opens the lock settings when no passcode exists yet)
+        window.addEventListener("keydown", function(e)
+        {
+            if (!isLockShortcut(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (passcode) window.WAIncognitoLock.lockNow();
+            else if (typeof openSettingsDialog == "function") openSettingsDialog("layar");
+        }, true);
+
         setInterval(function()
         {
+            if (document.hidden) checkHiddenLock(); // background tabs still tick (slowly)
             if (!lock || !lockIsActive()) return;
             var before = lock.state();
             if (lock.tick() != before) render();
@@ -234,7 +279,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
 
         // used by the menu (ui.js)
         window.WAIncognitoLock = {
-            lockNow: function() { ensureLock(false).lockNow(); render(); },
+            lockNow: function() { manualLock = !!passcode; ensureLock(false).lockNow(); render(); },
             hasPasscode: function() { return !!passcode; },
         };
 

@@ -431,16 +431,24 @@ NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
 
 // An edit was detected. Always notifies (toast); keeps the original when it is known: from the 20-minute cache, or else from
 // WhatsApp's own message model (chat.msgs), which still holds the old body at this point.
+// Versions we already stored per message id (to drop duplicate packets of the same edit)
+NodeHandler.lastEditBefore = new Map();
+var EDIT_DUPLICATE_WINDOW_MS = 5000;
+
 NodeHandler.processEdit = async function(edit, remoteJid, options)
 {
+    // Secret edits carry no text, and WhatsApp has already decrypted the earlier edits itself: its own message model
+    // holds the CURRENT body (the version this edit is about to replace). That is the most reliable "before", so it wins
+    // when the edit has no text. With text, the cache holds the latest version we saw; the model is the fallback.
     var recalled = EditTracker.recall(edit.targetId);
     var fromModel = null;
-    if (!recalled)
+    if (!recalled || edit.newText == null)
     {
         try { fromModel = readOriginalFromChatModel(await getChatByJID(remoteJid), edit.targetId); }
         catch (e) { fromModel = null; }
     }
-    var original = resolveEditOriginal(recalled, fromModel);
+    var original = edit.newText == null ? (fromModel ? resolveEditOriginal(null, fromModel) : resolveEditOriginal(recalled, null))
+                                        : resolveEditOriginal(recalled, fromModel);
 
     if (typeof WAdebugMode != "undefined" && WAdebugMode)
     {
@@ -448,8 +456,14 @@ NodeHandler.processEdit = async function(edit, remoteJid, options)
                                                    original: original ? original.source : "unknown", saveEdits: !!options.saveEdits, toastOnEdit: !!options.toastOnEdit });
     }
 
-    var samePreview = original && edit.newText != null && edit.newText === original.text; // e.g. a link preview update
     var ts = Date.now();
+    var previous = NodeHandler.lastEditBefore.get(edit.targetId);
+    var duplicate = !!(original && previous && previous.text === original.text && ts - previous.ts < EDIT_DUPLICATE_WINDOW_MS);
+    if (duplicate) return;
+
+    document.dispatchEvent(new CustomEvent("waIncognitoEdited", { detail: JSON.stringify({ targetId: edit.targetId }) }));
+
+    var samePreview = original && edit.newText != null && edit.newText === original.text; // e.g. a link preview update
 
     if (original && !samePreview && options.saveEdits)
     {
@@ -457,11 +471,12 @@ NodeHandler.processEdit = async function(edit, remoteJid, options)
                        newText: edit.newText, ts: ts, originalTs: original.ts, chatJid: remoteJid };
         saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not save the original of an edited message"); });
     }
+    if (original) NodeHandler.lastEditBefore.set(edit.targetId, { text: original.text, ts: ts });
 
     // the next edit of the same message starts from this version
     if (edit.newText != null) EditTracker.remember(edit.targetId, edit.newText, ts);
 
-    if (!samePreview) notifyEditedMessage(remoteJid, edit.newText != null ? edit.newText : (original ? original.text : ""));
+    if (!samePreview) notifyEditedMessage(remoteJid, edit.newText != null ? edit.newText : (original ? original.text : ""), edit.targetId);
 }
 
 //
