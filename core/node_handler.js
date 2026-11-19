@@ -254,7 +254,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         modifiedMessageNode = deepClone(messageNode);
         modifiedMessageNode.content = [];
 
-        indexOfEncNode = 0;
+        var indexOfEncNode = 0;
         for (var i = 0; i < messageNode.content.length; i++)
         {
             var node = messageNode.content[i];
@@ -298,7 +298,8 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
-    
+    var messageId = null;
+
     if (messageNode.attrs != null)
     {
         messageId = messageNode.attrs["id"];
@@ -315,7 +316,16 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     }
 
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
-    await interceptViewOnceMessages(e2eMessage, messageId);
+    try
+    {
+        await interceptViewOnceMessages(e2eMessage, messageId);
+    }
+    catch (exception)
+    {
+        // A view-once failure must not make the whole packet pass through unmodified (that would let REVOKEs through)
+        console.error("WhatsIncognito: Ignoring error while handling a view-once message:");
+        console.error(exception);
+    }
 
     if (!saveDeletedMsgsHookEnabled)
     {

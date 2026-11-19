@@ -1,131 +1,51 @@
-﻿// This is the background page.
-// it keeps track of prefrences/settings in localStorage
+﻿// This is the background service worker.
+// It keeps track of the preferences/settings in chrome.storage.local.
 
 if (typeof chrome !== "undefined") {
   var browser = chrome;
 }
 
-// TODO: We need to remove this bad code dupliation
+// Default value of every option. Stored values override these.
+const DEFAULT_OPTIONS = {
+    onlineUpdatesHook: false,
+    typingUpdatesHook: false,
+    readConfirmationsHook: true,
+    showReadWarning: true,
+    safetyDelay: 0,
+    saveDeletedMsgs: false,
+    showDeviceTypes: true,
+    autoReceiptOnReplay: true,
+    allowStatusDownload: true,
+};
+
 browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 {
     if (messageEvent.name == "setOptions")
     {
-        if ("onlineUpdatesHook" in messageEvent)
-		{
-            chrome.storage.local.set({"onlineUpdatesHook": messageEvent.onlineUpdatesHook});
-		}
-        if ("typingUpdatesHook" in messageEvent)
-		{
-            chrome.storage.local.set({"typingUpdatesHook": messageEvent.typingUpdatesHook});
-		}
-		if ("readConfirmationsHook" in messageEvent)
-		{
-            chrome.storage.local.set({"readConfirmationsHook": messageEvent.readConfirmationsHook});
-		}
-		if ("safetyDelay" in messageEvent)
-		{
-            chrome.storage.local.set({"safetyDelay": messageEvent.safetyDelay});
-        }
-        if ("showReadWarning" in messageEvent)
+        var toStore = {};
+        for (var key of Object.keys(DEFAULT_OPTIONS))
         {
-            chrome.storage.local.set({"showReadWarning": messageEvent.showReadWarning});
+            if (key in messageEvent) toStore[key] = messageEvent[key];
         }
-        if ("saveDeletedMsgs" in messageEvent)
-        {
-            chrome.storage.local.set({"saveDeletedMsgs": messageEvent.saveDeletedMsgs});
-        }
-        if ("showDeviceTypes" in messageEvent)
-        {
-            chrome.storage.local.set({"showDeviceTypes": messageEvent.showDeviceTypes});
-        }
-        if ("autoReceiptOnReplay" in messageEvent)
-        {
-            chrome.storage.local.set({"autoReceiptOnReplay": messageEvent.autoReceiptOnReplay});
-        }
-        if ("allowStatusDownload" in messageEvent)
-        {
-            chrome.storage.local.set({"allowStatusDownload": messageEvent.allowStatusDownload});
-        }
+        if (Object.keys(toStore).length > 0) chrome.storage.local.set(toStore);
     }
     else if (messageEvent.name == "getOptions")
     {
-        // these are the default values. we will update them according to the storage
-		var onlineUpdatesHook = false;
-        var typingUpdatesHook = false;
-        var readConfirmationsHook = true;
-        var showReadWarning = true;
-		var safetyDelay = 0;
-        var saveDeletedMsgs = false;
-        var showDeviceTypes = true;
-        var autoReceiptOnReplay = true;
-        var allowStatusDownload = true;
-
-        chrome.storage.local.get(['onlineUpdatesHook',
-                                'typingUpdatesHook',
-                                'readConfirmationsHook', 
-                                'showReadWarning', 
-                                'safetyDelay', 
-                                'saveDeletedMsgs', 
-                                'showDeviceTypes',
-                                'autoReceiptOnReplay',
-                                'allowStatusDownload']).then(function(storage)
+        chrome.storage.local.get(Object.keys(DEFAULT_OPTIONS)).then(function(storage)
         {
-            if (storage["onlineUpdatesHook"] != undefined)
+            var options = {};
+            for (var key of Object.keys(DEFAULT_OPTIONS))
             {
-                onlineUpdatesHook = storage["onlineUpdatesHook"];
+                options[key] = storage[key] != undefined ? storage[key] : DEFAULT_OPTIONS[key];
             }
-            if (storage["typingUpdatesHook"] != undefined)
-            {
-                typingUpdatesHook = storage["typingUpdatesHook"];
-            }
-            if (storage["readConfirmationsHook"] != undefined)
-            {
-                readConfirmationsHook = storage["readConfirmationsHook"];
-            }
-            if (storage["showReadWarning"] != undefined)
-            {
-                showReadWarning = storage["showReadWarning"];
-            }
-            if (storage["safetyDelay"] != undefined)
-            {
-                safetyDelay = storage["safetyDelay"];
-            }
-            if (storage["saveDeletedMsgs"] != undefined)
-            {
-                saveDeletedMsgs = storage["saveDeletedMsgs"];
-            }
-            if (storage["showDeviceTypes"] != undefined)
-            {
-                showDeviceTypes = storage["showDeviceTypes"];
-            }
-            if (storage["autoReceiptOnReplay"] != undefined)
-            {
-                autoReceiptOnReplay = storage["autoReceiptOnReplay"];
-            }
-            if (storage["allowStatusDownload"] != undefined)
-            {
-                allowStatusDownload = storage["allowStatusDownload"];
-            }
-            callback(
-            {
-                onlineUpdatesHook: onlineUpdatesHook,
-                typingUpdatesHook: typingUpdatesHook,
-                readConfirmationsHook: readConfirmationsHook,
-                showReadWarning: showReadWarning,
-                safetyDelay: safetyDelay,
-                saveDeletedMsgs: saveDeletedMsgs,
-                showDeviceTypes: showDeviceTypes,
-                autoReceiptOnReplay: autoReceiptOnReplay,
-                allowStatusDownload: allowStatusDownload
-            });
-        });   
+            callback(options);
+        });
     }
-    
+
     return true;
 });
 
 browser.action.onClicked.addListener(function(activeTab)
 {
-    var newURL = "https://web.whatsapp.com";
-    browser.tabs.create({ url: newURL });
+    browser.tabs.create({ url: "https://web.whatsapp.com" });
 });

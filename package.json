@@ -1,0 +1,7 @@
+{
+  "name": "whatsapp-web-incognito",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}

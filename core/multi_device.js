@@ -137,7 +137,7 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         {
             console.error("Could not decrypt Noise packet");
             console.error(exception);
-            debugger;
+            waDebugBreak();
             throw exception;
         }
     }
@@ -297,7 +297,7 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     if (sessionObject == null)
     {
         console.error("Can't get session for " + address.toString());
-        debugger;
+        waDebugBreak();
     }
 
     var version = (new Uint8Array(whisperMessageBuffer))[0];
@@ -335,7 +335,7 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     catch (exception)
     {
         console.error("E2E plaintext decryption failed.")
-        debugger;
+        waDebugBreak();
         throw exception;
     }
     
@@ -423,7 +423,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     {
         console.error("E2E plaintext decryption failed at signalDecryptPrekeyWhisperMessage. is new session: " + isNewSession);
         console.error("session address: " + lidAddress);
-        debugger;
+        waDebugBreak();
         throw exception;
     }
     // plaintext makes sense? good.
@@ -514,7 +514,6 @@ MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, coun
     {
         console.warn("Possible duplicated message (counter < chain message counter)"); // look in messageKeys?
         throw "possbile duplicated message";
-        debugger;
     }
 
     var messageKey = null;

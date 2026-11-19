@@ -32,4 +32,8 @@ var UIClassNames = {};
      UIClassNames.CHAT_MESSAGE = "x1n2onr6";
      UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV = "x1n2onr6 x1mzt3pk x126k92a x6ikm8r x10wlt62";
 
+     // Our own classes (not WhatsApp's), kept here so every UIClassNames reference resolves
+     UIClassNames.DELETED_MESSAGE_SPAN = "incognito-deleted-message-span";
+     UIClassNames.STICKER_MESSAGE_TAG = "incognito-restored-sticker";
+
 })();

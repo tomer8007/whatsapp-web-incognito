@@ -41,7 +41,7 @@ wsHook.before = function (originalData, url)
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return originalData;
 
         // encrytped binary payload
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=false);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, /* isIncoming */ false);
         if (decryptedFrames == null) return originalData;
 
         for (var i = 0; i < decryptedFrames.length; i++)
@@ -58,20 +58,20 @@ wsHook.before = function (originalData, url)
 
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(manipulatedNode, isIncoming=false, decryptedFrame.byteLength);
+                printNode(manipulatedNode, /* isIncoming */ false, decryptedFrame.byteLength);
                 if (WAPassthroughWithDebug) return originalData;
             }
 
-            // sanity check that our node parsing is complete
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
+            // sanity check that our node parsing is complete (decodes + re-encodes the frame: debug mode only)
+            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ false);
         }
 
-        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, /* isIncoming */ false);
 
         var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
         if (!looksEqual && isAllowed)
         {
-            debugger;
+            waDebugBreak();
         }
 
         if (isInitializing)
@@ -118,7 +118,7 @@ wsHook.after = function (messageEvent, url)
 
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return messageEvent;
 
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=true);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, /* isIncoming */ true);
         if (decryptedFrames == null) return messageEvent;
 
         var didBlockNode = false;
@@ -133,13 +133,13 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
+                printNode(realNode, /* isIncoming */ true, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            // sanity check that our node parsing is deterministic
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
+            // sanity check that our node parsing is deterministic (decodes + re-encodes the frame: debug mode only)
+            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
 
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
@@ -202,10 +202,6 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             }
 
-            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-                detail: deletedMessageId
-            }));
-
             // Now, save the deleted message in the DB after a short wait
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
             setTimeout(async function() 
@@ -222,10 +218,10 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
     , 10);
 }
 
-var deletedMessageSaveAttempts = 0;
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
 
-async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId)
+// `attempt` counts retries for this one deleted message, so deleted messages don't share a retry budget.
+async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt = 0)
 {
     var chat = await getChatByJID(remoteJid);
     if (chat)
@@ -236,44 +232,32 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
             await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
 
         var msgs = chat.msgs.getModelsArray();
-    
-        var foundOriginalMessage = false;
         for (let i = 0; i < msgs.length; i++)
         {
             if (msgs[i].id.id == deletedMessageId)
             {
                 saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                foundOriginalMessage = true;
-                break;
+                return;
             }
         }
-
-        if (!foundOriginalMessage && deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
-            // We are probably starting up and the original message is not added yet to the message store,
-            // just schedule the search for later
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+        // We are probably starting up and the original message is not added yet to the message store
     }
     else
     {
-        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
-
-        if (deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+        console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message yet");
     }
+
+    if (attempt >= MAX_DELETED_MSG_SAVE_ATTEMPTS)
+    {
+        console.warn("WAIncognito: Giving up on saving deleted message " + deletedMessageId);
+        return;
+    }
+
+    console.warn("WAIncognito: Scheduling deleted message save for later");
+    setTimeout(async function() 
+    {
+        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1);
+    }, 1000);
 }
 
 async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID)
@@ -403,8 +387,8 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
                 type: type, signal: (new AbortController).signal
             });
 
-            body = arrayBufferToBase64(decryptedData);
-            dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
+            var body = arrayBufferToBase64(decryptedData);
+            var dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
             var caption = retrievedMsg.caption;
             // store in indexedDB called "view-once" messageID and dataURI 
             var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
@@ -466,7 +450,7 @@ async function decryptE2EMessagesFromNode(node)
     {
         console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
         console.error(exception);
-        debugger;
+        waDebugBreak();
     }
 }
 
@@ -544,7 +528,8 @@ function hookLogs()
 
     setTimeout(() => {
         var originalWALoggerLog = require("WALogger").LOG;
-        var originalWALoggerDev = require("WALogger").LOG;
+        var originalWALoggerDev = require("WALogger").DEV;
+        var originalWALoggerWarn = require("WALogger").WARN;
         var originalWALoggerERROR = require("WALogger").ERROR;
 
         require("WALogger").LOG = hookedWALoggerLog;
@@ -588,7 +573,7 @@ function hookLogs()
                     r[a - 1] = arguments[a];
             var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
             console.warn("[WhatsApp WARN] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            return originalWALoggerWarn.apply(null, arguments);
         }
         
     }, 2000);
@@ -597,10 +582,10 @@ function hookLogs()
 
     function hookedPromiseError(event)
     {
-        debugger;
         console.error("Unhandled promise rejection:");
-        console.error(errorObject);
-        return originalOnUnhandledRejection.call(event);
+        console.error(event ? event.reason : event);
+        if (typeof originalOnUnhandledRejection == "function")
+            return originalOnUnhandledRejection.call(window, event);
     }
 
     
@@ -642,7 +627,6 @@ function initializeDeletedMessagesDB()
     {
         // triggers if the client had no database
         // ...perform initialization...
-        debugger;
 
         // Get a reference to the request related to this event
         // @type IDBOpenRequest (a specialized type of IDBRequest)
@@ -700,7 +684,7 @@ async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
     var looksGood = isEqualArray(new Uint8Array(decryptedFrameOpened), encodedNodeData.slice(1));
     if (!looksGood && !isIncoming)
     {
-        debugger;
+        waDebugBreak();
     }
     if (!looksGood && isIncoming)
     {
