@@ -1,0 +1,12 @@
+{
+  "extName": {
+    "message": "WAIncognito - Incognito for WhatsApp™",
+    "description": "Extension name (brand, not translated)"
+  },
+  "extDescription": {
+    "message": "既読通知とオンライン状態を制御して、WhatsApp™ Web で姿を見せないようにします"
+  },
+  "extActionTitle": {
+    "message": "WhatsApp Web を開く"
+  }
+}
