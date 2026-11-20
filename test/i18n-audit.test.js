@@ -24,8 +24,6 @@ const SAME_AS_ENGLISH = {
     "edit.version": ["fr","de"],
     "hidetag.title": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],
     "lock.minutes": ["id","es","pt-BR","fr"],
-    "lock.passcode": ["id"],
-    "lock.placeholder": ["id"],
     "restore.contactName": ["de"],
     "sched.chat": ["id","es","de"],
     "sched.placeholder": ["fr"],
@@ -37,7 +35,7 @@ const SAME_AS_ENGLISH = {
     "status.progress": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],
     "unit.mb": ["id","es","pt-BR","de","tr","hi","ja","zh-CN"],
     "unit.minutes": ["fr"],
-    "vault.unlock.placeholder": ["id","de"],
+    "vault.unlock.placeholder": ["de"],
 };
 
 test("every language has every key, non-empty, with the same placeholders", () => {
@@ -232,4 +230,28 @@ test("no Indonesian words remain in code, comments, styles, tests or the manifes
         });
     }
     assert.deepStrictEqual(problems, []);
+});
+
+
+test("English is the default: fresh options, the picker order, and every fallback ends in English", () => {
+    const s = load();
+    assert.strictEqual(s.defaultOptions().language, "en");
+    assert.strictEqual(s.getLanguage(), "en", "before any option arrives");
+    assert.deepStrictEqual([...s.I18N_LANGUAGES.map((l) => l.code)], ["en", "ar", "de", "es", "fr", "hi", "id", "ja", "pt-BR", "ru", "tr", "zh-CN"]);
+    assert.strictEqual(s.I18N_LANGUAGES[0].name, "English");
+    assert.strictEqual(s.resolveLanguage(undefined, ["xx"]), "en");
+    assert.strictEqual(s.resolveLanguage("", []), "en");
+    assert.strictEqual(s.resolveLanguage("klingon", ["xx-YY"]), "en", "an unknown preference with an unsupported browser language");
+    assert.strictEqual(s.resolveLanguage("auto", ["xx", "id"]), "id", "the first supported browser language wins");
+    s.setLanguage(s.defaultOptions().language);
+    assert.strictEqual(s.t("common.cancel"), "Cancel");
+    s.setLanguage("auto-but-unsupported");
+    assert.strictEqual(s.getLanguage(), "en");
+});
+
+test("the picker offers 'auto' with an English label and the stored value of existing users is untouched", () => {
+    const s = load();
+    assert.strictEqual(s.I18N_DICT.en["lang.auto"], "Automatic (browser)");
+    assert.strictEqual(s.parseOptionValue("language", "auto"), "auto", "a stored auto stays valid");
+    assert.strictEqual(s.parseOptionValue("language", "ar"), "ar");
 });

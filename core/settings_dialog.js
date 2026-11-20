@@ -409,7 +409,7 @@ function openSettingsDialog(initial)
 
     function currentLanguageName()
     {
-        var code = options.language || "auto";
+        var code = options.language || getOptionSchemaEntry("language").default;
         if (code == "auto") return t("lang.auto");
         var language = I18N_LANGUAGES.find(function(l) { return l.code == code; });
         return language ? language.name : code;
@@ -461,7 +461,7 @@ function openSettingsDialog(initial)
     function openLanguageMenu()
     {
         languageMenu.textContent = "";
-        var current = options.language || "auto";
+        var current = options.language || getOptionSchemaEntry("language").default;
         [{ code: "auto", name: t("lang.auto") }].concat(I18N_LANGUAGES).forEach(function(language)
         {
             var item = make("button", "wam-menu-item");

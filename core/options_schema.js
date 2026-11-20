@@ -35,8 +35,10 @@ var OPTIONS_SCHEMA = [
     { key: "lockOnHidden", type: "bool", default: false },
     { key: "lockOnHiddenMinutes", type: "number", default: 2 },
 
-    { key: "language", type: "enum", default: "auto",
-      choices: ["auto", "id", "en", "es", "pt-BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh-CN"] },
+    // English is the default for new installs. A user who already has "auto" stored (earlier builds saved the default) keeps browser
+    // detection: stored values always win over this default. "auto" stays selectable in the picker.
+    { key: "language", type: "enum", default: "en",
+      choices: ["auto", "en", "ar", "de", "es", "fr", "hi", "id", "ja", "pt-BR", "ru", "tr", "zh-CN"] },
 
     { key: "hidetagEnabled", type: "bool", default: false },
 

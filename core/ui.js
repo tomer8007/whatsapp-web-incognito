@@ -93,7 +93,7 @@ document.addEventListener("onOptionsUpdate", function(e)
 
 function initialize()
 {
-    applyLanguage("auto"); // until the saved language arrives
+    applyLanguage("en"); // English until the saved language arrives
     // load saved settings
     safeSendMessage({ name: "getOptions" }, function (options)
     {

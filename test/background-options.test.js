@@ -28,7 +28,7 @@ const DEFAULTS = {
     lockIdleMinutes: 10,
     lockOnHidden: false,
     lockOnHiddenMinutes: 2,
-    language: "auto",
+    language: "en",
     hidetagEnabled: false,
     voiceNoteRate: 1,
 };

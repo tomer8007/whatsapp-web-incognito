@@ -8,7 +8,7 @@ function load() {
     return loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js"]);
 }
 
-const CODES = ["id", "en", "es", "pt-BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh-CN"];
+const CODES = ["en", "ar", "de", "es", "fr", "hi", "id", "ja", "pt-BR", "ru", "tr", "zh-CN"];
 
 test("twelve languages are offered, Arabic is right-to-left", () => {
     const s = load();
@@ -94,9 +94,9 @@ test("t fills placeholders, falls back to English and then to the key", () => {
     assert.strictEqual(s.t("toast.delete"), "Message deleted");
 });
 
-test("language is a schema option with default auto, and English toasts have no emoji", () => {
+test("language is a schema option with default English, and English toasts have no emoji", () => {
     const s = load();
-    assert.strictEqual(s.defaultOptions().language, "auto");
+    assert.strictEqual(s.defaultOptions().language, "en");
     assert.strictEqual(s.parseOptionValue("language", "pt-BR"), "pt-BR");
-    assert.strictEqual(s.parseOptionValue("language", "zz"), "auto");
+    assert.strictEqual(s.parseOptionValue("language", "zz"), "en");
 });

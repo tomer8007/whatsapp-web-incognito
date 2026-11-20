@@ -2,21 +2,22 @@
 // Translations (both worlds). t(key, params) looks the key up in the active language, falls back to English, then to the key.
 // The dictionaries live in core/i18n_strings.js (I18N_DICT[code] = {key: text}). `{name}` placeholders are filled from params.
 // The page world only sends kinds and params; the isolated world (toasts, popups) translates. A few page-world labels use t() too:
-// both worlds read the same `language` option (default "auto" = the browser language).
+// both worlds read the same `language` option (default "en"; "auto" = the browser language, English when it is not supported).
 //
 
+// English first (the default), then the others by language code. Native names.
 var I18N_LANGUAGES = [
-    { code: "id", name: "Bahasa Indonesia" },
     { code: "en", name: "English" },
-    { code: "es", name: "Español" },
-    { code: "pt-BR", name: "Português (Brasil)" },
-    { code: "fr", name: "Français" },
+    { code: "ar", name: "العربية", rtl: true },
     { code: "de", name: "Deutsch" },
+    { code: "es", name: "Español" },
+    { code: "fr", name: "Français" },
+    { code: "hi", name: "हिन्दी" },
+    { code: "id", name: "Bahasa Indonesia" },
+    { code: "ja", name: "日本語" },
+    { code: "pt-BR", name: "Português (Brasil)" },
     { code: "ru", name: "Русский" },
     { code: "tr", name: "Türkçe" },
-    { code: "ar", name: "العربية", rtl: true },
-    { code: "hi", name: "हिन्दी" },
-    { code: "ja", name: "日本語" },
     { code: "zh-CN", name: "简体中文" },
 ];
 
