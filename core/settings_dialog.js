@@ -289,11 +289,24 @@ function applyDialogDirection(element)
     element.setAttribute("dir", (typeof isRtlLanguage == "function" && isRtlLanguage()) ? "rtl" : "ltr");
 }
 
+// Where the dialog opens. initial: nothing, a category id, or {category, contact}. A contact always opens its detail page inside
+// "contacts"; everything else opens a category list page. -> {category, contact}. Pure, unit-tested.
+function resolveSettingsRoute(initial, defaultCategory)
+{
+    if (initial && typeof initial == "object")
+    {
+        if (initial.contact) return { category: "contacts", contact: initial.contact };
+        return { category: initial.category || defaultCategory, contact: null };
+    }
+    return { category: initial || defaultCategory, contact: null };
+}
+
 // initial: a category id, or {category, contact} to open a contact's page
 function openSettingsDialog(initial)
 {
-    var initialCategory = (initial && typeof initial == "object") ? initial.category : initial;
-    var initialContact = (initial && typeof initial == "object") ? initial.contact : null;
+    var route = resolveSettingsRoute(initial, SETTINGS_CATEGORIES[0].id);
+    var initialCategory = route.category;
+    var initialContact = route.contact;
     if (settingsHandle && !settingsHandle.closed)
     {
         if (initialContact && settingsHandle.openContact) settingsHandle.openContact(initialContact);
@@ -923,14 +936,17 @@ function openSettingsDialog(initial)
         var context = currentContact;
         var page = make("div", "wam-contact-page");
 
+        // a visible way back to the full list, whether the page was opened from the list or straight from a chat
+        var crumb = make("button", "wam-crumb");
+        crumb.type = "button";
+        crumb.setAttribute("aria-label", t("contact.back"));
+        crumb.title = t("contact.back");
+        crumb.innerHTML = settingsIconSVG("arrowLeft") + "<span></span>";
+        crumb.lastChild.textContent = t("contact.allContacts");
+        crumb.addEventListener("click", function() { select("contacts"); });
+        page.appendChild(crumb);
+
         var head = make("div", "wam-contact-head");
-        var back = make("button", "wam-back");
-        back.type = "button";
-        back.setAttribute("aria-label", t("contact.back"));
-        back.title = t("contact.back");
-        back.innerHTML = settingsIconSVG("arrowLeft");
-        back.addEventListener("click", function() { select("contacts"); });
-        head.appendChild(back);
         head.appendChild(avatarElement(context.name));
         var headText = make("div", "wam-contact-head-text");
         headText.appendChild(make("h3", "wam-panel-title", context.name));
@@ -1173,7 +1189,7 @@ function openSettingsDialog(initial)
         options = loaded || {};
         if (handle.closed) return;
         buildHeaderTools();
-        select(initialCategory || SETTINGS_CATEGORIES[0].id);
+        select(initialCategory, !!initialContact); // keep the contact: its detail page opens right away
         var active = nav.querySelector(".wam-nav-active");
         if (active) active.focus();
     });

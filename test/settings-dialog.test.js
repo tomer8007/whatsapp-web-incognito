@@ -136,3 +136,38 @@ test("contact list: custom first, filters, search, paging, placeholder avatar", 
     assert.strictEqual(s.contactAvatar("").letter, "?");
     assert.strictEqual(s.contactSummaryCount(all[2], ruleSet), 2);
 });
+
+test("routing: a chat context opens its detail page, a category id or nothing opens a normal page", () => {
+    const { resolveSettingsRoute, SETTINGS_CATEGORIES } = load();
+    const first = SETTINGS_CATEGORIES[0].id;
+    const person = { name: "Budi", jids: ["1@c.us", "9@lid"], primaryJid: "1@c.us", isGroup: false };
+    const group = { name: "Kelas", jids: ["1203@g.us"], primaryJid: "1203@g.us", isGroup: true };
+    const plain = (route) => ({ category: route.category, contact: route.contact });
+    assert.deepStrictEqual(plain(resolveSettingsRoute({ category: "contacts", contact: person }, first)), { category: "contacts", contact: person });
+    assert.deepStrictEqual(plain(resolveSettingsRoute({ contact: group }, first)), { category: "contacts", contact: group }, "a contact alone still lands in contacts");
+    assert.strictEqual(resolveSettingsRoute({ category: "vault", contact: person }, first).category, "contacts", "a contact always means its page");
+    // the list path and the generic entry points are unchanged
+    assert.deepStrictEqual(plain(resolveSettingsRoute("contacts", first)), { category: "contacts", contact: null });
+    assert.deepStrictEqual(plain(resolveSettingsRoute("screen", first)), { category: "screen", contact: null });
+    assert.deepStrictEqual(plain(resolveSettingsRoute(undefined, first)), { category: first, contact: null });
+    assert.deepStrictEqual(plain(resolveSettingsRoute({ category: "vault" }, first)), { category: "vault", contact: null });
+    assert.deepStrictEqual(plain(resolveSettingsRoute({}, first)), { category: first, contact: null });
+});
+
+test("the dialog keeps the preselected contact on the first render, offers a visible way back, and the header button has a silent list fallback", () => {
+    const fs = require("node:fs"), path = require("node:path");
+    const { ROOT } = require("./helpers/sandbox");
+    const dialog = fs.readFileSync(path.join(ROOT, "core/settings_dialog.js"), "utf8");
+    assert.ok(/select\(initialCategory, !!initialContact\)/.test(dialog), "the first select must keep the contact");
+    assert.ok(/crumb\.lastChild\.textContent = t\("contact\.allContacts"\)/.test(dialog));
+    assert.ok(/crumb\.addEventListener\("click", function\(\) \{ select\("contacts"\); \}\)/.test(dialog), "back goes to the list");
+    const ui = fs.readFileSync(path.join(ROOT, "core/ui.js"), "utf8");
+    assert.ok(/if \(context\) openContactPrivacyModal\(context\);[^\n]*\n\s*else openSettingsDialog\("contacts"\);/.test(ui));
+    assert.ok(!/header\.noChat/.test(ui), "no error popup when the chat cannot be resolved");
+});
+
+test("the header button text says what it does, in every language", () => {
+    const s = load();
+    assert.strictEqual(s.I18N_DICT.en["header.button"], "Privacy settings for this chat");
+    for (const l of s.I18N_LANGUAGES) assert.ok(s.I18N_DICT[l.code]["header.button"] && s.I18N_DICT[l.code]["contact.allContacts"], l.code);
+});

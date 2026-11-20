@@ -966,22 +966,24 @@ body #main[data-incognito-noblur~="avatars"] header img
 .wam-contact-head-text { min-width: 0; }
 .wam-contact-head .wam-panel-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wam-contact-head .wam-panel-intro { margin: 0; }
-.wam-back
+.wam-crumb
 {
-  flex: none;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  gap: 6px;
+  margin: 0 0 10px 0;
+  padding: 6px 12px 6px 8px;
   border: none;
-  border-radius: 50%;
+  border-radius: 999px;
   background: transparent;
-  color: var(--wam-text);
+  color: var(--WDS-accent, #21c063);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
   cursor: pointer;
 }
-.wam-back:hover { background: var(--wam-surface-2); }
-.wam-dialog[dir="rtl"] .wam-back svg { transform: scaleX(-1); }
+.wam-crumb:hover { background: var(--WDS-surface-highlight, rgba(128, 128, 128, 0.2)); }
+.wam-dialog[dir="rtl"] .wam-crumb svg { transform: scaleX(-1); }
 .wam-summary { margin-top: 12px; }
 
 .wam-row-contact { flex-wrap: wrap; }

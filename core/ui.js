@@ -764,8 +764,8 @@ function ensureConversationHeaderButton()
     {
         e.stopPropagation();
         var context = await requestActiveChatContext();
-        if (context) openContactPrivacyModal(context);
-        else WAModal.fire({ title: t("header.noChat"), icon: "info", confirmButtonText: t("common.ok") });
+        if (context) openContactPrivacyModal(context); // straight to this chat's rule page (people and groups)
+        else openSettingsDialog("contacts"); // no chat context: the list, silently
     });
     header.appendChild(button);
 }
