@@ -35,3 +35,14 @@ test("every code the page world can report maps to a translation", () => {
         assert.ok(!/Something went wrong/.test(s.userErrorText(code)), code + " is not mapped");
     }
 });
+
+test("a failed send result never leaks the raw WhatsApp value: it becomes a translated sentence", () => {
+    const s = load("de");
+    for (const code of ["send-result:ERROR_UNKNOWN", "send-result:ERROR_NETWORK", "send-result:undefined"]) {
+        const text = s.userErrorText(code);
+        assert.strictEqual(text, s.I18N_DICT.de["err.sendFailed"]);
+        assert.ok(!/ERROR_|undefined|send-result/.test(text));
+    }
+    assert.strictEqual(s.userErrorText("send-result:ERROR_CANCEL"), s.I18N_DICT.de["err.sendCancelled"]);
+    assert.ok(/boom/.test(s.userErrorText("boom")), "unknown values keep the generic wrapper with the detail");
+});

@@ -56,12 +56,12 @@ test("put works while locked; get needs an unlock", async () => {
     await Vault.setup("pw");
     Vault.lock();
 
-    await Vault.put({ id: "L1", kind: "deleted", ts: 5, chatJid: "1@c.us", body: "saat terkunci" });
+    await Vault.put({ id: "L1", kind: "deleted", ts: 5, chatJid: "1@c.us", body: "while locked" });
     assert.strictEqual(await Vault.has("L1"), true, "existence is visible while locked");
     await assert.rejects(Vault.get("L1"), /locked/);
 
     assert.strictEqual(await Vault.unlock("pw"), true);
-    assert.strictEqual((await Vault.get("L1")).body, "saat terkunci");
+    assert.strictEqual((await Vault.get("L1")).body, "while locked");
 });
 
 test("stored records hold no plaintext: chatHash is not the raw JID, body is encrypted", async () => {

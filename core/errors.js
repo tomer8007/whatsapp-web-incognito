@@ -5,6 +5,8 @@
 
 var USER_ERROR_MAP = [
     [/^no-answer$/, "sched.noAnswer"],
+    [/^send-result:ERROR_CANCEL/i, "err.sendCancelled"],
+    [/^send-result:/, "err.sendFailed"], // any other result WhatsApp reports for a send that did not succeed
     [/^wrong-passphrase$/, "vault.wrong"],
     [/Vault is locked|^vault-locked$/, "vault.locked"],
     [/Vault is not set up/, "err.vaultNotSetUp"],

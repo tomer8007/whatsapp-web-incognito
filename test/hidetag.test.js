@@ -83,7 +83,7 @@ test("the real send passes the mention list through the sender and checks the re
     s.findSendTextFunction = () => async () => ({ messageSendResult: "ERROR_UNKNOWN" });
     const failed = await s.sendHidetag(groupWith(["5@lid", "1@lid"]), "halo", false);
     assert.strictEqual(failed.ok, false);
-    assert.ok(/send result/.test(failed.error));
+    assert.ok(/send-result:/.test(failed.error));
 });
 
 test("empty text, no members and a missing sender are refused without sending", async () => {

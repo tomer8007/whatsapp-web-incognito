@@ -193,7 +193,7 @@ async function sendHidetag(chat, text, dryRun, selectedJids, quotedMsg)
         var okValue = "OK";
         try { okValue = require("WAWebSendMsgResultAction").SendMsgResult.OK; } catch (e) { /* keep the default */ }
         var sent = !!result && result.messageSendResult === okValue;
-        return { ok: sent, error: sent ? undefined : "send result " + String(result && result.messageSendResult), count: plan.count, big: plan.big };
+        return { ok: sent, error: sent ? undefined : "send-result:" + String(result && result.messageSendResult), count: plan.count, big: plan.big };
     }
     catch (e)
     {
