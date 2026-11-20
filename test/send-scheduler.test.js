@@ -233,3 +233,12 @@ test("resolveSendLaterPreset: 10 minutes, 1 hour, tomorrow 08:00", () => {
     assert.deepStrictEqual([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()], [2026, 10, 21, 8, 0]);
     assert.strictEqual(sandbox.resolveSendLaterPreset("custom", now), null);
 });
+
+test("ui.js wires the Send later header button and dialog options", () => {
+    const code = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "core", "ui.js"), "utf8");
+    assert.ok(/function ensureSendLaterButton/.test(code));
+    assert.ok(/ensureConversationHeaderButton\(\);\s*ensureSendLaterButton\(\);/.test(code));
+    assert.ok(/alsoReceipt: result\.value\.alsoReceipt/.test(code));
+    assert.ok(/resolveSendLaterPreset\(choice, Date\.now\(\)\)/.test(code));
+    assert.ok(/onSent: function\(item\)/.test(code));
+});
