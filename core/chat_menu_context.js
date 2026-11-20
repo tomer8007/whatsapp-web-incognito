@@ -30,6 +30,46 @@ function findChatInMenuItems(items)
     return null;
 }
 
+// Only real conversations: people (c.us / lid) and groups. Status, broadcast lists and newsletters are not chats of a contact.
+function isContactChatJid(jid)
+{
+    return /@(c\.us|lid|g\.us)$/.test(String(jid));
+}
+
+function contactNameFromCollection(wid)
+{
+    try
+    {
+        if (!wid || typeof require != "function") return "";
+        var collection = require("WAWebContactCollection").ContactCollection;
+        var contact = collection && collection.get ? collection.get(wid) : null;
+        var name = contact && (contact.name || contact.shortName || contact.pushname || contact.formattedName);
+        return name ? String(name) : "";
+    }
+    catch (e) { return ""; }
+}
+
+// A name for the list: the chat's own, else the contact book (by the chat id, then the PN/LID counterpart),
+// else the phone number of the PN JID, else a translated "Unknown contact". Never empty.
+function chatDisplayName(chat, jids)
+{
+    var name = chat.formattedTitle || chat.name || "";
+    if (!name && chat.contact) name = chat.contact.name || chat.contact.pushname || chat.contact.formattedName || "";
+    if (!name) name = contactNameFromCollection(chat.id);
+    if (!name && chat.accountLid) name = contactNameFromCollection(chat.accountLid);
+    if (!name)
+    {
+        var pn = chatPnJid(chat);
+        if (pn) name = contactNameFromCollection(pn);
+    }
+    if (name) return String(name);
+
+    var pnJid = jids.filter(function(jid) { return /@c\.us$/.test(jid); })[0];
+    var digits = pnJid ? pnJid.split("@")[0].replace(/\D/g, "") : "";
+    if (digits) return "+" + digits;
+    return typeof t == "function" ? t("contact.unknown") : "Unknown contact";
+}
+
 function buildChatMenuContext(chat)
 {
     if (!chat || !chat.id) return null;
@@ -42,8 +82,7 @@ function buildChatMenuContext(chat)
         if (jids.indexOf(jid) == -1) jids.push(jid);
     });
 
-    var name = chat.formattedTitle || chat.name || (chat.contact && (chat.contact.name || chat.contact.pushname)) || "";
-    return { jids: jids, primaryJid: jids[0], name: String(name), isGroup: !!chat.isGroup || chat.id.server == "g.us" };
+    return { jids: jids, primaryJid: jids[0], name: chatDisplayName(chat, jids), isGroup: !!chat.isGroup || chat.id.server == "g.us" };
 }
 
 // WhatsApp Web 2.3000.x: the menu of the open conversation (header three-dot button) is a plain
@@ -88,7 +127,7 @@ function listChatContexts()
     for (var i = 0; i < chats.length; i++)
     {
         var context = buildChatMenuContext(chats[i]);
-        if (context && context.name) contexts.push(context);
+        if (context && isContactChatJid(context.primaryJid)) contexts.push(context);
     }
     return contexts;
 }

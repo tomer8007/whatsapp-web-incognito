@@ -45,16 +45,22 @@ test("buildChatMenuContext never throws on odd input", () => {
     assert.strictEqual(buildChatMenuContext({}), null);
 });
 
-test("listChatContexts lists chats newest first, names only, and skips unnamed ones", () => {
+test("listChatContexts lists people and groups newest first, names only, never drops a chat for a missing name, skips broadcasts", () => {
     const s = load();
     const chats = [
-        { id: wid("1@c.us"), formattedTitle: "Lama", t: 10, msgs: "secret" },
-        { id: wid("2@c.us"), formattedTitle: "Baru", t: 99 },
-        { id: wid("3@c.us"), t: 50 },
+        { id: wid("1@c.us"), formattedTitle: "Old", t: 10, msgs: "secret" },
+        { id: wid("2@c.us"), formattedTitle: "New", t: 99 },
+        { id: wid("628123456@c.us"), t: 50 },
+        { id: wid("1203@g.us"), isGroup: true, name: "Team", t: 40 },
+        { id: wid("777@lid"), t: 30 },
+        { id: wid("status@broadcast"), t: 100, formattedTitle: "Status" },
+        { id: wid("120363@newsletter"), t: 100, name: "News" },
     ];
+    s.t = (key) => (key == "contact.unknown" ? "Unknown contact" : key);
     s.WhatsAppAPI = { ChatCollection: { getModelsArray: () => chats } };
     const list = [...s.listChatContexts()];
-    assert.deepStrictEqual(list.map((c) => c.name), ["Baru", "Lama"]);
+    assert.deepStrictEqual(list.map((c) => c.name), ["New", "+628123456", "Team", "Unknown contact", "Old"]);
+    assert.deepStrictEqual(list.map((c) => c.isGroup), [false, false, true, false, false]);
     assert.ok(!JSON.stringify(list).includes("secret"));
     s.WhatsAppAPI = {};
     assert.deepStrictEqual([...s.listChatContexts()], []);
