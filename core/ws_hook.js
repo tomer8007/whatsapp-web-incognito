@@ -5,21 +5,14 @@ var wsHook = {};
 
 (function() 
 {
-	var before = wsHook.before = function(data, url) 
+	wsHook.before = function(data, url) 
 	{
 		return data;
 	};
-	var after = wsHook.after = function(e, url) 
+	wsHook.after = function(e, url) 
 	{
 		return e;
 	};
-	wsHook.resetHooks = function() 
-	{
-		wsHook.before = before;
-		wsHook.after = after;
-	}
-
-	var _WS = WebSocket; // save the original constructor
 
 	// hook it
 	WebSocket = function(url, protocols) 
@@ -36,8 +29,7 @@ var wsHook = {};
 		var _wsobject = this;
 		wsHook._send = WSObject.send = function(data) 
 		{
-			//data = wsHook.before(data, WSObject.url) || data;
-			new wsHook.before(data, WSObject.url).then(function (newData)
+			Promise.resolve(wsHook.before(data, WSObject.url)).then(function (newData)
 			{
 				// TODO: there could be an error "WebSocket is already in CLOSING or CLOSED state."
 				if (newData != null)

@@ -10,9 +10,9 @@ var isMainUIInitialized = false;
 var privacyScreenLockEnabled = false;
 var privacyScreenLockPIN = "";
 var privacyScreenLockIdleMinutes = 5;
-var privacyScreenIdleTimer = null;
 var isPrivacyScreenLocked = false;
 var privacyListenersAttached = false;
+var waiPrivacyLock = null; // PrivacyIdleLock (shared/privacy_lock.js), set by initializeUI
 var waiCurrentOptions = null;
 var waiLastOnlineUpdatesHook = null;
 var waiModalController = null;
@@ -110,12 +110,9 @@ function applyOptionSideEffects(prevOpts, nextOpts, patch)
 
     if ("onlineUpdatesHook" in p && waiLastOnlineUpdatesHook !== null && nextOpts.onlineUpdatesHook !== waiLastOnlineUpdatesHook)
     {
-        if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-        {
-            WAIPageBus.sendToPage('presence:set', {
-                status: nextOpts.onlineUpdatesHook ? 'unavailable' : 'available'
-            });
-        }
+        WAIPageBus.sendToPage('presence:set', {
+            status: nextOpts.onlineUpdatesHook ? 'unavailable' : 'available'
+        });
     }
     if (typeof nextOpts.onlineUpdatesHook === "boolean")
     {
@@ -149,13 +146,12 @@ function syncPrivacyScreenLockFromOptions(opts)
         setupPrivacyScreenActivityListeners();
         if (enabledChanged || idleChanged)
         {
-            resetPrivacyScreenIdleTimer();
+            waiPrivacyLock.arm();
         }
     }
     else if (enabledChanged)
     {
-        clearTimeout(privacyScreenIdleTimer);
-        privacyScreenIdleTimer = null;
+        waiPrivacyLock.disarm();
         removePrivacyScreenActivityListeners();
         unlockPrivacyScreen();
     }
@@ -203,10 +199,7 @@ function handleMarkAsReadClick(data)
                 {
                     if (result.isConfirmed)
                     {
-                        if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-                        {
-                            WAIPageBus.sendToPage('receipt:send', data);
-                        }
+                        WAIPageBus.sendToPage('receipt:send', data);
 
                         var shouldShowReadWarning = result.value == 0;
                         sendExtMessage({ name: "setOptions", showReadWarning: shouldShowReadWarning });
@@ -214,7 +207,7 @@ function handleMarkAsReadClick(data)
                     }
                 });
             }
-            else if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
+            else
             {
                 WAIPageBus.sendToPage('receipt:send', data);
             }
@@ -225,6 +218,13 @@ function handleMarkAsReadClick(data)
 function initializeUI()
 {
     waiCurrentOptions = getDefaultOptionsMap();
+
+    waiPrivacyLock = new WAIPrivacyLock.PrivacyIdleLock({
+        onLock: lockPrivacyScreen,
+        isLocked: function () { return isPrivacyScreenLocked; },
+        isEnabled: function () { return privacyScreenLockEnabled; },
+        getIdleMinutes: function () { return privacyScreenLockIdleMinutes; }
+    });
 
     // Single startup handshake for options, whitelist, and ephemeral notes
     sendExtMessage({ name: "getInitialState" }, function (initialState)
@@ -308,41 +308,38 @@ function initializeUI()
         catch (err) {}
     });
 
-    if (typeof WAIPageBus !== "undefined" && WAIPageBus.onHostMessage)
+    WAIPageBus.onHostMessage('receipt:markAsReadClick', handleMarkAsReadClick);
+
+    WAIPageBus.onHostMessage('deletedMsg:pseudoAdded', function (data)
     {
-        WAIPageBus.onHostMessage('receipt:markAsReadClick', handleMarkAsReadClick);
+        if (data && data.id) pseudoMsgsIDs.add(data.id);
+    });
 
-        WAIPageBus.onHostMessage('deletedMsg:pseudoAdded', function (data)
+    WAIPageBus.onHostMessage('deletedMsg:result', function (data)
+    {
+        var msgID = data && data.messageID;
+        if (!msgID || !waiPendingDeletedMsgs.has(msgID)) return;
+        var entries = waiPendingDeletedMsgs.get(msgID);
+        waiPendingDeletedMsgs.delete(msgID);
+        for (var i = 0; i < entries.length; i++)
         {
-            if (data && data.id) pseudoMsgsIDs.add(data.id);
-        });
+            clearTimeout(entries[i].timer);
+            try { entries[i].callback(data.messageData); } catch (err) {}
+        }
+    });
 
-        WAIPageBus.onHostMessage('deletedMsg:result', function (data)
+    WAIPageBus.onHostMessage('deviceType:result', function (data)
+    {
+        var msgID = data && data.messageID;
+        if (!msgID || !waiPendingDeviceTypes.has(msgID)) return;
+        var entries = waiPendingDeviceTypes.get(msgID);
+        waiPendingDeviceTypes.delete(msgID);
+        for (var i = 0; i < entries.length; i++)
         {
-            var msgID = data && data.messageID;
-            if (!msgID || !waiPendingDeletedMsgs.has(msgID)) return;
-            var entries = waiPendingDeletedMsgs.get(msgID);
-            waiPendingDeletedMsgs.delete(msgID);
-            for (var i = 0; i < entries.length; i++)
-            {
-                clearTimeout(entries[i].timer);
-                try { entries[i].callback(data.messageData); } catch (err) {}
-            }
-        });
-
-        WAIPageBus.onHostMessage('deviceType:result', function (data)
-        {
-            var msgID = data && data.messageID;
-            if (!msgID || !waiPendingDeviceTypes.has(msgID)) return;
-            var entries = waiPendingDeviceTypes.get(msgID);
-            waiPendingDeviceTypes.delete(msgID);
-            for (var i = 0; i < entries.length; i++)
-            {
-                clearTimeout(entries[i].timer);
-                try { entries[i].callback(data.deviceType); } catch (err) {}
-            }
-        });
-    }
+            clearTimeout(entries[i].timer);
+            try { entries[i].callback(data.deviceType); } catch (err) {}
+        }
+    });
 
     // Global shortcut Alt+Shift+I toggles the unified settings modal; Escape closes it.
     document.addEventListener('keydown', function (e)
@@ -368,10 +365,7 @@ function initializeUI()
         setTimeout(function () { onMainUIReady(); }, 100);
     }
 
-    if (typeof WAIPageBus !== "undefined" && WAIPageBus.DOMObserver)
-    {
-        WAIPageBus.DOMObserver.subscribe(onMutationsObserved);
-    }
+    WAIPageBus.DOMObserver.subscribe(onMutationsObserved);
 }
 
 function isMessageNode(node)
@@ -415,10 +409,7 @@ function onMutationsObserved(mutations)
                 // dropdown was opened
                 setTimeout(function ()
                 {
-                    if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-                    {
-                        WAIPageBus.sendToPage('ui:dropdownOpened', {});
-                    }
+                    WAIPageBus.sendToPage('ui:dropdownOpened', {});
                 }, 200);
             }
 
@@ -429,10 +420,7 @@ function onMutationsObserved(mutations)
             }
             if (addedNode.nodeName === "HEADER" || (addedNode.firstElementChild && addedNode.querySelector && addedNode.querySelector("header")))
             {
-                if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-                {
-                    WAIPageBus.sendToPage('ui:paneChatOpened', {});
-                }
+                WAIPageBus.sendToPage('ui:paneChatOpened', {});
             }
             if (addedNode.firstElementChild && addedNode.querySelectorAll)
             {
@@ -461,10 +449,7 @@ function onMutationsObserved(mutations)
 
 function onMainUIReady()
 {
-    if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-    {
-        WAIPageBus.sendToPage('ui:mainReady', {});
-    }
+    WAIPageBus.sendToPage('ui:mainReady', {});
 
     setTimeout(checkInterception, 1000);
 
@@ -549,17 +534,7 @@ function unlockPrivacyScreen()
     if (overlay) overlay.remove();
     var app = document.getElementById("app");
     if (app) app.classList.remove("privacy-locked-app");
-    resetPrivacyScreenIdleTimer();
-}
-
-function resetPrivacyScreenIdleTimer()
-{
-    if (!privacyScreenLockEnabled) return;
-    clearTimeout(privacyScreenIdleTimer);
-    if (!isPrivacyScreenLocked)
-    {
-        privacyScreenIdleTimer = setTimeout(lockPrivacyScreen, privacyScreenLockIdleMinutes * 60 * 1000);
-    }
+    waiPrivacyLock.arm();
 }
 
 function handlePrivacyScreenActivity(e)
@@ -569,7 +544,7 @@ function handlePrivacyScreenActivity(e)
         lockPrivacyScreen();
         return;
     }
-    resetPrivacyScreenIdleTimer();
+    waiPrivacyLock.arm();
 }
 
 function setupPrivacyScreenActivityListeners()
@@ -856,20 +831,6 @@ document.addEventListener('onInterceptionWorking', function (e)
     };
 });
 
-function getTheme()
-{
-    if (localStorage["theme"] != "null" && localStorage["theme"] != undefined)
-        return localStorage["theme"];
-    else
-    {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ||
-            document.getElementsByClassName("web")[0].classList.contains("dark"))
-            return "\"dark\"";
-        else
-            return "\"light\"";
-    }
-}
-
 //
 // Utils
 //
@@ -1017,6 +978,26 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
     });
 }
 
+// One-shot callback scheduled to fire (or be dropped) after a timeout, tracked in
+// a shared per-key map so callers deduplicate by key and the entry is removed on fire.
+function createPendingEntry(map, key, callback, timeoutMs)
+{
+    var entry = { callback: callback, timer: null };
+    entry.timer = setTimeout(function ()
+    {
+        var list = map.get(key);
+        if (!list) return;
+        var next = list.filter(function (item) { return item !== entry; });
+        if (next.length > 0) map.set(key, next);
+        else map.delete(key);
+    }, timeoutMs);
+
+    var existing = map.get(key);
+    if (existing) existing.push(entry);
+    else map.set(key, [entry]);
+    return entry;
+}
+
 function restoreDeletedMessageIfNeeded(messageNode, msgID)
 {
     if (!msgID) return;
@@ -1063,24 +1044,9 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         tryToSynthesizeMessage(messageSubElement, messageData);
     }
 
-    var entry = { callback: onDeletedMessageReceived, timer: null };
-    entry.timer = setTimeout(function ()
-    {
-        var list = waiPendingDeletedMsgs.get(msgID);
-        if (!list) return;
-        var next = list.filter(function (item) { return item !== entry; });
-        if (next.length > 0) waiPendingDeletedMsgs.set(msgID, next);
-        else waiPendingDeletedMsgs.delete(msgID);
-    }, 10000);
+    createPendingEntry(waiPendingDeletedMsgs, msgID, onDeletedMessageReceived, 10000);
 
-    var existing = waiPendingDeletedMsgs.get(msgID);
-    if (existing) existing.push(entry);
-    else waiPendingDeletedMsgs.set(msgID, [entry]);
-
-    if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-    {
-        WAIPageBus.sendToPage('deletedMsg:lookup', { messageID: msgID });
-    }
+    WAIPageBus.sendToPage('deletedMsg:lookup', { messageID: msgID });
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1239,24 +1205,9 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         });
     }
 
-    var entry = { callback: onDeviceTypeReceived, timer: null };
-    entry.timer = setTimeout(function ()
-    {
-        var list = waiPendingDeviceTypes.get(msgID);
-        if (!list) return;
-        var next = list.filter(function (item) { return item !== entry; });
-        if (next.length > 0) waiPendingDeviceTypes.set(msgID, next);
-        else waiPendingDeviceTypes.delete(msgID);
-    }, 5000);
+    createPendingEntry(waiPendingDeviceTypes, msgID, onDeviceTypeReceived, 5000);
 
-    var existing = waiPendingDeviceTypes.get(msgID);
-    if (existing) existing.push(entry);
-    else waiPendingDeviceTypes.set(msgID, [entry]);
-
-    if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-    {
-        WAIPageBus.sendToPage('deviceType:lookup', { messageID: msgID });
-    }
+    WAIPageBus.sendToPage('deviceType:lookup', { messageID: msgID });
 }
 
 function checkInterception()
@@ -1278,17 +1229,4 @@ function checkInterception()
     return true;
 }
 
-setTimeout(function ()
-{
-    if (!window.onerror) return;
-
-    // WhatsApp hooks window.onerror.
-    // This makes extension-related errors not printed out,
-    // so make a hook-on-hook to print those first
-    var originalOnError = window.onerror;
-    window.onerror = function (message, source, lineno, colno, error)
-    {
-        console.error(error);
-        originalOnError.call(window, message, source, lineno, colno, error);
-    };
-}, 1000);
+WAIErrorHook.installErrorHook();

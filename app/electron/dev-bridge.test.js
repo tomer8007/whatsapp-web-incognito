@@ -135,7 +135,7 @@ test('a dead dev server never crashes the app and backs off quietly', async () =
   });
 
   for (let i = 0; i < 12; i++) await bridge.tick();
-  assert.ok(logged <= 1, `expected at most one warning, got ${logged}`);
+  assert.strictEqual(logged, 1, `expected exactly one warning, got ${logged}`);
 });
 
 test('a throwing reload handler is contained', async () => {

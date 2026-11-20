@@ -559,8 +559,6 @@ const state = {
   backgroundNotified: false,
   /** How many times the preload has reported a completed injection (wai:page-state). */
   injections: 0,
-  /** Latest page snapshot pushed by the preload; shown by wai:get-state. */
-  page: null,
   /** Whether a native settings popup is currently on screen (key auto-repeat guard). */
   settingsOpen: false,
   lastFailure: null,
@@ -1113,11 +1111,6 @@ function installNavigationLock(win) {
       return { action: 'deny' };
     });
   })();
-
-  guard('will-attach-webview', () => {
-    // webviewTag is false, so this should be unreachable; refuse anyway.
-    wc.on('will-attach-webview', (event) => event.preventDefault());
-  })();
 }
 
 // ---------------------------------------------------------------- menus
@@ -1444,7 +1437,6 @@ function installIpc() {
   ipcMain.handle('wai:get-state', (event) => guard('wai:get-state', () => ({
     status: state.watchdog ? state.watchdog.snapshot() : { status: 'UNKNOWN' },
     prefs: state.prefs.get(),
-    page: state.page,
     version: (state.meta && state.meta.version) || app.getVersion(),
     injections: state.injections,
     failure: state.lastFailure,
@@ -1571,9 +1563,7 @@ function installIpc() {
       if (snapshot.opened) log('settings: using the in-page options panel (native menu unavailable)');
       else warn('settings: the in-page options panel is unavailable too — no settings UI is showing');
     }
-    if (snapshot.state) state.page = { ...snapshot.state, at: Date.now() };
-    if (state.watchdog) state.watchdog.ingest(snapshot);
-  })());
+    if (state.watchdog) state.watchdog.ingest(snapshot);  })());
 
   ipcMain.on('wai:failure', (event, reason, detail) => guard('wai:failure', () => {
     state.lastFailure = { reason, detail, at: Date.now() };
@@ -1647,10 +1637,10 @@ function updateBadgeFromTitle() {
     const count = match ? parseInt(match[1], 10) : 0;
     if (state.tray && typeof state.tray.updateBadge === 'function') state.tray.updateBadge(count);
     if (typeof app.setBadgeCount === 'function') {
-      try { app.setBadgeCount(count); } catch (_) {}
+      try { app.setBadgeCount(count); } catch (e) { debug('setBadgeCount failed:', (e && e.message) || e); }
     }
     if (process.platform === 'darwin' && app.dock && typeof app.dock.setBadge === 'function') {
-      try { app.dock.setBadge(count > 0 ? String(count) : ''); } catch (_) {}
+      try { app.dock.setBadge(count > 0 ? String(count) : ''); } catch (e) { debug('dock.setBadge failed:', (e && e.message) || e); }
     }
   } catch (e) {
     debug('updateBadgeFromTitle failed:', (e && e.message) || e);
@@ -1680,7 +1670,7 @@ function safeStringify(value) {
  *               the OLD preload against NEW bundles, which is precisely the torn-context
  *               state the watchdog exists to detect.
  */
-function startDevBridge(win, artifacts) {
+function startDevBridge(win) {
   if (!process.argv.includes('--dev')) return;
 
   let DevBridge;
@@ -1718,7 +1708,6 @@ function startDevBridge(win, artifacts) {
 
   state.devBridge = bridge.start();
   log(`dev bridge active → http://127.0.0.1:${port} (bundles re-inject, shell relaunches)`);
-  void artifacts;
 }
 
 function startWatchdog(win) {
@@ -2044,7 +2033,7 @@ function boot() {
 
     const win = createWindow(state.prefs.get());
     startWatchdog(win);
-    startDevBridge(win, build.artifacts);
+    startDevBridge(win);
 
     log(`ready — v${build.meta.version} → ${build.meta.whatsapp || 'https://web.whatsapp.com/'}`);
   }).catch((e) => {

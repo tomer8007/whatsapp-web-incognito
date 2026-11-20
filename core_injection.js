@@ -3,6 +3,9 @@
 	'use strict';
 
 	var manifest = typeof WAIBundleManifest !== 'undefined' ? WAIBundleManifest : {};
+	// Literal fallback only: the canonical value lives in shared/bundle_manifest.js.
+	// A-ua in scripts/verify-bundles.mjs syncs rules.json, bundle_manifest.js and
+	// MainActivity.kt — this fallback's drift is why it carries a comment here.
 	var DESKTOP_UA = manifest.DESKTOP_UA ||
 		'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
 
@@ -54,7 +57,7 @@
 
 	var MAIN_CRITICAL = manifest.MAIN_CRITICAL || ['core/ws_hook.js', 'core/comms_worker_fix.js'];
 	var MAIN_REST = manifest.MAIN_REST || [];
-	var DEFERRED = manifest.DEFERRED || ['lib/moduleraid.js'];
+	var DEFERRED = manifest.DEFERRED || [];
 
 	function waitForMountTarget(cb) {
 		var target = document.head || document.documentElement;

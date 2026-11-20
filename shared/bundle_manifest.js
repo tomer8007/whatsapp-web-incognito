@@ -20,6 +20,7 @@
     'shared/ephemeral_utils.js',
     'shared/settings_schema.js',
     'shared/wai_page_bus.js',
+    'shared/error_hook.js',
     'core/parsing/binary_reader.js',
     'core/parsing/binary_writer.js',
     'core/parsing/node_reader_writer.js',
@@ -33,9 +34,7 @@
     'core/interception.js',
   ]);
 
-  var DEFERRED = Object.freeze([
-    'lib/moduleraid.js',
-  ]);
+  var DEFERRED = Object.freeze([]);
 
   var UI = Object.freeze([
     'core/ui_class_names.js',
@@ -43,7 +42,9 @@
     'shared/ephemeral_utils.js',
     'shared/settings_schema.js',
     'shared/wai_page_bus.js',
+    'shared/privacy_lock.js',
     'shared/settings_renderer.js',
+    'shared/error_hook.js',
     'core/ui.js',
     'core/status_download.js',
     'lib/sweetalert.min.js',

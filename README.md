@@ -45,8 +45,8 @@ The resulting "stanzas" are then simply checked to see if WhatsApp tries to send
 ## Organization & Internals
 The main code of the extension is located in `core/interception.js` and in `core/ui.js`. 
 
-Other files inside the `core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional `parsing/` code for parsing messages (such as `message_types.js`) that is rarely used in the extension.
-`background.js` mainly keeps track of the saved preferences using `localStorage`.
+Other files inside the `core` folder deal with the infrastructure that makes the interception and the decoding works. There is also an additional `parsing/` code for parsing messages (`binary_reader.js`, `binary_writer.js`, `node_reader_writer.js`, `protobuf/`) that is rarely used in the extension.
+`background.js` mainly keeps track of the saved preferences using `chrome.storage.local`.
 
 If you want to see what kind of messages WhatsApp is sending and receiving over WebSocket in real-time, you can type `WAdebugMode = true` in the javascript console. Incoming and outgoing payloads (after decryption) will be printed out.
 
@@ -75,7 +75,7 @@ what keeps `git merge upstream/master` clean.
 ```bash
 pnpm install
 
-pnpm build           # all three targets
+pnpm build           # all four targets (firefox, chrome, electron, geckoview)
 pnpm build:chrome    # dist/extension/chrome   -> Chrome, "Load unpacked"
 pnpm build:firefox   # dist/extension/firefox  -> Firefox
 pnpm build:electron  # app/.build/             -> desktop app
@@ -84,7 +84,7 @@ pnpm package:ext       # release/extensions/*.zip + firefox .xpi
 pnpm package:chrome    # just the chrome zip
 pnpm package:firefox   # just the firefox zip + .xpi
 
-pnpm verify          # 27 build-time assertions
+pnpm verify          # 31 build-time assertions
 pnpm test            # unit tests
 pnpm check           # build + package + verify + test, no GUI  <- what CI runs
 pnpm one             # the above, then launch the app and print a verdict

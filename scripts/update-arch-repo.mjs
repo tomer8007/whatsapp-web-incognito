@@ -13,7 +13,9 @@ import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const PACMAN_PKG_SUFFIXES = ['.pkg.tar.zst', '.pkg.tar.xz', '.pacman'];
 const argv = process.argv.slice(2);
+const WAI_PACKAGE_JSON = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const opt = (n) => argv.find((a) => a.startsWith(`--${n}=`))?.split('=')[1];
 
 const artifactsDir = resolve(opt('artifacts') || join(ROOT, 'release'));
@@ -54,7 +56,7 @@ const findPacmanPkgs = (dir) => {
   for (const f of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, f.name);
     if (f.isDirectory()) results = results.concat(findPacmanPkgs(full));
-    else if (f.isFile() && (f.name.endsWith('.pkg.tar.zst') || f.name.endsWith('.pkg.tar.xz') || f.name.endsWith('.pacman'))) {
+    else if (f.isFile() && PACMAN_PKG_SUFFIXES.some((s) => f.name.endsWith(s))) {
       results.push(full);
     }
   }
@@ -98,9 +100,7 @@ for (const arch of archs) {
   const archDir = join(outDir, arch);
   mkdirSync(archDir, { recursive: true });
 
-  const existingPkgs = readdirSync(archDir).filter((f) =>
-    f.endsWith('.pkg.tar.zst') || f.endsWith('.pkg.tar.xz') || f.endsWith('.pacman')
-  );
+  const existingPkgs = readdirSync(archDir).filter((f) => PACMAN_PKG_SUFFIXES.some((s) => f.name.endsWith(s)));
 
   if (existingPkgs.length === 0) continue;
 
@@ -135,11 +135,11 @@ for (const arch of archs) {
       // Extract .PKGINFO from package if possible
       let pkgname = 'waincognito-bin';
       let pkgbase = 'waincognito-bin';
-      let pkgver = '2.6.6-1';
+      let pkgver = WAI_PACKAGE_JSON.version;
       let pkgdesc = 'Be invisible on WhatsApp Web by disabling read receipts and presence updates';
       let url = 'https://github.com/moodynooby/whatsapp-web-incognito';
       let packager = 'WAIncognito Packagers';
-      let isize = csize * 3;
+      let isize = csize; // input is the package file itself
       let license = ['GPL-3.0'];
       let depends = ['gtk3', 'libnotify', 'nss', 'libxss', 'libxtst', 'xdg-utils', 'libappindicator-gtk3'];
 

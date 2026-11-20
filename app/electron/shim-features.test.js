@@ -45,6 +45,7 @@ function loadShimSandbox(bootstrap, ipcOverrides) {
     },
     navigator: { userAgent: 'test-ua' },
     location: { href: 'https://web.whatsapp.com/', protocol: 'https:' },
+    WAIJidUtils: require('../../shared/jid_utils.js'),
     __WAI_BOOTSTRAP__: bootstrap,
     __WAI_IPC__: ipc,
     JSON, Object, Math, Date, RegExp, Error, TypeError, Array, String, Number, Boolean,

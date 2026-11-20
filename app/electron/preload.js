@@ -330,6 +330,8 @@ function runSequence(reason) {
 
     // 1b. THE HARD DEADLINE, taken as early as possible (C1).
     once('nativeWs', () => evaluate('nativeWs', readHook('native-ws.js'))),
+    // 1b2. Socket liveness tracker for the shim (state()/self-test read it).
+    once('socketTracker', () => evaluate('socketTracker', readArtifact('socket-tracker.js'))),
     once('critical', () => evaluate('critical', readArtifact('critical.js'))),
 
     // 1c. Take over window.Notification early using the bridge.
@@ -352,7 +354,8 @@ function runSequence(reason) {
     //    that matters.
     once('mainRest', () => evaluate('mainRest', readArtifact('main-rest.js'))),
 
-    // 5. moduleraid, which needs WhatsApp's webpack registry and self-polls for it.
+    // Deferred scripts (none right now; the group exists so future deferred deps
+    // can land without reordering the critical path).
     once('deferred', () => evaluate('deferred', readArtifact('deferred.js'))),
 
     // 7. Wrap wsHook.before/after for frame counters and confirm the hook is alive.
@@ -443,7 +446,7 @@ function injectUi() {
 // pending" report can never drift from the sequence itself. `nativeWs` and `critical`
 // come first because ws_hook.js has the only hard deadline (C1).
 const STEP_ORDER = [
-  'bridge', 'nativeWs', 'critical', 'notifications',
+  'bridge', 'nativeWs', 'socketTracker', 'critical', 'notifications',
   'bootstrap', 'shim', 'diagnostics', 'styles', 'mainRest', 'deferred', 'arm', 'ui',
 ];
 

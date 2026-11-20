@@ -41,13 +41,14 @@ const RUN_VERIFY = !flag('no-verify');
 /** Directories whose contents are page-world code or shared helpers. */
 const HOT_DIRS = ['core', 'lib', 'shared', 'images'];
 /** Individual files that feed the bundles. */
-const HOT_FILES = ['styles.css', 'manifest.json', 'background.js', 'core_injection.js', 'popup.html', 'popup.js', 'app/electron/shim.js'];
+const HOT_FILES = ['styles.css', 'manifest.json', 'background.js', 'core_injection.js', 'popup.html', 'popup.js', 'shared/privacy_lock.js', 'app/electron/shim.js'];
 
 /** Files whose changes mean "restart the app", watched but classified elsewhere. */
 const SHELL_FILES = [
   'app/electron/main.js', 'app/electron/preload.js', 'app/electron/watchdog.js',
   'app/electron/tray.js', 'app/electron/settings-menu.js', 'app/electron/prefs-store.js',
   'app/electron/dev-bridge.js', 'app/electron/whitelist_manager.js', 'app/electron/ephemeral_notes.js',
+  'app/electron/socket_tracker.js', 'app/electron/socket_tracker.test.js',
   'package.json',
 ];
 

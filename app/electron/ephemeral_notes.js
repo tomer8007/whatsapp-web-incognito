@@ -89,23 +89,23 @@ function isNotesStore(value) {
 }
 
 function resolveNotesTarget(args) {
-  if (args.length === 0) return { target: defaultStore, jid: undefined, note: undefined, hasTarget: false };
+  if (args.length === 0) return { target: defaultStore, jid: undefined, note: undefined };
   if (isNotesStore(args[0]) || (args[0] && typeof args[0] === 'object' && !Array.isArray(args[0]) && args.length >= 2)) {
     // Treat a plain object as a notes map when followed by a JID argument.
     if (isNotesStore(args[0])) {
-      return { target: args[0], jid: args[1], note: args[2], hasTarget: true };
+      return { target: args[0], jid: args[1], note: args[2] };
     }
     if (args.length >= 2 && typeof args[1] === 'string') {
-      return { target: args[0], jid: args[1], note: args[2], hasTarget: true };
+      return { target: args[0], jid: args[1], note: args[2] };
     }
   }
-  return { target: defaultStore, jid: args[0], note: args[1], hasTarget: false };
+  return { target: defaultStore, jid: args[0], note: args[1] };
 }
 
 const defaultStore = createEphemeralNotesStore();
 
 function setNote(...args) {
-  const { target, jid, note, hasTarget } = resolveNotesTarget(args);
+  const { target, jid, note } = resolveNotesTarget(args);
   if (isNotesStore(target)) {
     return target.setNote(jid, note);
   }
@@ -118,7 +118,7 @@ function setNote(...args) {
 }
 
 function getNote(...args) {
-  const { target, jid, hasTarget } = resolveNotesTarget(args);
+  const { target, jid } = resolveNotesTarget(args);
   if (isNotesStore(target)) return target.getNote(jid);
   const normalized = normalizeJid(jid);
   if (!normalized) return '';
@@ -126,7 +126,7 @@ function getNote(...args) {
 }
 
 function deleteNote(...args) {
-  const { target, jid, hasTarget } = resolveNotesTarget(args);
+  const { target, jid } = resolveNotesTarget(args);
   if (isNotesStore(target)) return target.deleteNote(jid);
   const normalized = normalizeJid(jid);
   if (!normalized || !Object.prototype.hasOwnProperty.call(target, normalized)) return false;
@@ -135,7 +135,7 @@ function deleteNote(...args) {
 }
 
 function listNotes(...args) {
-  const { target, hasTarget } = resolveNotesTarget(args);
+  const { target } = resolveNotesTarget(args);
   if (isNotesStore(target)) return target.listNotes();
   return Object.keys(target || {})
     .sort()
@@ -143,7 +143,7 @@ function listNotes(...args) {
 }
 
 function clearAll(...args) {
-  const { target, hasTarget } = resolveNotesTarget(args);
+  const { target } = resolveNotesTarget(args);
   if (isNotesStore(target)) return target.clearAll();
   const count = Object.keys(target || {}).length;
   for (const key of Object.keys(target || {})) delete target[key];

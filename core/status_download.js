@@ -4,6 +4,14 @@
 
 var allowStatusDownload = true;
 
+// Walks up `depth` ancestors of `node`; returns null when the chain runs out early.
+function ancestorAtDepth(node, depth)
+{
+    var current = node;
+    for (var i = 0; i < depth && current; i++) current = current.parentElement;
+    return current;
+}
+
 function determineIfNodeIsStatus(node) 
 {
     if (!node || node.nodeType !== 1) return false;
@@ -15,9 +23,9 @@ function determineIfNodeIsStatus(node)
         {
             return true;
         }
-        // fallback
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        if (parent?.getAttribute("data-animate-status-viewer") != null)
+        // fallback: status containers above the media
+        var parent = ancestorAtDepth(node, 13);
+        if (parent && parent.getAttribute("data-animate-status-viewer") != null)
         {
             isNodeStatus = true;
         }
@@ -28,9 +36,9 @@ function determineIfNodeIsStatus(node)
         {
             return true;
         }
-        // fallback
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
-        if (parent?.getAttribute("data-testid") == "status-video")
+        // fallback: status containers above the media
+        var parent = ancestorAtDepth(node, 8);
+        if (parent && parent.getAttribute("data-testid") == "status-video")
         {
             isNodeStatus = true;
         }
@@ -89,6 +97,7 @@ function createDownloadButton(src)
 function handleSRCAdd(src, node)
 {
     if (!allowStatusDownload) return;
+    if (src == null) return;
 
     if (determineIfNodeIsStatus(node))
     {
@@ -168,10 +177,7 @@ function onStatusMutations(mutations)
     });
 }
 
-if (typeof WAIPageBus !== "undefined" && WAIPageBus.DOMObserver)
-{
-    WAIPageBus.DOMObserver.subscribe(onStatusMutations);
-}
+WAIPageBus.DOMObserver.subscribe(onStatusMutations);
 
 document.addEventListener('onOptionsUpdate', function (e)
 {

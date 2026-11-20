@@ -17,6 +17,7 @@
     "core/ws_hook.js",
     "lib/css/drop-theme-basic.css",
     "lib/drop.js",
+    "lib/moduleraid.js",
     "lib/pako.js",
     "lib/pbf.3.0.5.min.js"
   ],
@@ -210,6 +211,16 @@
       "why": "Initialize enforcing globals from WAISettingsSchema, replace legacy Drop/Tether 3-page carousel with WAISettingsRenderer modal + toolbar popup (retiring lib/drop.js and lib/css/drop-theme-basic.css), eliminate redundant startup messages and listener leaks in core/ui.js, remove chat header override/Private Note/Export controls so only the compact settings trigger/modal plus blocked-receipt indicators remain on WhatsApp Web, move option ownership into enforcing modules, and merge body MutationObservers via shared/wai_page_bus.js.",
       "risk": "low",
       "assertion": "A-umd, A-prefs, A-panelkeys, A7"
+    },
+    {
+      "id": "P16",
+      "file": "lib/moduleraid.js",
+      "status": "deleted",
+      "summary": "Delete the vendored moduleRaid helper — nothing calls moduleRaid() anywhere (its consumers, core/utils.js getModuleFinder and the DEFERRED injection step, are gone too).",
+      "kind": "cleanup",
+      "why": "The extension never used the module raid (window.mR); it is pure dead code and would be re-injected past WhatsApp's webpack registry every load for no effect.",
+      "risk": "low",
+      "assertion": "A7"
     }
   ],
   "encoding": {

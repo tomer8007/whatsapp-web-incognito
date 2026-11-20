@@ -20,7 +20,7 @@ const path = require('node:path');
 const WAISettingsSchema = require('../../shared/settings_schema.js');
 
 const FILE_VERSION = 1;
-const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+const SHA256_HEX_RE = WAISettingsSchema.SHA256_HEX_RE;
 
 function effectiveRangeFor(key, ranges) {
   if (ranges && ranges[key]) return ranges[key];

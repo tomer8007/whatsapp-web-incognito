@@ -841,7 +841,6 @@ if (!zips.length) {
 
 // ---------------------------------------------------------------- report
 
-const width = Math.max(...results.map((r) => r[2].length));
 console.log('');
 for (const [status, id, desc] of results) {
   const mark = status === 'PASS' ? '\x1b[32m ok \x1b[0m' : '\x1b[31mFAIL\x1b[0m';

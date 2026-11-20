@@ -341,5 +341,6 @@
     choiceLabel: choiceLabel,
     coerceSetting: coerceSetting,
     validatePatch: validatePatch,
+    SHA256_HEX_RE: SHA256_HEX_RE,
   };
 });

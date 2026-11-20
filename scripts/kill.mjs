@@ -64,44 +64,63 @@ function isWatcher(cmd) {
   return c.includes('scripts/dev.mjs');
 }
 
-console.log('stopping stale WAIncognito instance(s)');
-const procs = listProcesses();
-const ours = procs.filter((p) => isOurApp(p.cmd) && !SELF.has(p.pid));
-const watchers = ALL ? procs.filter((p) => isWatcher(p.cmd) && !SELF.has(p.pid)) : [];
-const targets = [...ours, ...watchers];
-
-if (!targets.length) { ok('none running'); process.exit(0); }
-
-console.log(`  found ${targets.length} stale process(es):`);
-for (const p of targets) {
-  const short = p.cmd.length > 96 ? `${p.cmd.slice(0, 96)}...` : p.cmd;
-  console.log(`       ${String(p.pid).padStart(7)}  ${short}`);
+/** List electron processes whose command line names the app (plus optionally watchers). */
+function staleTargets(includeWatchers = false) {
+  const procs = listProcesses();
+  const ours = procs.filter((p) => isOurApp(p.cmd) && !SELF.has(p.pid));
+  const watchers = includeWatchers ? procs.filter((p) => isWatcher(p.cmd) && !SELF.has(p.pid)) : [];
+  return [...ours, ...watchers];
 }
 
-if (DRY) {
-  warn('--dry: nothing stopped');
-  process.exit(0);
-}
-
-let stopped = 0;
-for (const p of targets) {
-  if (killPid(p.pid)) {
-    stopped++;
-    console.log(`  stopped ${p.pid}`);
-  } else {
-    console.log(`  could not stop ${p.pid} (already gone, or not permitted)`);
-  }
-}
-
-if (!isWindows) {
-  spawnSync('sleep', ['1']);
+/** Terminate targets: SIGTERM, then SIGKILL for anything still alive after 1s. */
+function stopTargets(targets) {
+  let stopped = 0;
   for (const p of targets) {
-    const alive = spawnSync('kill', ['-0', String(p.pid)], { encoding: 'utf8' }).status === 0;
-    if (alive) {
+    if (killPid(p.pid)) {
+      stopped++;
+      console.log(`  stopped ${p.pid}`);
+    } else {
+      console.log(`  could not stop ${p.pid} (already gone, or not permitted)`);
+    }
+  }
+
+  if (!isWindows) {
+    // Bounded liveness check: poll briefly, then SIGKILL whatever is still alive.
+    let alive = targets;
+    for (let i = 0; i < 5 && alive.length > 0; i++) {
+      spawnSync('sleep', ['0.2']);
+      alive = targets.filter((p) => spawnSync('kill', ['-0', String(p.pid)], { encoding: 'utf8' }).status === 0);
+    }
+    for (const p of alive) {
       spawnSync('kill', ['-KILL', String(p.pid)], { encoding: 'utf8' });
       console.log(`  force-killed ${p.pid}`);
     }
   }
+
+  console.log(`  stopped ${stopped} process(es)`);
 }
 
-console.log(`  stopped ${stopped} process(es)`);
+export { listProcesses, killPid, isOurApp, isWatcher, SELF, staleTargets, stopTargets };
+
+if (import.meta.main) {
+  console.log('stopping stale WAIncognito instance(s)');
+  const procs = listProcesses();
+  const ours = procs.filter((p) => isOurApp(p.cmd) && !SELF.has(p.pid));
+  const watchers = ALL ? procs.filter((p) => isWatcher(p.cmd) && !SELF.has(p.pid)) : [];
+  const targets = [...ours, ...watchers];
+
+  if (!targets.length) { ok('none running'); process.exit(0); }
+
+  console.log(`  found ${targets.length} stale process(es):`);
+  for (const p of targets) {
+    const short = p.cmd.length > 96 ? `${p.cmd.slice(0, 96)}...` : p.cmd;
+    console.log(`       ${String(p.pid).padStart(7)}  ${short}`);
+  }
+
+  if (DRY) {
+    warn('--dry: nothing stopped');
+    process.exit(0);
+  }
+
+  stopTargets(targets);
+}

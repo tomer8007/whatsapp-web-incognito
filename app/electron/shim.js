@@ -80,20 +80,14 @@
   };
 
   function normalizeJid(jid) {
-    if (typeof window.WAIJidUtils === 'object' && window.WAIJidUtils &&
-        typeof window.WAIJidUtils.normalizeJid === 'function') {
-      return window.WAIJidUtils.normalizeJid(jid);
+    var WAIJidUtils = (typeof window.WAIJidUtils === 'object' && window.WAIJidUtils) ? window.WAIJidUtils : null;
+    if (WAIJidUtils && typeof WAIJidUtils.normalizeJid === 'function') {
+      return WAIJidUtils.normalizeJid(jid);
     }
+    // WAIJidUtils is loaded right after the shim, so by the time any message is
+    // handled this branch is unreachable; keep a plain pass-through here.
     if (!jid || typeof jid !== 'string') return '';
-    var trimmed = jid.trim();
-    if (!trimmed) return '';
-    var atIndex = trimmed.indexOf('@');
-    var prefix = atIndex !== -1 ? trimmed.substring(0, atIndex) : trimmed;
-    var suffix = atIndex !== -1 ? trimmed.substring(atIndex + 1).toLowerCase() : 'c.us';
-    if (suffix === 's.whatsapp.net') suffix = 'c.us';
-    var colonIndex = prefix.indexOf(':');
-    if (colonIndex !== -1) prefix = prefix.substring(0, colonIndex);
-    return prefix ? (prefix + '@' + suffix) : '';
+    return jid;
   }
 
   function coercePrefValue(k, v) {
@@ -119,7 +113,10 @@
       if (typeof v !== 'string') return undefined;
       var trimmed = v.trim();
       if (trimmed === '') return '';
-      return /^[a-f0-9]{64}$/i.test(trimmed) ? trimmed.toLowerCase() : undefined;
+      var isHexSha256 = (typeof window.WAISettingsSchema === 'object' && window.WAISettingsSchema && window.WAISettingsSchema.SHA256_HEX_RE)
+      ? window.WAISettingsSchema.SHA256_HEX_RE
+      : /^[a-f0-9]{64}$/i;
+    return isHexSha256.test(trimmed) ? trimmed.toLowerCase() : undefined;
     }
     if (typeof def === 'boolean') {
       if (typeof v === 'boolean') return v;
@@ -153,35 +150,24 @@
   }
   state.prefsEcho = prefsHash();
 
-  var socket = null;               // last instance ws_hook handed out
-  function bindSocket() {
-    try {
-      var Native = window.__WAI_NATIVE_WS__;
-      if (!Native) return;
-      var Current = window.WebSocket;
-      if (typeof Current !== 'function') return;
-
-      var Tracked = function (url, protocols) {
-        var args = (protocols === undefined) ? [url] : [url, protocols];
-        var s = Reflect.construct(Current, args);
-        socket = s;
-        readSocket();
-        return s;
-      };
-      Tracked.prototype = Native.prototype;
-      if (Current !== Tracked) window.WebSocket = Tracked;
-    } catch (e) { /* non-fatal: we just lose socket reporting */ }
+  // Socket liveness lives in the tracker artifact (app/electron/socket_tracker.js,
+  // built to app/.build/socket-tracker.js and injected as an artifact by the
+  // preload before the shim). The shim keeps the copies the watchdog reads.
+  function syncSocketState()
+  {
+    var tracker = (typeof WAISocketTracker === 'object' && WAISocketTracker) ? WAISocketTracker : null;
+    if (!tracker || typeof tracker.socketState !== 'number') return;
+    if (tracker.socketState !== state.socketState)
+    {
+      state.socketState = tracker.socketState;
+      state.socketSince = tracker.socketSince;
+    }
   }
 
-  function readSocket() {
-    try {
-      if (!socket) return;
-      var v = socket.readyState;
-      if (typeof v === 'number' && v !== state.socketState) {
-        state.socketState = v;
-        state.socketSince = Date.now();
-      }
-    } catch (e) { /* ignore */ }
+  function readSocket()
+  {
+    if (typeof WAISocketTracker === 'object' && WAISocketTracker) WAISocketTracker.readSocket();
+    syncSocketState();
   }
 
   function arm() {
@@ -205,7 +191,8 @@
     } catch (e) {
       reportFailure('the WebSocket hook threw while arming', String(e && e.message || e));
     }
-    bindSocket();
+    if (typeof WAISocketTracker === 'object' && WAISocketTracker) WAISocketTracker.bindSocket();
+    readSocket();
     return gen;
   }
 
@@ -376,6 +363,7 @@
     order: ORDER,
     loaded: loaded,
     state: function () {
+      syncSocketState();
       return {
         generation: state.generation, hookAlive: state.hookAlive,
         socketState: state.socketState, socketSince: state.socketSince,

@@ -368,6 +368,10 @@ function buildElectron(manifest, files) {
   }
   writeFileSync(join(EBUILD, 'shim.js'), shimOut);
 
+  // Socket liveness tracker for the shim (injected by the preload as a separate
+  // artifact, before the shim runs).
+  writeFileSync(join(EBUILD, 'socket-tracker.js'), readSource(join(ROOT, 'app', 'electron', 'socket_tracker.js')));
+
   // Ship the manifest-derived file list so CI can build an explicit allowlist instead
   // of `mv !(release|.github)`, which would leak app/ and scripts/ into the zip.
   writeFileSync(join(EBUILD, 'ext-files.json'), `${JSON.stringify(files, null, 2)}\n`);

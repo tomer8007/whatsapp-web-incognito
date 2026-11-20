@@ -25,7 +25,7 @@ function findChatEntryElementForJID(jid)
         {
             matches = true;
         }
-        else if (typeof (jid) == "string" && id.user == jid.split("@")[0].split(":")[0])
+        else if (typeof (jid) == "string" && id.user == getPrefixFromJID(jid))
         {
             matches = true;
         }
@@ -42,15 +42,6 @@ function findChatEntryElementForJID(jid)
     }
 
     return blockedChat;
-}
-
-function getModuleFinder()
-{
-    if (window.mR) return window.mR;
-
-    window.mR = new moduleRaid();
-
-    return window.mR;
 }
 
 function nodeToElement(node)
@@ -91,32 +82,6 @@ function nodeToElement(node)
     return element;
 }
 
-function nodeToXML(node)
-{
-    if  (typeof(node) == ArrayBuffer)
-        return "<ArrayBuffer (" + node.byteLength + " bytes)>";
-
-    var text = "<" + node.tag + " ";
-    for (var attribute in node.attrs)
-    {
-        text += attribute + "='" + node.attrs[attribute] + "' ";
-    }
-    text += ">";
-
-    if (node.content)
-    {
-        for (var subNode of node.content)
-        {
-            text += "\r\n";
-            text += nodeToXML(subNode);
-        }
-    }
-
-    text += "\r\n</"+node.tag+">";
-
-    return text;
-}
-
 function getCurrentChat()
 {
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
@@ -143,14 +108,7 @@ function getCurrentChatPanel()
 
 function getPrefixFromJID(jid)
 {
-    if (typeof WAIJidUtils !== "undefined" && typeof WAIJidUtils.prefixOfJid === "function")
-        return WAIJidUtils.prefixOfJid(jid);
-    if (!jid) return "";
-    var str = String(jid);
-    var atIndex = str.indexOf("@");
-    var prefix = atIndex !== -1 ? str.substring(0, atIndex) : str;
-    var colonIndex = prefix.indexOf(":");
-    return colonIndex !== -1 ? prefix.substring(0, colonIndex) : prefix;
+    return WAIJidUtils.prefixOfJid(jid);
 }
 
 function isChatBlocked(jid)
@@ -211,23 +169,7 @@ function getJidOfChat(chat)
 
 function normalizeJID(jid)
 {
-    if (typeof WAIJidUtils !== "undefined" && typeof WAIJidUtils.normalizeJid === "function")
-        return WAIJidUtils.normalizeJid(jid);
-    if (!jid || typeof jid !== "string") return "";
-    var trimmed = jid.trim();
-    if (!trimmed) return "";
-    var atIndex = trimmed.indexOf("@");
-    var prefix = atIndex !== -1 ? trimmed.substring(0, atIndex) : trimmed;
-    var suffix = atIndex !== -1 ? trimmed.substring(atIndex + 1).toLowerCase() : "c.us";
-
-    if (suffix === "s.whatsapp.net") suffix = "c.us";
-
-    var colonIndex = prefix.indexOf(":");
-    if (colonIndex !== -1) {
-        prefix = prefix.substring(0, colonIndex);
-    }
-
-    return prefix ? (prefix + "@" + suffix) : "";
+    return WAIJidUtils.normalizeJid(jid);
 }
 
 const arrayBufferToBase64 = (buffer) =>
@@ -241,124 +183,6 @@ const arrayBufferToBase64 = (buffer) =>
         binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, len)));
     }
     return btoa(binary);
-}
-
-function showToast(message)
-{
-    var appElement = document.getElementsByClassName("app-wrapper-web")[0];
-    if (!appElement) return;
-    var toast = document.createElement("div");
-    toast.setAttribute("class", "f1UZe");
-    toast.style.transformOrigin = "left top";
-    var inner = document.createElement("div");
-    inner.className = "hYvJ8";
-    inner.textContent = String(message == null ? "" : message);
-    toast.appendChild(inner);
-    appElement.insertBefore(toast, appElement.firstChild);
-    if (typeof Velocity === "function")
-    {
-        Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-        setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
-    }
-    else
-    {
-        setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 4000);
-    }
-}
-
-function exportIdbDatabase(idbDatabase) 
-{
-    return new Promise((resolve, reject) => 
-    {
-      const exportObject = {};
-      if (idbDatabase.objectStoreNames.length === 0) 
-      {
-        resolve(JSON.stringify(exportObject));
-      } 
-      else 
-      {
-        const transaction = idbDatabase.transaction(idbDatabase.objectStoreNames,'readonly');
-        transaction.addEventListener('error', reject);
-  
-        for (const storeName of idbDatabase.objectStoreNames) 
-        {
-          const allObjects = [];
-          transaction.objectStore(storeName).openCursor().addEventListener('success', event => 
-          {
-              const cursor = event.target.result;
-              if (cursor) {
-                // Cursor holds value, put it into store data
-                allObjects.push(cursor.value);
-                cursor.continue();
-              } 
-              else 
-              {
-                // No more values, store is done
-                exportObject[storeName] = allObjects;
-  
-                // Last store was handled
-                if (idbDatabase.objectStoreNames.length === Object.keys(exportObject).length) {
-                  resolve(exportObject);
-                }
-              }
-            })
-        }
-      }
-    })
-}
-
-function importToIdbDatabase(idbDatabase, importObject) 
-{
-    return new Promise((resolve, reject) => {
-      const transaction = idbDatabase.transaction(
-        idbDatabase.objectStoreNames,
-        'readwrite'
-      )
-      transaction.addEventListener('error', reject)
-  
-      for (const storeName of idbDatabase.objectStoreNames) {
-        let count = 0
-        for (const toAdd of importObject[storeName]) {
-          const request = transaction.objectStore(storeName).add(toAdd)
-          request.addEventListener('success', () => {
-            count++
-            if (count === importObject[storeName].length) {
-              // Added all objects for this store
-              delete importObject[storeName]
-              if (Object.keys(importObject).length === 0) {
-                // Added all object stores
-                resolve()
-              }
-            }
-          })
-        }
-      }
-    })
-}
-
-function clearDatabase(idbDatabase) 
-{
-    return new Promise((resolve, reject) => {
-        const transaction = idbDatabase.transaction(
-        idbDatabase.objectStoreNames,
-        'readwrite'
-        )
-        transaction.addEventListener('error', reject)
-
-        let count = 0
-        for (const storeName of idbDatabase.objectStoreNames) {
-        transaction
-            .objectStore(storeName)
-            .clear()
-            .addEventListener('success', () => {
-            count++
-            if (count === idbDatabase.objectStoreNames.length) {
-                // Cleared all object stores
-                resolve()
-            }
-            })
-        }
-    })
 }
 
 // Based on https://stackoverflow.com/a/39165137/1806873
@@ -416,29 +240,6 @@ function FindReact(dom, traverseUp = 0)
     return reactElement;
 }
 
-function getCSSRule(ruleName)
-{
-    var rules = {};
-    var styleSheets = document.styleSheets;
-    var styleSheetRules = null;
-    for (var i = 0; i < styleSheets.length; ++i)
-    {
-        try
-        {
-            styleSheetRules = styleSheets[i].cssRules;
-        }
-        catch (e)
-        {
-            // Assume Chrome 64+ doesn't let us access this CSS due to security policies or whatever, just ignore
-            continue;
-        }
-        if (styleSheetRules == null) continue;
-        for (var j = 0; j < styleSheetRules.length; ++j)
-            rules[styleSheetRules[j].selectorText] = styleSheetRules[j];
-    }
-    return rules[ruleName];
-}
-
 function makeLogMessage(args) 
 {
     function mergeArrays(e, t)  {
@@ -479,23 +280,6 @@ function deepClone(object)
     return Object.assign(Object.create(Object.getPrototypeOf(object)), object)
 }
 
-
-function base64ToArrayBuffer(base64) 
-{
-    var binary_string =  window.atob(base64);
-    var len = binary_string.length;
-    var bytes = new Uint8Array(len);
-    for (var i = 0; i < len; i++)        
-    {
-        bytes[i] = binary_string.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-function toArayBufer(array)
-{
-    return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
-}
 
 // Mobile and Waydroid viewport compatibility
 (function ensureMobileCompatibility() {

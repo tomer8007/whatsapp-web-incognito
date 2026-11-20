@@ -66,7 +66,12 @@ const STATUS = Object.freeze({
  * (core/node_handler.js) and already keeps the replay queue in `exceptionsList` — §9.6
  * asks the tray to surface the existing queue, not to build a second one.
  */
-const PROBE = fs.readFileSync(path.join(__dirname, 'page-hooks', 'watchdog-probe.js'), 'utf8').trim();
+// Guarded: the probe script ships with the build, but a build that dropped it should
+// fail the watchdog loudly rather than crash-loop the app on startup.
+let PROBE = '(function () { return { ok: false, error: "watchdog-probe.js is missing from the build" }; })()';
+try {
+  PROBE = fs.readFileSync(path.join(__dirname, 'page-hooks', 'watchdog-probe.js'), 'utf8').trim();
+} catch (e) { /* PROBE stays the degrade-to-NOT_PROTECTED script above */ }
 
 /**
  * @param {object} opts

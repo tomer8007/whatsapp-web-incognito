@@ -2,213 +2,208 @@
 // UI Event handlers (page world)
 // ---------------------
 
-if (typeof WAIPageBus !== 'undefined' && WAIPageBus.onPageMessage)
+WAIPageBus.onPageMessage('ui:mainReady', function ()
 {
-    WAIPageBus.onPageMessage('ui:mainReady', function ()
+    setTimeout(exposeWhatsAppAPI, 100);
+    setTimeout(function ()
     {
-        setTimeout(exposeWhatsAppAPI, 100);
-        setTimeout(function ()
+        if (typeof readConfirmationsHookEnabled !== "undefined")
         {
-            if (typeof readConfirmationsHookEnabled !== "undefined")
-            {
-                setGlobalColorVaraibleString(
-                    "--WDS-persistent-always-branded",
-                    readConfirmationsHookEnabled ? 'rgba(9, 210, 97, 0.3)' : 'rgba(9, 210, 97, 1)'
-                );
-            }
-        }, 150);
-    });
-
-    WAIPageBus.onPageMessage('presence:set', function (data)
-    {
-        if (!window.WhatsAppAPI || typeof WhatsAppAPI.sendPresenceStatusProtocol !== 'function') return;
-        var status = (data && data.status) ? String(data.status) : 'available';
-        WhatsAppAPI.sendPresenceStatusProtocol({ name: "", status: status });
-    });
-
-    WAIPageBus.onPageMessage('ui:paneChatOpened', function ()
-    {
-        var chat = typeof getCurrentChat === "function" ? getCurrentChat() : null;
-        if (chat && chat.id) chats[chat.id] = chat;
-    });
-
-    WAIPageBus.onPageMessage('ui:dropdownOpened', function ()
-    {
-        // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
-        var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
-        if (dropdown == undefined) return;
-
-        var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
-        var outerDropdown = document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0];
-        if (!outerDropdown) return;
-        var reactResult = FindReact(outerDropdown);
-        if (reactResult == null || !reactResult.props || !Array.isArray(reactResult.props.children) || reactResult.props.children.length == 0) return;
-
-        var firstChild = reactResult.props.children[0];
-        var reactMenuItems = firstChild && firstChild.props ? firstChild.props.children : null;
-        if (!reactMenuItems || reactMenuItems.props == undefined || !Array.isArray(reactMenuItems.props.children)) return;
-
-        reactMenuItems = reactMenuItems.props.children;
-
-        var markAsReadButton = null;
-        var props = null;
-        for (var i = 0; i < reactMenuItems.length; i++)
-        {
-            if (reactMenuItems[i] == null) continue;
-
-            if (reactMenuItems[i].key == "mark_unread")
-            {
-                markAsReadButton = menuItems[i];
-                props = reactMenuItems[i].props;
-                break;
-            }
+            setGlobalColorVariableString(
+                "--WDS-persistent-always-branded",
+                readConfirmationsHookEnabled ? 'rgba(9, 210, 97, 0.3)' : 'rgba(9, 210, 97, 1)'
+            );
         }
+    }, 150);
+});
 
-        if (props != null && props.chat && markAsReadButton)
-        {
-            var chatObj = props.chat;
-            var name = chatObj.name;
-            var formattedName = (chatObj.contact && chatObj.contact.name) || name;
-            var jid = getJidOfChat(chatObj);
-            var lastKey = chatObj.lastReceivedKey || {};
-            var lastMessageIndex = lastKey.id;
-            var unreadCount = chatObj.unreadCount || 0;
-            var isGroup = chatObj.isGroup;
-            var fromMe = lastKey.fromMe;
-            if (unreadCount > 0)
-            {
-                // this is mark-as-read button, not mark-as-unread
-                markAsReadButton.addEventListener("mousedown", function ()
-                {
-                    var data = {
-                        name: name,
-                        formattedName: formattedName,
-                        jid: jid,
-                        lastMessageIndex: lastMessageIndex,
-                        fromMe: fromMe,
-                        unreadCount: unreadCount,
-                        isGroup: isGroup
-                    };
+WAIPageBus.onPageMessage('presence:set', function (data)
+{
+    if (!window.WhatsAppAPI || typeof WhatsAppAPI.sendPresenceStatusProtocol !== 'function') return;
+    var status = (data && data.status) ? String(data.status) : 'available';
+    WhatsAppAPI.sendPresenceStatusProtocol({ name: "", status: status });
+});
 
-                    WAIPageBus.sendToHost('receipt:markAsReadClick', data);
-                });
-            }
-        }
-    });
+WAIPageBus.onPageMessage('ui:paneChatOpened', function ()
+{
+    var chat = typeof getCurrentChat === "function" ? getCurrentChat() : null;
+    if (chat && chat.id) chats[chat.id] = chat;
+});
 
-    WAIPageBus.onPageMessage('receipt:send', async function (data)
+WAIPageBus.onPageMessage('ui:dropdownOpened', function ()
+{
+    // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
+    var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
+    if (dropdown == undefined) return;
+
+    var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
+    var outerDropdown = document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0];
+    if (!outerDropdown) return;
+    var reactResult = FindReact(outerDropdown);
+    if (reactResult == null || !reactResult.props || !Array.isArray(reactResult.props.children) || reactResult.props.children.length == 0) return;
+
+    var firstChild = reactResult.props.children[0];
+    var reactMenuItems = firstChild && firstChild.props ? firstChild.props.children : null;
+    if (!reactMenuItems || reactMenuItems.props == undefined || !Array.isArray(reactMenuItems.props.children)) return;
+
+    reactMenuItems = reactMenuItems.props.children;
+
+    var markAsReadButton = null;
+    var props = null;
+    for (var i = 0; i < reactMenuItems.length; i++)
     {
-        if (!data || !data.jid) return;
-        var chat = await getChatByJID(data.jid);
-        if (!chat) return;
-        var chatContainer = { chat: chat };
+        if (reactMenuItems[i] == null) continue;
 
-        // add an exception and remove it after a short time at any case
-        var normalized = normalizeJID(data.jid);
-        exceptionsList.push(normalized);
-        setTimeout(function () { exceptionsList = exceptionsList.filter(function (i) { return i !== normalized && i !== data.jid; }); }, 2000);
-
-        WhatsAppAPI.Seen.sendSeen(chatContainer).then(function ()
+        if (reactMenuItems[i].key == "mark_unread")
         {
-            // TODO: remove the old blinking chats code
-            if (data.jid in blinkingChats)
-            {
-                clearInterval(blinkingChats[data.jid]["timerID"]);
-                delete blinkingChats[data.jid];
-            }
-            if (data.jid in blockedChats)
-            {
-                delete blockedChats[data.jid];
-            }
-        });
-
-        if (typeof chat.unreadCount === "number" && typeof data.unreadCount === "number")
-        {
-            chat.unreadCount = Math.max(0, chat.unreadCount - data.unreadCount);
+            markAsReadButton = menuItems[i];
+            props = reactMenuItems[i].props;
+            break;
         }
+    }
 
-        // animate out the incognito message
-        var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-        if (warningMessage != null && warningMessage.messageID && warningMessage.messageID.startsWith(data.jid))
-        {
-            if (typeof Velocity === "function")
-            {
-                Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-                setTimeout(function () { if (warningMessage.parentNode) warningMessage.remove(); }, 300);
-            }
-            else if (warningMessage.parentNode)
-            {
-                warningMessage.remove();
-            }
-        }
-    });
-
-    WAIPageBus.onPageMessage('deletedMsg:lookup', function (data)
+    if (props != null && props.chat && markAsReadButton)
     {
-        var msgID = data && data.messageID;
-        if (!msgID) return;
-
-        if (window.deletedMessagesDB == null)
+        var chatObj = props.chat;
+        var name = chatObj.name;
+        var formattedName = (chatObj.contact && chatObj.contact.name) || name;
+        var jid = getJidOfChat(chatObj);
+        var lastKey = chatObj.lastReceivedKey || {};
+        var lastMessageIndex = lastKey.id;
+        var unreadCount = chatObj.unreadCount || 0;
+        var isGroup = chatObj.isGroup;
+        var fromMe = lastKey.fromMe;
+        if (unreadCount > 0)
         {
-            WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
-            return;
-        }
-
-        try
-        {
-            var transaction = window.deletedMessagesDB.transaction('msgs', "readonly");
-            var msgsStore = transaction.objectStore("msgs");
-
-            // search the message ID in both the original message ID and the revoked message ID
-            var requestByID = msgsStore.get(msgID);
-
-            requestByID.onsuccess = function ()
+            // this is mark-as-read button, not mark-as-unread
+            markAsReadButton.addEventListener("mousedown", function ()
             {
-                var messageData = requestByID.result;
-                if (messageData)
-                {
-                    WAIPageBus.sendToHost('deletedMsg:result', { messageData: messageData, messageID: msgID });
-                    return;
-                }
-
-                // Did not find the message data by revoked message ID. try by original message ID
-                var originalIDIndex = msgsStore.index('originalID_index');
-                var requestByOriginalID = originalIDIndex.get(msgID);
-                requestByOriginalID.onsuccess = function ()
-                {
-                    WAIPageBus.sendToHost('deletedMsg:result', { messageData: requestByOriginalID.result, messageID: msgID });
+                var data = {
+                    name: name,
+                    formattedName: formattedName,
+                    jid: jid,
+                    lastMessageIndex: lastMessageIndex,
+                    fromMe: fromMe,
+                    unreadCount: unreadCount,
+                    isGroup: isGroup
                 };
-                requestByOriginalID.onerror = function ()
-                {
-                    WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
-                };
+
+                WAIPageBus.sendToHost('receipt:markAsReadClick', data);
+            });
+        }
+    }
+});
+
+WAIPageBus.onPageMessage('receipt:send', async function (data)
+{
+    if (!data || !data.jid) return;
+    var chat = await getChatByJID(data.jid);
+    if (!chat) return;
+    var chatContainer = { chat: chat };
+
+    // The user asked for receipts; allow one to go out (see allowReceiptsFor in interception.js)
+    allowReceiptsFor(data.jid);
+
+    WhatsAppAPI.Seen.sendSeen(chatContainer).then(function ()
+    {
+        // TODO: remove the old blinking chats code
+        if (data.jid in blinkingChats)
+        {
+            clearInterval(blinkingChats[data.jid]["timerID"]);
+            delete blinkingChats[data.jid];
+        }
+        if (data.jid in blockedChats)
+        {
+            delete blockedChats[data.jid];
+        }
+    });
+
+    if (typeof chat.unreadCount === "number" && typeof data.unreadCount === "number")
+    {
+        chat.unreadCount = Math.max(0, chat.unreadCount - data.unreadCount);
+    }
+
+    // animate out the incognito message
+    var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
+    if (warningMessage != null && warningMessage.messageID && warningMessage.messageID.startsWith(data.jid))
+    {
+        if (typeof Velocity === "function")
+        {
+            Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+            setTimeout(function () { if (warningMessage.parentNode) warningMessage.remove(); }, 300);
+        }
+        else if (warningMessage.parentNode)
+        {
+            warningMessage.remove();
+        }
+    }
+});
+
+WAIPageBus.onPageMessage('deletedMsg:lookup', function (data)
+{
+    var msgID = data && data.messageID;
+    if (!msgID) return;
+
+    if (window.deletedMessagesDB == null)
+    {
+        WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+        return;
+    }
+
+    try
+    {
+        var transaction = window.deletedMessagesDB.transaction('msgs', "readonly");
+        var msgsStore = transaction.objectStore("msgs");
+
+        // search the message ID in both the original message ID and the revoked message ID
+        var requestByID = msgsStore.get(msgID);
+
+        requestByID.onsuccess = function ()
+        {
+            var messageData = requestByID.result;
+            if (messageData)
+            {
+                WAIPageBus.sendToHost('deletedMsg:result', { messageData: messageData, messageID: msgID });
+                return;
+            }
+
+            // Did not find the message data by revoked message ID. try by original message ID
+            var originalIDIndex = msgsStore.index('originalID_index');
+            var requestByOriginalID = originalIDIndex.get(msgID);
+            requestByOriginalID.onsuccess = function ()
+            {
+                WAIPageBus.sendToHost('deletedMsg:result', { messageData: requestByOriginalID.result, messageID: msgID });
             };
-            requestByID.onerror = function ()
+            requestByOriginalID.onerror = function ()
             {
                 WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
             };
-        }
-        catch (err)
+        };
+        requestByID.onerror = function ()
         {
             WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
-        }
-    });
-
-    WAIPageBus.onPageMessage('deviceType:lookup', function (data)
+        };
+    }
+    catch (err)
     {
-        var msgID = data && data.messageID;
-        if (!msgID) return;
-        var deviceType = null;
+        WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+    }
+});
 
-        if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
-            deviceType = deviceTypesPerMessage[msgID];
+WAIPageBus.onPageMessage('deviceType:lookup', function (data)
+{
+    var msgID = data && data.messageID;
+    if (!msgID) return;
+    var deviceType = null;
 
-        setTimeout(function ()
-        {
-            WAIPageBus.sendToHost('deviceType:result', { deviceType: deviceType, messageID: msgID });
-        }, 20);
-    });
-}
+    if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
+        deviceType = deviceTypesPerMessage[msgID];
+
+    setTimeout(function ()
+    {
+        WAIPageBus.sendToHost('deviceType:result', { deviceType: deviceType, messageID: msgID });
+    }, 20);
+});
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
@@ -228,7 +223,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if (isReadHookActive)
     {
         // set unread counters to transparent
-        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
+        setGlobalColorVariableString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
     }
     else
     {
@@ -242,7 +237,7 @@ document.addEventListener('onOptionsUpdate', function (e)
         }
 
         // set unread counters to solid
-        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
+        setGlobalColorVariableString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
         var warningMessage = document.getElementsByClassName("incognito-message").length > 0
             ? document.getElementsByClassName("incognito-message")[0]
             : null;
@@ -409,10 +404,7 @@ function markChatAsPendingReciptsSending(chat)
                     fromMe: currentLastKey.fromMe,
                     unreadCount: chat.unreadCount
                 };
-                if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToPage)
-                {
-                    WAIPageBus.sendToPage('receipt:send', data);
-                }
+                WAIPageBus.sendToPage('receipt:send', data);
 
                 var unreadCounter = blockedChatElem ? blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS) : null;
                 if (unreadCounter)
@@ -492,10 +484,7 @@ function markChatAsBlocked(chat)
                     isGroup: chat.isGroup,
                     formattedName: (chat.contact && chat.contact.name) || chat.name || ""
                 };
-                if (typeof WAIPageBus !== "undefined" && WAIPageBus.sendToHost)
-                {
-                    WAIPageBus.sendToHost('receipt:markAsReadClick', data);
-                }
+                WAIPageBus.sendToHost('receipt:markAsReadClick', data);
             };
         }
 
@@ -554,7 +543,7 @@ function markChatAsBlocked(chat)
     }
 }
 
-function setGlobalColorVaraibleString(variable, colorString)
+function setGlobalColorVariableString(variable, colorString)
 {
     var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
@@ -614,16 +603,4 @@ function getUnreadMarkerElement(parentElement = null)
     return null;
 }
 
-setTimeout(function () {
-    if (!window.onerror) return;
-
-    // WhatsApp hooks window.onerror.
-    // This makes extension-related errors not printed out,
-    // so make a hook-on-hook to print those first
-    var originalOnError = window.onerror;
-    window.onerror = function (message, source, lineno, colno, error)
-    {
-        console.error(error);
-        originalOnError.call(window, message, source, lineno, colno, error);
-    };
-}, 1000);
+WAIErrorHook.installErrorHook();

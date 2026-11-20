@@ -9,16 +9,9 @@
     if (JID && typeof JID.normalizeJid === 'function') {
       return JID.normalizeJid(jid);
     }
-    if (!jid || typeof jid !== 'string') return '';
-    var trimmed = jid.trim();
-    if (!trimmed) return '';
-    var atIndex = trimmed.indexOf('@');
-    var prefix = atIndex !== -1 ? trimmed.substring(0, atIndex) : trimmed;
-    var suffix = atIndex !== -1 ? trimmed.substring(atIndex + 1).toLowerCase() : 'c.us';
-    if (suffix === 's.whatsapp.net') suffix = 'c.us';
-    var colonIndex = prefix.indexOf(':');
-    if (colonIndex !== -1) prefix = prefix.substring(0, colonIndex);
-    return prefix ? (prefix + '@' + suffix) : '';
+    // JID is always injected: WAIJidUtils in the page world, the required module in the
+    // Electron main process. No fallback copy of the normalization lives here.
+    return (typeof jid === 'string' && jid) ? jid : '';
   }
 
   var EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;

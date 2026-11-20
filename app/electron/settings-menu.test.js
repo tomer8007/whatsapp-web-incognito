@@ -248,7 +248,6 @@ test('a throwing apply does not propagate out of a menu click', () => {
     apply: () => { throw new Error('prefs.json is read-only'); },
   });
   assert.doesNotThrow(() => rows(items)['Block read receipts'].click());
-  assert.doesNotThrow(() => rows(items)['Reset all options to defaults'] === undefined);
 });
 
 test('building from a bad prefs object yields no rows instead of throwing', () => {

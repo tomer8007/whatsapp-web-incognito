@@ -350,13 +350,15 @@ test('updateBadge(0) puts the plain icon back', () => {
   assert.strictEqual(calls.images[calls.images.length - 1], plain, 'the original icon is restored');
 });
 
-test('updateBadge ignores junk and never regresses the count to NaN', () => {
+test('updateBadge ignores junk and the tray stays functional', () => {
   const { FakeTray, calls } = makeTrayCtor();
   const handle = createTray(baseOpts({ Menu: { buildFromTemplate: (t) => ({ templates: t }) }, Tray: FakeTray }));
+  const before = calls.contextMenus.length;
   for (const junk of [undefined, null, 'lots', NaN, -4]) {
     handle.updateBadge(junk);
-    assert.strictEqual(calls.contextMenus.length >= 2, true, 'still functional after ' + String(junk));
+    assert.ok(calls.contextMenus.length >= before, 'the tray is still functional after ' + String(junk));
   }
+  assert.ok(calls.contextMenus.length > before, 'updateBadge rebuilt the menu');
 });
 
 test('createTray refuses a caller that forgot getWindow', () => {
