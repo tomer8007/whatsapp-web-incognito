@@ -120,7 +120,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             if (!options.lockEnabled) return false;
             if (!passcode)
             {
-                if (!warnedNoPasscode) { warnedNoPasscode = true; console.warn("WAIncognito: lock is on but no passcode is set (settings: Layar & Kunci)"); }
+                if (!warnedNoPasscode) { warnedNoPasscode = true; console.warn("WAIncognito: lock is on but no passcode is set (settings: Screen & Lock)"); }
                 return false;
             }
             return true;
@@ -266,7 +266,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id)
             e.preventDefault();
             e.stopPropagation();
             if (passcode) window.WAIncognitoLock.lockNow();
-            else if (typeof openSettingsDialog == "function") openSettingsDialog("layar");
+            else if (typeof openSettingsDialog == "function") openSettingsDialog("screen");
         }, true);
 
         setInterval(function()

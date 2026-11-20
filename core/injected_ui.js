@@ -572,7 +572,7 @@ function markChatAsBlocked(chat)
             sendButton.textContent = t("receipt.markRead");
             warningMessage.appendChild(sendButton);
 
-            // "Kirim centang biru nanti…": inserted BEFORE the send button, because the send button must stay the last child
+            // "Send later…" (receipt.later): inserted BEFORE the send button, because the send button must stay the last child
             var scheduleButton = document.createElement('div');
             scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
             scheduleButton.textContent = t("receipt.later");

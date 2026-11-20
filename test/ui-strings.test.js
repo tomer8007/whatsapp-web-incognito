@@ -43,7 +43,7 @@ test("no user-visible string literal is hard-coded in the UI files (everything g
 });
 
 test("the checker itself catches a hard-coded label", () => {
-    assert.deepStrictEqual(findHardcoded('button.textContent = "Simpan";'), ["Simpan"]);
+    assert.deepStrictEqual(findHardcoded('button.textContent = "Speichern";'), ["Speichern"]);
     assert.deepStrictEqual(findHardcoded('x.setAttribute("aria-label", "Close dialog");'), ["Close dialog"]);
     assert.deepStrictEqual(findHardcoded('WAModal.fire({ title: "Halo dunia" });'), ["Halo dunia"]);
     assert.deepStrictEqual(findHardcoded('button.textContent = t("common.save");'), []);

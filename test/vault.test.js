@@ -45,7 +45,7 @@ test("a wrong passphrase is rejected, the right one unlocks", async () => {
     await Vault.setup("benar");
     Vault.lock();
     assert.strictEqual(Vault.isUnlocked(), false);
-    assert.strictEqual(await Vault.unlock("salah"), false);
+    assert.strictEqual(await Vault.unlock("wrong"), false);
     assert.strictEqual(Vault.isUnlocked(), false);
     assert.strictEqual(await Vault.unlock("benar"), true);
     assert.strictEqual(Vault.isUnlocked(), true);
@@ -123,7 +123,7 @@ test("migration moves the plaintext DB into the vault and clears it", async () =
     const legacy = {
         readAll: async () => [
             { store: "msgs", record: { id: "m1", originalID: "m1", Jid: "628@c.us", body: "lama", isMedia: false } },
-            { store: "edits", record: { id: "edit:t1:5", targetId: "t1", original: "asli", ts: 5 } },
+            { store: "edits", record: { id: "edit:t1:5", targetId: "t1", original: "original", ts: 5 } },
         ],
         clearAll: async () => { cleared = true; },
     };

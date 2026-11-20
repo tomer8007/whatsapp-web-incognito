@@ -82,8 +82,9 @@ test("resolveLanguage: explicit choice, browser language, regional variants, fal
 test("t fills placeholders, falls back to English and then to the key", () => {
     const s = load();
     s.setLanguage("id");
-    assert.strictEqual(s.t("toast.delete"), "Pesan dihapus");
-    assert.strictEqual(s.t("sched.done", { time: "10:00" }), "Pesan dijadwalkan pada 10:00");
+    assert.strictEqual(s.t("toast.delete"), s.I18N_DICT.id["toast.delete"]);
+    assert.notStrictEqual(s.t("toast.delete"), s.I18N_DICT.en["toast.delete"]);
+    assert.strictEqual(s.t("sched.done", { time: "10:00" }), s.I18N_DICT.id["sched.done"].replace("{time}", "10:00"));
     s.I18N_DICT.id["only.en"] = undefined;
     s.I18N_DICT.en["only.en"] = "English only";
     delete s.I18N_DICT.id["only.en"];
@@ -93,7 +94,7 @@ test("t fills placeholders, falls back to English and then to the key", () => {
     assert.strictEqual(s.t("toast.delete"), "Message deleted");
 });
 
-test("language is a schema option with default auto, and Indonesian/English toasts have no emoji", () => {
+test("language is a schema option with default auto, and English toasts have no emoji", () => {
     const s = load();
     assert.strictEqual(s.defaultOptions().language, "auto");
     assert.strictEqual(s.parseOptionValue("language", "pt-BR"), "pt-BR");

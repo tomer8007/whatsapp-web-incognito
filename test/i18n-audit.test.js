@@ -11,8 +11,8 @@ const LANGUAGES = ["id", "en", "es", "pt-BR", "fr", "de", "ru", "tr", "ar", "hi"
 // A translation may equal the English text only for words that really are the same there (cognates, brand names, units, short tokens).
 // Everything else must be translated. Add an entry here only after checking that the word is correct in that language.
 const SAME_AS_ENGLISH = {
-    "cat.notifikasi": ["fr"],
-    "cat.pesan": ["fr"],
+    "cat.notifications": ["fr"],
+    "cat.messages": ["fr"],
     "cat.vault": ["id"],
     "common.no": ["es"],
     "common.ok": ["id","pt-BR","fr","de","ru","ja"],
@@ -146,9 +146,9 @@ test("no file hard-codes text for the user: every visible string goes through t(
 });
 
 test("the checker catches a hard-coded label in any language", () => {
-    assert.deepStrictEqual(findHardcoded('button.textContent = "Simpan";'), ["Simpan"]);
+    assert.deepStrictEqual(findHardcoded('button.textContent = "Speichern";'), ["Speichern"]);
     assert.deepStrictEqual(findHardcoded('x.setAttribute("aria-label", "Close dialog");'), ["Close dialog"]);
-    assert.deepStrictEqual(findHardcoded('WAModal.fire({ title: "Halo dunia" });'), ["Halo dunia"]);
+    assert.deepStrictEqual(findHardcoded('WAModal.fire({ title: "Bonjour le monde" });'), ["Bonjour le monde"]);
     assert.deepStrictEqual(findHardcoded('el.title = "Закрыть";'), ["Закрыть"]);
     assert.deepStrictEqual(findHardcoded('button.textContent = t("common.cancel");'), []);
     assert.deepStrictEqual(findHardcoded('el.textContent = "";'), []);
@@ -213,4 +213,23 @@ test("a missing key falls back to English, then to the key itself; numbers follo
     assert.strictEqual(s.formatNumber(1234.5, 2), "1.234,50");
     s.setLanguage("en");
     assert.strictEqual(s.formatNumber(1234.5, 2), "1,234.50");
+});
+
+test("no Indonesian words remain in code, comments, styles, tests or the manifest (the id language table is the only place for them)", () => {
+    const WORDS = ["pesan", "kirim", "jadwal", "jadwalkan", "privasi", "kontak", "centang", "dihapus", "hapus", "simpan", "buka", "tidak", "yang", "untuk", "dengan", "sudah",
+                   "belum", "grup", "ubah", "tampil", "tampilkan", "sembunyi", "sembunyikan", "kunci", "anggota", "aktif", "nonaktif", "ikuti", "tutup", "batal", "salah",
+                   "dibaca", "terkirim", "terjadwal", "diedit", "sementara", "waktu", "menit", "hari", "jeda", "ketuk", "layar", "notifikasi", "utilitas", "diagnostik"];
+    const re = new RegExp("\\b(" + WORDS.join("|") + ")\\b", "i");
+    const files = sourceFiles().concat(["styles.css", "manifest.json", "core_injection.js", "README.md"])
+        .concat(fs.readdirSync(path.join(ROOT, "test")).filter((f) => f.endsWith(".js") && f != "i18n-audit.test.js").map((f) => "test/" + f))
+        .concat(fs.readdirSync(path.join(ROOT, "test/helpers")).map((f) => "test/helpers/" + f));
+    const problems = [];
+    for (const file of files) {
+        read(file).split("\n").forEach((line, index) => {
+            if (line.includes("EDITED_LABEL_WORDS")) return; // WhatsApp's own "Edited" word in 12 languages
+            const m = line.match(re);
+            if (m) problems.push(file + ":" + (index + 1) + " [" + m[1] + "] " + line.trim().slice(0, 70));
+        });
+    }
+    assert.deepStrictEqual(problems, []);
 });

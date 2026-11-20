@@ -9,9 +9,9 @@ function load(language) {
 }
 
 test("known codes and English exception messages become translated texts", () => {
-    const s = load("id");
-    assert.strictEqual(s.userErrorText("wrong-passphrase"), "Passphrase salah");
-    assert.strictEqual(s.userErrorText(new Error("Vault is locked")), "Vault terkunci");
+    const s = load("en");
+    assert.strictEqual(s.userErrorText("wrong-passphrase"), "Wrong passphrase");
+    assert.strictEqual(s.userErrorText(new Error("Vault is locked")), "Vault locked");
     assert.strictEqual(s.userErrorText("send-function-not-found"), s.t("err.sendNotFound"));
     assert.strictEqual(s.userErrorText("no-answer"), s.t("sched.noAnswer"));
     assert.strictEqual(s.userErrorText("not-a-group"), s.t("hidetag.notGroup"));

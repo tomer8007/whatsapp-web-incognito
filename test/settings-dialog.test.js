@@ -8,11 +8,11 @@ function load() {
     return loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/modal.js", "core/settings_dialog.js"]);
 }
 
-test("the settings popup has the nine categories in order, named in Indonesian by default", () => {
+test("the settings popup has the nine categories in order, named in English", () => {
     const s = load();
-    s.setLanguage("id");
+    s.setLanguage("en");
     assert.deepStrictEqual([...s.SETTINGS_CATEGORIES.map((c) => s.t("cat." + c.id))],
-        ["Privasi", "Privasi per kontak", "Pesan", "Notifikasi", "Layar & Kunci", "Vault", "Penjadwalan", "Utilitas", "Diagnostik"]);
+        ["Privacy", "Per-contact privacy", "Messages", "Notifications", "Screen & Lock", "Vault", "Scheduling", "Utilities", "Diagnostics"]);
 });
 
 test("every option of the schema is in exactly one category (safetyDelay has been hidden since the old menu)", () => {

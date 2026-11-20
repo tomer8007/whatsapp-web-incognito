@@ -92,21 +92,21 @@ test("the default minimum interval is 60 seconds", async () => {
 });
 
 test("restore does not send overdue items: they go to onOverdue and stay in the list", async () => {
-    const t = setup({ initial: [{ id: "old", jid: "1@c.us", text: "terlewat", dueAt: 500 }, { id: "soon", jid: "2@c.us", text: "nanti", dueAt: 4000 }] });
+    const t = setup({ initial: [{ id: "old", jid: "1@c.us", text: "overdue", dueAt: 500 }, { id: "soon", jid: "2@c.us", text: "later", dueAt: 4000 }] });
     await t.scheduler.restore();
     assert.strictEqual(t.sent.length, 0, "nothing sent automatically");
     assert.deepStrictEqual(plain(t.overdue).map((i) => i.id), ["old"]);
     assert.deepStrictEqual(plain(t.scheduler.list()).map((i) => [i.id, i.status]), [["old", "overdue"], ["soon", "pending"]]);
 
     await t.advance(3000);
-    assert.deepStrictEqual(plain(t.sent).map((s) => s.text), ["nanti"], "the future item was re-armed");
+    assert.deepStrictEqual(plain(t.sent).map((s) => s.text), ["later"], "the future item was re-armed");
 });
 
 test("an overdue item can be sent now, or cancelled", async () => {
-    const t = setup({ initial: [{ id: "old", jid: "1@c.us", text: "terlewat", dueAt: 500 }, { id: "old2", jid: "1@c.us", text: "batal", dueAt: 600 }] });
+    const t = setup({ initial: [{ id: "old", jid: "1@c.us", text: "overdue", dueAt: 500 }, { id: "old2", jid: "1@c.us", text: "cancelled", dueAt: 600 }] });
     await t.scheduler.restore();
     await t.scheduler.sendNow("old");
-    assert.deepStrictEqual(plain(t.sent).map((s) => s.text), ["terlewat"]);
+    assert.deepStrictEqual(plain(t.sent).map((s) => s.text), ["overdue"]);
     await t.scheduler.cancel("old2");
     assert.strictEqual(t.scheduler.list().length, 0);
     assert.strictEqual(t.state.items.length, 0);

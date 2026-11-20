@@ -98,10 +98,10 @@ test("every blur selector used for diagnostics is really in styles.css", () => {
     }
 });
 
-test("the lock UI shows the required disclaimer (Indonesian)", () => {
+test("the lock UI shows the required disclaimer (English)", () => {
     const s = load();
-    s.setLanguage("id");
-    assert.strictEqual(s.t("lock.disclaimer"), "Kunci ini layar privasi, bukan pengaman data. Untuk melindungi data, gunakan Vault.");
+    s.setLanguage("en");
+    assert.strictEqual(s.t("lock.disclaimer"), "This lock is a privacy screen, not data security. To protect your data, use the Vault.");
 });
 
 test("shouldLockAfterHidden: only after N minutes, never when disabled", () => {

@@ -42,7 +42,7 @@ var SETTINGS_ICONS = {
 // lock-card {keys}, contacts, vault-status, scheduled-receipts, scheduled-messages, diagnostics.
 // Texts are translation keys: category cat.<id> / cat.<id>.intro, sections sec.*, options opt.<key> and opt.<key>.desc.
 var SETTINGS_CATEGORIES = [
-    { id: "privasi", icon: "eyeOff",
+    { id: "privacy", icon: "eyeOff",
       sections: [
         { titleKey: "sec.traces", items: [
             { type: "toggle", key: "readConfirmationsHook", icon: "check" },
@@ -55,11 +55,11 @@ var SETTINGS_CATEGORIES = [
             { type: "toggle", key: "showDeviceTypes", icon: "phone" },
         ] },
       ] },
-    { id: "kontak", icon: "user",
+    { id: "contacts", icon: "user",
       sections: [
         { titleKey: "sec.contacts", items: [ { type: "contacts" } ] },
       ] },
-    { id: "pesan", icon: "message",
+    { id: "messages", icon: "message",
       sections: [
         { titleKey: "sec.deleted", items: [
             { type: "toggle", key: "saveDeletedMsgs", icon: "trash" },
@@ -71,7 +71,7 @@ var SETTINGS_CATEGORIES = [
         ] },
         { titleKey: "sec.notes", items: [ { type: "note", textKey: "note.messages" } ] },
       ] },
-    { id: "notifikasi", icon: "bell",
+    { id: "notifications", icon: "bell",
       sections: [
         { titleKey: "sec.alerts", items: [
             { type: "toggle", key: "toastOnDelete", icon: "trash" },
@@ -79,7 +79,7 @@ var SETTINGS_CATEGORIES = [
             { type: "note", textKey: "note.toasts" },
         ] },
       ] },
-    { id: "layar", icon: "lock",
+    { id: "screen", icon: "lock",
       sections: [
         { titleKey: "sec.lockWhenIdle", items: [
             { type: "lock-card", keys: ["lockEnabled", "lockIdleMinutes", "lockOnHidden", "lockOnHiddenMinutes"] },
@@ -103,13 +103,13 @@ var SETTINGS_CATEGORIES = [
             { type: "note", textKey: "note.vault" },
         ] },
       ] },
-    { id: "jadwal", icon: "clock",
+    { id: "schedule", icon: "clock",
       sections: [
         { titleKey: "sec.schedReceipts", items: [ { type: "scheduled-receipts" } ] },
         { titleKey: "sec.schedMessages", items: [ { type: "scheduled-messages" } ] },
         { titleKey: "sec.schedHow", items: [ { type: "note", textKey: "note.schedule" } ] },
       ] },
-    { id: "utilitas", icon: "tool",
+    { id: "utilities", icon: "tool",
       sections: [
         { titleKey: "sec.audio", items: [ { type: "select", key: "voiceNoteRate", icon: "mic" } ] },
         { titleKey: "sec.hidetag", items: [
@@ -122,7 +122,7 @@ var SETTINGS_CATEGORIES = [
             { type: "note", textKey: "note.statusBulk" },
         ] },
       ] },
-    { id: "diagnostik", icon: "activity",
+    { id: "diagnostics", icon: "activity",
       sections: [ { titleKey: "sec.results", items: [ { type: "diagnostics" } ] } ] },
 ];
 
@@ -180,7 +180,7 @@ function filterContacts(contexts, query, limit)
     return { shown: matches.slice(0, limit), total: matches.length };
 }
 
-// The pages of one contact ("Privasi per kontak"). kind: blockAllow (block = "on"), onOff, choice, info.
+// The pages of one contact ("Per-contact privacy"). kind: blockAllow (block = "on"), onOff, choice, info.
 // `option` is the global option the "Follow global" state falls back to (see CONTACT_RULE_SCHEMA in core/contact_rules.js).
 var CONTACT_SECTIONS = [
     { titleKey: "sec.traces", items: [
@@ -334,7 +334,7 @@ function openSettingsDialog(initial)
     lockButton.addEventListener("click", function()
     {
         if (window.WAIncognitoLock && window.WAIncognitoLock.hasPasscode()) window.WAIncognitoLock.lockNow();
-        else select("layar");
+        else select("screen");
     });
     var languageMenu = make("div", "wam-menu");
     languageMenu.setAttribute("role", "listbox");
@@ -364,7 +364,7 @@ function openSettingsDialog(initial)
     function select(id, keepContact)
     {
         activeId = id;
-        if (id != "kontak" || !keepContact) currentContact = null;
+        if (id != "contacts" || !keepContact) currentContact = null;
         Array.prototype.forEach.call(nav.children, function(tab)
         {
             var selected = tab.dataset.category == id;
@@ -377,7 +377,7 @@ function openSettingsDialog(initial)
         panel.scrollTop = 0;
     }
     handle.select = select;
-    handle.openContact = function(context) { currentContact = context; select("kontak", true); };
+    handle.openContact = function(context) { currentContact = context; select("contacts", true); };
 
     function buildNav()
     {
@@ -754,7 +754,7 @@ function openSettingsDialog(initial)
         else WAModal.fire({ title: t("lock.noPasscode"), text: t("lock.noPasscodeText"), icon: "info", confirmButtonText: t("common.ok") });
     }
 
-    // "Privasi per kontak": a searchable, filterable, paged list of the user's chats (names only, never messages)
+    // "Per-contact privacy": a searchable, filterable, paged list of the user's chats (names only, never messages)
     var CONTACT_PAGE_SIZE = 60;
 
     function avatarElement(name)
@@ -846,7 +846,7 @@ function openSettingsDialog(initial)
         return box;
     }
 
-    // The page of one contact: back arrow, summary card, then the same cards as "Privasi" with a segmented control per item
+    // The page of one contact: back arrow, summary card, then the same cards as "Privacy" with a segmented control per item
     function stateLabel(on) { return on ? t("state.on") : t("state.off"); }
 
     function globalValueOf(item)
@@ -929,7 +929,7 @@ function openSettingsDialog(initial)
         back.setAttribute("aria-label", t("contact.back"));
         back.title = t("contact.back");
         back.innerHTML = settingsIconSVG("arrowLeft");
-        back.addEventListener("click", function() { select("kontak"); });
+        back.addEventListener("click", function() { select("contacts"); });
         head.appendChild(back);
         head.appendChild(avatarElement(context.name));
         var headText = make("div", "wam-contact-head-text");
@@ -967,7 +967,7 @@ function openSettingsDialog(initial)
         reset.addEventListener("click", async function()
         {
             await resetContactRulesForContext(context);
-            select("kontak", true); // redraw every control
+            select("contacts", true); // redraw every control
         });
 
         CONTACT_SECTIONS.forEach(function(section)
@@ -1142,7 +1142,7 @@ function openSettingsDialog(initial)
     function renderPanel(category)
     {
         panel.textContent = "";
-        if (category.id == "kontak" && currentContact)
+        if (category.id == "contacts" && currentContact)
         {
             panel.appendChild(renderContactDetail());
             return;

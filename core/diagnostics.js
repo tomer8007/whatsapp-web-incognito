@@ -1,6 +1,6 @@
 //
 // Diagnostics: every feature that depends on WhatsApp internals (modules, exports, DOM selectors, databases, hooks)
-// registers that dependency here, so a WhatsApp update that breaks a feature is visible in the "Diagnostik" menu.
+// registers that dependency here, so a WhatsApp update that breaks a feature is visible in the "Diagnostics" category.
 //
 // Loaded in both worlds: the page world registers modules/exports/db/hooks, the isolated world registers selectors
 // (it owns the menu UI and merges both result lists).

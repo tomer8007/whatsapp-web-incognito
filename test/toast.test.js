@@ -4,7 +4,7 @@ const { createSandbox, loadScripts } = require("./helpers/sandbox");
 
 function loadToast() {
     const s = loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/toast.js"]);
-    s.setLanguage("id");
+    s.setLanguage("en");
     return s;
 }
 
@@ -33,10 +33,10 @@ test("formatToast builds title and body, cutting the preview to 80 characters", 
     const { formatToast } = loadToast();
     const long = "x".repeat(200);
     const t = formatToast({ kind: "delete", chatName: "Budi", preview: long }, { hidePreview: false });
-    assert.strictEqual(t.title, "Pesan dihapus");
+    assert.strictEqual(t.title, "Message deleted");
     assert.ok(t.body.startsWith("Budi: "));
     assert.ok(t.body.length <= "Budi: ".length + 81, "preview cut to 80 chars (+ ellipsis)");
-    assert.strictEqual(formatToast({ kind: "edit", chatName: "Budi", preview: "hai" }, {}).title, "Pesan diedit");
+    assert.strictEqual(formatToast({ kind: "edit", chatName: "Budi", preview: "hai" }, {}).title, "Message edited");
     assert.strictEqual(formatToast({ kind: "edit", chatName: "Budi", preview: "hai" }, {}).body, "Budi: hai");
     assert.ok(formatToast({ kind: "status-delete", chatName: "Budi", preview: "" }, {}).title.includes("Status"));
 });

@@ -1,6 +1,6 @@
 //
 // Chat menu context (page world). When the user opens the context menu of a chat in the chat list, the isolated world
-// (ui.js) needs to know which chat it is, to add its own entries ("Privasi kontak ini…", "Jadwalkan pesan…", ...).
+// (ui.js) needs to know which chat it is, to add its own entries (the keys menu.contactPrivacy, menu.scheduleMessage, ...).
 // ui.js dispatches `onDropdownOpened`; this file answers with `waIncognitoChatMenuContext`
 //   {context: {jids: [normalized pn, normalized lid], primaryJid, name, isGroup} | null}.
 //
@@ -62,7 +62,7 @@ document.addEventListener("onDropdownOpened", function()
 });
 
 //
-// The user's chats (names only, never messages) for the "Privasi per kontak" list, and the chat that is open right now.
+// The user's chats (names only, never messages) for the "Per-contact privacy" list, and the chat that is open right now.
 //   waIncognitoChatsRequest {messageID}      -> waIncognitoChatsResult {messageID, chats: [context...]}, newest first
 //   waIncognitoActiveChatRequest {messageID} -> waIncognitoActiveChatResult {messageID, context | null}
 //

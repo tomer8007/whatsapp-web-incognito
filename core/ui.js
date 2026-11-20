@@ -1374,7 +1374,7 @@ function sendBackgroundMessage(message)
 // The per-contact settings open as a page inside the big popup (core/settings_dialog.js)
 function openContactPrivacyModal(context)
 {
-    openSettingsDialog({ category: "kontak", contact: context });
+    openSettingsDialog({ category: "contacts", contact: context });
     return Promise.resolve();
 }
 
@@ -1829,7 +1829,7 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 // This function gets called on every new message node that gets added to the screen,
 // and takes care of "deleted" messages - 
 // attempts to syntethise a message that was deleted from our DB / just mark it in red
-// Red tint, left border and a "Dihapus" label (styles.css) on the message row. The row is the element with data-id: that hook
+// Red tint, left border and a "Deleted" label (styles.css) on the message row. The row is the element with data-id: that hook
 // is stable, unlike the bubble's classes. The label text comes from the --incognito-deleted-label variable (see applyLanguage).
 function markMessageDeleted(node)
 {

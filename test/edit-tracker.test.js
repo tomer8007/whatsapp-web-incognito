@@ -41,7 +41,7 @@ test("extractText handles the six message shapes", () => {
 
 test("extractText unwraps ephemeral and view-once wrappers and returns null otherwise", () => {
     const { extractText } = load();
-    assert.strictEqual(extractText({ ephemeralMessage: { message: { conversation: "sementara" } } }), "sementara");
+    assert.strictEqual(extractText({ ephemeralMessage: { message: { conversation: "temporary" } } }), "temporary");
     assert.strictEqual(extractText({ viewOnceMessageV2: { message: { imageMessage: { caption: "sekali" } } } }), "sekali");
     assert.strictEqual(extractText({ stickerMessage: {} }), null);
     assert.strictEqual(extractText(null), null);
@@ -51,9 +51,9 @@ test("extractText unwraps ephemeral and view-once wrappers and returns null othe
 test("recall returns what was remembered, and null for unknown messages", () => {
     const { createEditTracker } = load();
     const tracker = createEditTracker({ now: () => 1000 });
-    tracker.remember("M1", "teks asli", 5);
+    tracker.remember("M1", "original text", 5);
     const entry = tracker.recall("M1");
-    assert.strictEqual(entry.text, "teks asli");
+    assert.strictEqual(entry.text, "original text");
     assert.strictEqual(entry.ts, 5);
     assert.strictEqual(tracker.recall("nope"), null);
 });

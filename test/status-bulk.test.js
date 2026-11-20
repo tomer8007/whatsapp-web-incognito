@@ -19,7 +19,7 @@ test("statusFileName replaces unsafe characters with _", () => {
     const { statusFileName } = load();
     assert.strictEqual(statusFileName("Ani/Bu: \"Kantor\"?", TS, 1, "image/webp"), "status_Ani_Bu_Kantor_20260307-090502_1.webp");
     assert.ok(!/[\/\\:*?"<>|\s]/.test(statusFileName("a b\\c", TS, 1, "image/png")));
-    assert.ok(statusFileName("", TS, 1, "image/png").startsWith("status_kontak_"));
+    assert.ok(statusFileName("", TS, 1, "image/png").startsWith("status_contact_"));
     assert.ok(statusFileName("Siti Nur", TS, 1, "image/png").startsWith("status_Siti_Nur_"));
 });
 

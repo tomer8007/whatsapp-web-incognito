@@ -21,7 +21,7 @@ function pad2(number) { return (number < 10 ? "0" : "") + number; }
 function statusFileName(contactName, ts, index, mimetype)
 {
     var safeName = String(contactName || "").replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "");
-    if (!safeName) safeName = "kontak";
+    if (!safeName) safeName = "contact";
 
     var date = new Date(ts > 1e11 ? ts : ts * 1000);
     var stamp = date.getFullYear() + pad2(date.getMonth() + 1) + pad2(date.getDate()) + "-" +
