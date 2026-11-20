@@ -46,12 +46,24 @@ function buildChatMenuContext(chat)
     return { jids: jids, primaryJid: jids[0], name: String(name), isGroup: !!chat.isGroup || chat.id.server == "g.us" };
 }
 
+// WhatsApp Web 2.3000.x: the menu of the open conversation (header three-dot button) is a plain
+// div[role=menu] of button[role=menuitem] without React `chat` props. Such a menu that sits over the
+// conversation pane belongs to the open chat.
+function isMenuOverConversationPane()
+{
+    var outer = document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0];
+    var main = document.getElementById("main");
+    if (!outer || !main) return false;
+    return outer.getBoundingClientRect().left >= main.getBoundingClientRect().left;
+}
+
 document.addEventListener("onDropdownOpened", function()
 {
     var context = null;
     try
     {
         context = buildChatMenuContext(findChatInMenuItems(getOpenDropdownMenuItems()));
+        if (!context && isMenuOverConversationPane()) context = activeChatContext();
         if (context) chatMenuContextCount++;
     }
     catch (exception)

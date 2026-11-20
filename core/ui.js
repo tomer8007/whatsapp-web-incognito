@@ -600,11 +600,7 @@ function appendChatMenuEntries(context)
 
     chatMenuEntries.forEach(function(entry)
     {
-        var item = document.createElement("div");
-        item.className = UIClassNames.DROPDOWN_ENTRY_CLASS + " incognito-chat-menu-entry";
-        revealDropdownItem(item);
-        item.setAttribute("role", "button");
-        item.textContent = t(entry.labelKey);
+        var item = buildChatMenuItem(template, t(entry.labelKey));
         item.addEventListener("click", function(e)
         {
             e.stopPropagation();
@@ -614,6 +610,32 @@ function appendChatMenuEntries(context)
         template.parentElement.appendChild(item);
     });
     chatMenuEntriesShown++;
+}
+
+// A menu entry shaped like WhatsApp's own: a clone of an existing item (button[role=menuitem] in the current build)
+// with its icon removed and the label replaced; a plain div when the item is not a button.
+function buildChatMenuItem(template, label)
+{
+    var item;
+    if (template.tagName == "BUTTON")
+    {
+        item = template.cloneNode(true);
+        var icon = item.querySelector("[aria-hidden='true']");
+        if (icon) icon.remove();
+        var spans = item.querySelectorAll("span");
+        var labelSpan = spans.length > 0 ? spans[spans.length - 1] : null;
+        if (labelSpan) labelSpan.textContent = label; else item.textContent = label;
+        item.classList.add("incognito-chat-menu-entry");
+    }
+    else
+    {
+        item = document.createElement("div");
+        item.className = UIClassNames.DROPDOWN_ENTRY_CLASS + " incognito-chat-menu-entry";
+        item.setAttribute("role", "button");
+        item.textContent = label;
+    }
+    revealDropdownItem(item);
+    return item;
 }
 
 // best effort: WhatsApp closes its menus on an outside click or Escape

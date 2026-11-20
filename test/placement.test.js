@@ -59,5 +59,5 @@ test("ui.js applies the reveal to the sticker item, on every fit pass and to cha
     const code = fs.readFileSync(path.join(require("./helpers/sandbox").ROOT, "core/ui.js"), "utf8");
     assert.ok(/revealDropdownItem\(li\)/.test(code));
     assert.ok(/function fitStickerMenu\(item\)\s*\{\s*try\s*\{\s*revealDropdownItem\(item\)/.test(code));
-    assert.ok(/incognito-chat-menu-entry";\s*revealDropdownItem\(item\)/.test(code));
+    assert.ok(/function buildChatMenuItem[\s\S]*revealDropdownItem\(item\);\s*return item/.test(code));
 });
