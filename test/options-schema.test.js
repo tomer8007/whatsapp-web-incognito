@@ -49,11 +49,10 @@ test("defaultOptions() matches the spec table", () => {
     assert.deepStrictEqual({ ...sandbox.defaultOptions() }, EXPECTED_DEFAULTS);
 });
 
-test("every entry has a label, a group and a valid type", () => {
+test("every entry has a valid type and default, and carries no display text", () => {
     const sandbox = loadSchema();
     for (const entry of sandbox.OPTIONS_SCHEMA) {
-        assert.ok(entry.label, entry.key + " has no label");
-        assert.ok(entry.group, entry.key + " has no group");
+        assert.deepStrictEqual(Object.keys(entry).filter((k) => !["key", "type", "default", "choices"].includes(k)), [], entry.key + " has extra fields");
         assert.ok(["bool", "number", "enum"].includes(entry.type), entry.key + " has bad type");
         if (entry.type === "bool") assert.strictEqual(typeof entry.default, "boolean", entry.key);
         if (entry.type === "number") assert.strictEqual(typeof entry.default, "number", entry.key);
@@ -65,20 +64,6 @@ test("voiceNoteRate offers exactly the spec choices", () => {
     const sandbox = loadSchema();
     const entry = sandbox.OPTIONS_SCHEMA.find((o) => o.key === "voiceNoteRate");
     assert.deepStrictEqual([...entry.choices], [0.75, 1, 1.25, 1.5, 2, 2.5, 3]);
-});
-
-test("the menu renders one checkbox per new boolean option, grouped", () => {
-    const sandbox = loadSchema();
-    const html = sandbox.renderSchemaOptionsHTML(sandbox.defaultOptions());
-    const newBools = sandbox.OPTIONS_SCHEMA.filter((o) => !o.legacy && o.type === "bool");
-    const checkboxes = html.match(/class='checkbox checkbox-incognito/g) || [];
-    assert.strictEqual(checkboxes.length, newBools.length);
-    for (const o of newBools) assert.ok(html.includes(`data-option-key='${o.key}'`), o.key);
-    for (const o of sandbox.OPTIONS_SCHEMA.filter((o) => o.legacy)) {
-        assert.ok(!html.includes(`data-option-key='${o.key}'`), "legacy option rendered twice: " + o.key);
-    }
-    const groups = new Set(sandbox.OPTIONS_SCHEMA.filter((o) => !o.legacy).map((o) => o.group));
-    for (const g of groups) assert.ok(html.includes(g), "missing group " + g);
 });
 
 test("parseOptionValue converts menu input values to the schema type", () => {
