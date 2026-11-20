@@ -918,7 +918,6 @@ body #main[data-incognito-noblur~="avatars"] header img
 }
 
 .incognito-header-button:hover { background: var(--WDS-surface-highlight, rgba(128, 128, 128, 0.2)); }
-.incognito-hidetag-button { width: auto; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(128, 128, 128, 0.4); font: inherit; font-size: 13px; }
 
 /* right-to-left languages */
 .wam-dialog[dir="rtl"] .wam-row-chevron svg { transform: scaleX(-1); }

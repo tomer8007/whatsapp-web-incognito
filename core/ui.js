@@ -756,7 +756,7 @@ function ensureConversationHeaderButton()
     header.appendChild(button);
 }
 
-setInterval(function() { try { ensureConversationHeaderButton(); ensureHidetagHeaderButton(); } catch (e) {} }, 2000);
+setInterval(function() { try { ensureConversationHeaderButton(); refreshHidetagState(); } catch (e) {} }, 2000);
 
 //
 // Hidetag (core/hidetag.js in the page world): a message to a group that mentions every member without any "@name" in the text.
@@ -774,32 +774,22 @@ document.addEventListener("onOptionsUpdate", function(e)
     catch (exception) {}
 });
 
-function ensureHidetagHeaderButton()
+// Keeps the Hidetag state fresh: remembers the open chat when it is a group and drives the composer "@" button (added or removed).
+// A leftover "Hidetag" text button of an older build is removed once.
+function refreshHidetagState()
 {
-    var existing = document.querySelector(".incognito-hidetag-button");
-    var header = document.querySelector("#main header");
-    if (!hidetagEnabledCache || !header)
+    var stale = document.querySelector(".incognito-hidetag-button");
+    if (stale) stale.remove();
+    if (!hidetagEnabledCache)
     {
-        if (existing) existing.remove();
         hidetagActiveContext = null;
-        ensureComposerHidetagButton();
+        ensureComposerHidetagButton(); // removes the button
         return;
     }
     requestActiveChatContext().then(function(context)
     {
         hidetagActiveContext = context && context.isGroup ? context : null;
         ensureComposerHidetagButton();
-        var button = document.querySelector(".incognito-hidetag-button");
-        header = document.querySelector("#main header");
-        if (!context || !context.isGroup || !header) { if (button) button.remove(); return; }
-        if (button) return;
-        button = document.createElement("button");
-        button.type = "button";
-        button.className = "incognito-header-button incognito-hidetag-button";
-        button.textContent = t("hidetag.header");
-        button.title = t("hidetag.title");
-        button.addEventListener("click", function(e) { e.stopPropagation(); openHidetagModal(context); });
-        header.appendChild(button);
     });
 }
 
