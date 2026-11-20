@@ -43,9 +43,9 @@ var sendScheduler = createSendScheduler({
     onSent: function(item) { setTimeout(function() { sendReceiptNow(item.jid); }, 1500); },
 });
 
-chatMenuEntries.push({ id: "schedule-message", labelKey: "menu.scheduleMessage", run: function(context) { openScheduleMessageModal(context); } });
+chatMenuEntries.push({ id: "schedule-message", labelKey: "menu.scheduleMessage", run: function(context) { openScheduleMessageModal(context, "message"); } });
 
-chatMenuEntries.push({ id: "schedule-receipt", labelKey: "menu.scheduleReceipt", run: function(context) { openScheduleReceiptModal(context); } });
+chatMenuEntries.push({ id: "schedule-receipt", labelKey: "menu.scheduleReceipt", run: function(context) { openScheduleMessageModal(context, "ticks"); } });
 
 chatMenuEntries.push({ id: "contact-privacy", labelKey: "menu.contactPrivacy", run: function(context) { openContactPrivacyModal(context); } });
 chatMenuEntries.push({ id: "ephemeral", labelKey: "menu.ephemeral", run: function(context) { openEphemeralModal(context); } });
@@ -75,9 +75,7 @@ function relabelStaticUi()
 {
     var nav = document.querySelector(".menu-item-incognito [role=button], .menu-item-incognito[role=button]");
     if (nav) { nav.setAttribute("title", t("nav.title")); nav.setAttribute("aria-label", t("nav.title")); }
-    var later = document.querySelector(".incognito-later-button");
-    if (later) { later.setAttribute("title", t("sched.later.button")); later.setAttribute("aria-label", t("sched.later.button")); }
-    var header = document.querySelector(".incognito-header-button:not(.incognito-composer-button):not(.incognito-later-button)");
+    var header = document.querySelector(".incognito-header-button:not(.incognito-composer-button)");
     if (header) { header.setAttribute("title", t("header.button")); header.setAttribute("aria-label", t("header.button")); }
     var composer = document.querySelector(".incognito-composer-button");
     if (composer) { composer.setAttribute("title", t("hidetag.composer.tooltip")); composer.setAttribute("aria-label", t("hidetag.composer.tooltip")); }
@@ -347,7 +345,6 @@ function registerUIDiagnostics()
         return Array.prototype.filter.call(items, function(item) { return getComputedStyle(item).opacity != "0"; }).length;
     });
     Diagnostics.register("contacts", "selector", "incognito-header-button", function() { return document.getElementsByClassName("incognito-header-button").length; });
-    Diagnostics.register("contacts", "selector", "incognito-later-button", function() { return document.getElementsByClassName("incognito-later-button").length; });
     Diagnostics.register("ui", "hook", "incognito-menu-icon", function() { return document.getElementsByClassName("menu-item-incognito").length; });
 }
 
@@ -802,34 +799,8 @@ function sendReceiptNow(jid)
     document.dispatchEvent(new CustomEvent("sendReadConfirmationForJid", { detail: JSON.stringify({ jid: jid }) }));
 }
 
-// A second header button right next to the privacy button: "Send later" for the open chat.
-function ensureSendLaterButton()
-{
-    var header = document.querySelector("#main header");
-    if (!header || header.querySelector(".incognito-later-button")) return;
-    var privacy = header.querySelector(".incognito-header-button");
-    if (!privacy) return; // placed right after the privacy button, once that exists
 
-    var button = document.createElement("button");
-    button.type = "button";
-    button.className = "incognito-header-button incognito-later-button";
-    button.title = t("sched.later.button");
-    button.setAttribute("aria-label", t("sched.later.button"));
-    var icon = document.createElement("span");
-    icon.className = "incognito-header-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.style.setProperty("--incognito-icon", 'url("' + extensionUrl("images/send_later.svg") + '")');
-    button.appendChild(icon);
-    button.addEventListener("click", async function(e)
-    {
-        e.stopPropagation();
-        var context = await requestActiveChatContext();
-        if (context) openScheduleMessageModal(context);
-    });
-    privacy.after(button);
-}
-
-setInterval(function() { try { ensureConversationHeaderButton(); ensureSendLaterButton(); refreshHidetagState(); } catch (e) {} }, 2000);
+setInterval(function() { try { ensureConversationHeaderButton(); refreshHidetagState(); } catch (e) {} }, 2000);
 
 //
 // Hidetag (core/hidetag.js in the page world): a message to a group that mentions every member without any "@name" in the text.
@@ -1521,48 +1492,9 @@ document.addEventListener("onReadConfirmationBlocked", function(e)
 document.addEventListener("onScheduleReceiptClick", function(e)
 {
     var data = JSON.parse(e.detail);
-    if (data.context) openScheduleReceiptModal(data.context);
+    if (data.context) openScheduleMessageModal(data.context, "ticks");
 });
 
-async function openScheduleReceiptModal(context)
-{
-    var jid = context.primaryJid;
-    var existing = receiptScheduler.list().find(function(item) { return item.jid == jid; });
-
-    var result = await WAModal.fire({
-        title: t("rcpt.title"),
-        html: "<div style='font-size: 14px'><b>" + escapeHTML(context.name) + "</b><br><br>" +
-              (existing ? escapeHTML(t("rcpt.existing", { time: formatEditTime(existing.dueAt) })) + "<br><br>" : "") +
-              "<select id='incognito-receipt-choice' class='wam-select' style='margin: 0 0 8px 0'>" +
-              "<option value='15m'>" + escapeHTML(t("rcpt.m15")) + "</option><option value='1h'>" + escapeHTML(t("rcpt.h1")) + "</option><option value='3h'>" + escapeHTML(t("rcpt.h3")) + "</option>" +
-              "<option value='time'>" + escapeHTML(t("rcpt.time")) + "</option></select><br>" +
-              "<input type='time' id='incognito-receipt-time' class='wam-input' style='margin: 0; display: none'><br>" +
-              "<span style='font-size: 12px; opacity: 0.8'>" + escapeHTML(t("rcpt.note")) + "</span></div>",
-        showCancelButton: true,
-        showDenyButton: !!existing,
-        denyButtonText: t("rcpt.cancelSchedule"),
-        confirmButtonText: t("rcpt.confirm"),
-        cancelButtonText: t("common.close"),
-        didOpen: function()
-        {
-            var choice = document.getElementById("incognito-receipt-choice");
-            choice.addEventListener("change", function()
-            {
-                document.getElementById("incognito-receipt-time").style.display = choice.value == "time" ? "" : "none";
-            });
-        },
-        preConfirm: function()
-        {
-            var dueAt = resolveScheduleChoice(document.getElementById("incognito-receipt-choice").value, Date.now(),
-                                              document.getElementById("incognito-receipt-time").value);
-            if (dueAt == null) { WAModal.showValidationMessage(t("rcpt.invalidTime")); return false; }
-            return dueAt;
-        },
-    });
-
-    if (result.isDenied) await receiptScheduler.cancel(jid);
-    else if (result.isConfirmed) await receiptScheduler.schedule(jid, result.value);
-}
 
 //
 // Screen lock passcode (core/privacy_screen.js). Only {salt, hash} is stored, in chrome.storage.local["lockPasscode"].
@@ -1647,10 +1579,16 @@ function toDateTimeLocalValue(ms)
     return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + "T" + pad(date.getHours()) + ":" + pad(date.getMinutes());
 }
 
-function scheduledMessagesHTML(items)
+function scheduledMessagesHTML(items, receipts)
 {
-    if (items.length == 0) return "";
-    return "<div style='margin-top: 12px; font-size: 13px'><b>" + escapeHTML(t("sched.list")) + "</b>" + items.map(function(item)
+    receipts = receipts || [];
+    if (items.length == 0 && receipts.length == 0) return "";
+    var receiptRows = receipts.map(function(item)
+    {
+        return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + "<br><span style='opacity: 0.8'>" + escapeHTML(t("sched.later.ticksOnly")) + "</span> " +
+               "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-left: 8px' data-rcpt-cancel='" + escapeHTML(item.jid) + "'>" + escapeHTML(t("common.cancel")) + "</button></div>";
+    }).join("");
+    return "<div style='margin-top: 12px; font-size: 13px'><b>" + escapeHTML(t("sched.list")) + "</b>" + receiptRows + items.map(function(item)
     {
         var status = item.status == "error" ? " " + escapeHTML(t("sched.error", { error: userErrorText(item.error) })) : (item.status == "overdue" ? " " + escapeHTML(t("sched.overdueTag")) : "");
         return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + status + "<br><span style='opacity: 0.8'>" +
@@ -1665,9 +1603,11 @@ function readOptions()
 }
 
 // "Send later": one dialog for the open chat: message, time (presets or custom), blue ticks toggle, this chat's list.
-async function openScheduleMessageModal(context)
+async function openScheduleMessageModal(context, mode)
 {
+    var withMessage = mode != "ticks";
     var mine = sendScheduler.list().filter(function(item) { return context.jids.indexOf(item.jid) > -1; });
+    var mineReceipts = receiptScheduler.list().filter(function(item) { return context.jids.indexOf(item.jid) > -1; });
     // the blue ticks toggle starts on when this chat's read receipts are held back (its own rule, else the global option)
     var options = await readOptions();
     var ticksDefault = typeof resolveRule == "function" ? resolveRule(contactRules, context.jids, "readReceipts", !!options.readConfirmationsHook) : false;
@@ -1675,7 +1615,9 @@ async function openScheduleMessageModal(context)
     await WAModal.fire({
         title: t("sched.later.title"),
         html: "<div style='text-align: left; font-size: 14px'><b>" + escapeHTML(context.name) + "</b></div>" +
-              "<textarea id='incognito-sched-text' class='wam-textarea' placeholder='" + escapeHTML(t("sched.placeholder")) + "' style='margin: 8px 0'></textarea>" +
+              "<label style='display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 8px; text-align: left'>" +
+                  "<input type='checkbox' id='incognito-sched-withmsg'" + (withMessage ? " checked" : "") + "> <span>" + escapeHTML(t("sched.later.withMessage")) + "</span></label>" +
+              "<textarea id='incognito-sched-text' class='wam-textarea' placeholder='" + escapeHTML(t("sched.placeholder")) + "' style='margin: 8px 0" + (withMessage ? "" : "; display: none") + "'></textarea>" +
               "<select id='incognito-sched-preset' class='wam-select' style='margin: 0 0 8px 0'>" +
                   "<option value='10m'>" + escapeHTML(t("sched.later.p10m")) + "</option>" +
                   "<option value='1h'>" + escapeHTML(t("sched.later.p1h")) + "</option>" +
@@ -1683,9 +1625,9 @@ async function openScheduleMessageModal(context)
                   "<option value='custom'>" + escapeHTML(t("sched.later.pCustom")) + "</option></select>" +
               "<input type='datetime-local' id='incognito-sched-time' class='wam-input' style='margin: 0; display: none' value='" + toDateTimeLocalValue(Date.now() + 10 * 60 * 1000) + "'>" +
               "<label style='display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 8px; text-align: left'>" +
-                  "<input type='checkbox' id='incognito-sched-ticks'" + (ticksDefault ? " checked" : "") + "> <span>" + escapeHTML(t("sched.later.ticks")) + "</span></label>" +
+                  "<input type='checkbox' id='incognito-sched-ticks'" + ((ticksDefault || !withMessage) ? " checked" : "") + (withMessage ? "" : " disabled") + "> <span>" + escapeHTML(t("sched.later.ticks")) + "</span></label>" +
               "<div style='font-size: 12px; opacity: 0.8; margin-top: 8px'>" + escapeHTML(t("sched.later.hint")) + "</div>" +
-              "<div id='incognito-sched-list'>" + scheduledMessagesHTML(mine) + "</div>",
+              "<div id='incognito-sched-list'>" + scheduledMessagesHTML(mine, mineReceipts) + "</div>",
         width: 560,
         showCancelButton: true,
         confirmButtonText: t("sched.later.confirm"),
@@ -1693,12 +1635,22 @@ async function openScheduleMessageModal(context)
         didOpen: function(popup)
         {
             var preset = document.getElementById("incognito-sched-preset");
+            var withMsg = document.getElementById("incognito-sched-withmsg");
+            var ticks = document.getElementById("incognito-sched-ticks");
+            withMsg.addEventListener("change", function()
+            {
+                document.getElementById("incognito-sched-text").style.display = withMsg.checked ? "" : "none";
+                if (!withMsg.checked) ticks.checked = true;
+                ticks.disabled = !withMsg.checked;
+            });
             preset.addEventListener("change", function()
             {
                 document.getElementById("incognito-sched-time").style.display = preset.value == "custom" ? "" : "none";
             });
             popup.addEventListener("click", async function(e)
             {
+                var rcptButton = e.target.closest ? e.target.closest("[data-rcpt-cancel]") : null;
+                if (rcptButton) { await receiptScheduler.cancel(rcptButton.dataset.rcptCancel); rcptButton.parentElement.remove(); return; }
                 var button = e.target.closest ? e.target.closest("[data-sched-cancel]") : null;
                 if (!button) return;
                 await sendScheduler.cancel(button.dataset.schedCancel);
@@ -1707,17 +1659,19 @@ async function openScheduleMessageModal(context)
         },
         preConfirm: function()
         {
-            var text = document.getElementById("incognito-sched-text").value;
+            var onlyTicks = !document.getElementById("incognito-sched-withmsg").checked;
+            var text = onlyTicks ? "" : document.getElementById("incognito-sched-text").value;
             var choice = document.getElementById("incognito-sched-preset").value;
             var dueAt = choice == "custom" ? new Date(document.getElementById("incognito-sched-time").value).getTime() : resolveSendLaterPreset(choice, Date.now());
-            if (!text.trim()) { WAModal.showValidationMessage(t("sched.err.empty")); return false; }
+            if (!onlyTicks && !text.trim()) { WAModal.showValidationMessage(t("sched.err.empty")); return false; }
             if (!isFinite(dueAt) || dueAt < Date.now() + 5000) { WAModal.showValidationMessage(t("sched.err.future")); return false; }
-            return { text: text, dueAt: dueAt, alsoReceipt: document.getElementById("incognito-sched-ticks").checked };
+            return { onlyTicks: onlyTicks, text: text, dueAt: dueAt, alsoReceipt: document.getElementById("incognito-sched-ticks").checked };
         },
     }).then(async function(result)
     {
         if (!result.isConfirmed) return;
-        await sendScheduler.add(context.primaryJid, result.value.text, result.value.dueAt, context.name, { alsoReceipt: result.value.alsoReceipt });
+        if (result.value.onlyTicks) await receiptScheduler.schedule(context.primaryJid, result.value.dueAt);
+        else await sendScheduler.add(context.primaryJid, result.value.text, result.value.dueAt, context.name, { alsoReceipt: result.value.alsoReceipt });
         showScheduleToast(t("sched.done", { time: formatEditTime(result.value.dueAt) }), "success");
     });
 }

@@ -234,10 +234,14 @@ test("resolveSendLaterPreset: 10 minutes, 1 hour, tomorrow 08:00", () => {
     assert.strictEqual(sandbox.resolveSendLaterPreset("custom", now), null);
 });
 
-test("ui.js wires the Send later header button and dialog options", () => {
+test("ui.js: one Send later dialog serves the receipt warning and both menu entries, no header button", () => {
     const code = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "core", "ui.js"), "utf8");
-    assert.ok(/function ensureSendLaterButton/.test(code));
-    assert.ok(/ensureConversationHeaderButton\(\);\s*ensureSendLaterButton\(\);/.test(code));
+    assert.ok(!/ensureSendLaterButton|incognito-later-button/.test(code));
+    assert.ok(!/openScheduleReceiptModal/.test(code));
+    assert.ok(/onScheduleReceiptClick[\s\S]*openScheduleMessageModal\(data\.context, "ticks"\)/.test(code));
+    assert.ok(/menu\.scheduleReceipt[\s\S]*openScheduleMessageModal\(context, "ticks"\)/.test(code));
+    assert.ok(/menu\.scheduleMessage[\s\S]*openScheduleMessageModal\(context, "message"\)/.test(code));
+    assert.ok(/receiptScheduler\.schedule\(context\.primaryJid, result\.value\.dueAt\)/.test(code));
     assert.ok(/alsoReceipt: result\.value\.alsoReceipt/.test(code));
     assert.ok(/resolveSendLaterPreset\(choice, Date\.now\(\)\)/.test(code));
     assert.ok(/onSent: function\(item\)/.test(code));
