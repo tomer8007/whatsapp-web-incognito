@@ -342,7 +342,7 @@ function findStatusEntry(participantJid)
     var entry = null;
     try
     {
-        var wid = (window.WhatsAppAPI && WhatsAppAPI.WAWebWidFactory && WhatsAppAPI.WAWebWidFactory.createWid) ? WhatsAppAPI.WAWebWidFactory.createWid(jid) : jid;
+        var wid = (isUserJid(jid) && window.WhatsAppAPI && WhatsAppAPI.WAWebWidFactory && WhatsAppAPI.WAWebWidFactory.createWid) ? WhatsAppAPI.WAWebWidFactory.createWid(jid) : jid;
         entry = collection.get(wid);
     }
     catch (e) { /* fall back to a scan */ }

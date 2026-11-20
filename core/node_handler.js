@@ -46,7 +46,8 @@ NodeHandler.optionsFor = function (jid)
 // The global setting, unless a rule for this contact (pn or lid form) says otherwise.
 NodeHandler.isBlockedForContact = function (jid, field, globalBlocked)
 {
-    if (!jid || typeof resolveRule != "function") return globalBlocked;
+    // an empty JID, or one without a user part ("s.whatsapp.net", "call"), has no contact rules: no lookups at all
+    if (!jid || typeof resolveRule != "function" || jidParts(jid) == null) return globalBlocked;
     try
     {
         return resolveRule(contactRules, jidCandidates(jid, lidPnMap), field, globalBlocked);

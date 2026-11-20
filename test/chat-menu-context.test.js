@@ -129,3 +129,55 @@ test("chatMatchesJid matches the PN of a LID chat, and the chat context lists th
     assert.strictEqual(s.chatMatchesJid(chat, "777@c.us"), false);
     assert.deepStrictEqual([...s.buildChatMenuContext(chat).jids].sort(), ["628111@c.us", "9@lid"]);
 });
+
+// ---- no wid for JIDs that are not people (WhatsApp logs "Domain not supported") ----
+
+test("lookupCandidateJids builds a wid only for a person's JID", () => {
+    const s = load();
+    for (const [jid, expectCalls] of [["s.whatsapp.net", 0], ["@s.whatsapp.net", 0], ["status@broadcast", 0], ["123@g.us", 0], ["call", 0], ["", 0], [null, 0],
+                                      ["123@newsletter", 0], ["123@bot", 0], ["123@c.us", 1], ["123@s.whatsapp.net", 1], ["123:7@lid", 1]]) {
+        let calls = 0;
+        const deps = { lidUtils: { toLid: () => undefined, toPn: () => undefined }, createWid: (j) => { calls++; return wid(j); } };
+        assert.doesNotThrow(() => s.lookupCandidateJids(jid, deps));
+        assert.strictEqual(calls, expectCalls, String(jid));
+    }
+});
+
+test("lookupCandidateJids still maps PN to LID and back for people", () => {
+    const s = load();
+    const deps = { lidUtils: { toLid: (w) => wid("9@lid"), toPn: () => wid("628@c.us") }, createWid: (j) => wid(j) };
+    assert.deepStrictEqual([...s.lookupCandidateJids("628@s.whatsapp.net", deps)], ["628@c.us", "9@lid"]);
+    assert.deepStrictEqual([...s.lookupCandidateJids("9@lid", deps)], ["9@lid", "628@c.us"]);
+    assert.deepStrictEqual([...s.lookupCandidateJids("123@g.us", deps)], ["123@g.us"]);
+});
+
+test("chat lookup keeps working for groups and status, but never feeds createWid a bare domain", () => {
+    const s = load();
+    const group = { id: Object.assign(wid("123@g.us"), { server: "g.us" }), msgs: { getModelsArray: () => [] } };
+    const seen = [];
+    const deps = { collection: { get: (w) => (w.jid == "123@g.us" ? group : undefined), getModelsArray: () => [group] },
+                   createWid: (jid) => { seen.push(jid); return Object.assign(wid(jid), { jid }); }, lidUtils: null, lidPnMap: new Map([["s.whatsapp.net", "x"]]) };
+    assert.strictEqual(s.resolveChat(deps, "123@g.us"), group);
+    assert.strictEqual(s.resolveChat(deps, "s.whatsapp.net"), null);
+    assert.ok(!seen.includes("s.whatsapp.net") && !seen.includes("x"), "createWid saw: " + seen.join(","));
+});
+
+test("liveLidCounterparts skips non-person JIDs and answers repeated asks from its cache", () => {
+    const s = load();
+    let widCalls = 0;
+    s.window.WhatsAppAPI = { ChatCollection: {}, WAWebWidFactory: { createWid: (j) => { widCalls++; return wid(j); } } };
+    s.require = () => ({ toLid: () => wid("9@lid"), toPn: () => wid("628@c.us") });
+    assert.deepStrictEqual([...s.liveLidCounterparts("s.whatsapp.net")], []);
+    assert.deepStrictEqual([...s.liveLidCounterparts("status@broadcast")], []);
+    assert.strictEqual(widCalls, 0);
+    for (let i = 0; i < 5; i++) assert.deepStrictEqual([...s.liveLidCounterparts("628@c.us")], ["9@lid"]);
+    assert.strictEqual(widCalls, 1, "resolved once, then cached");
+});
+
+test("jidParts needs a user and a server", () => {
+    const s = load();
+    assert.strictEqual(s.jidParts("s.whatsapp.net"), null);
+    assert.strictEqual(s.jidParts("@s.whatsapp.net"), null);
+    assert.strictEqual(s.jidParts("123@"), null);
+    assert.deepStrictEqual({ ...s.jidParts("123:4@lid") }, { user: "123:4", server: "lid" });
+});

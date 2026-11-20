@@ -156,6 +156,29 @@ function isChatBlocked(jid)
 // own lidPnMap), and as a last resort a scan of the loaded chats for the message id (known for edits and revokes).
 //
 // deps: { collection: {get(wid), getModelsArray()}, createWid(jid), lidUtils: {toLid(wid), toPn(wid)}, lidPnMap: Map }
+// {user, server} of a "user@server" JID, or null when either part is missing ("s.whatsapp.net", "@s.whatsapp.net", "", null)
+function jidParts(jid)
+{
+    var text = String(jid == null ? "" : jid);
+    var at = text.indexOf("@");
+    if (at < 1 || at == text.length - 1) return null;
+    return { user: text.slice(0, at), server: text.slice(at + 1) };
+}
+
+// a person's JID (phone number or LID): the only kind WhatsApp's LID mapping knows. Other JIDs never reach createWid on the hot path.
+function isUserJid(jid)
+{
+    var parts = jidParts(jid);
+    return !!parts && (parts.server == "c.us" || parts.server == "s.whatsapp.net" || parts.server == "lid");
+}
+
+// a JID WhatsApp's wid factory accepts for a chat lookup (people, groups, status)
+function isChatLookupJid(jid)
+{
+    var parts = jidParts(jid);
+    return !!parts && (isUserJid(jid) || parts.server == "g.us" || parts.server == "broadcast");
+}
+
 function lookupCandidateJids(jid, deps)
 {
     var candidates = [];
@@ -167,14 +190,15 @@ function lookupCandidateJids(jid, deps)
     }
 
     add(jid);
-    var server = String(jid).split("@")[1];
+    var parts = jidParts(jid);
     try
     {
-        if (deps.lidUtils && deps.createWid)
+        // only a person's JID is turned into a wid (anything else logs "Domain not supported" in WhatsApp and is wasted work)
+        if (parts && deps.lidUtils && deps.createWid && isUserJid(jid))
         {
             var wid = deps.createWid(normalizeJID(String(jid)));
-            if (server == "c.us" || server == "s.whatsapp.net") add(deps.lidUtils.toLid(wid));
-            else if (server == "lid") add(deps.lidUtils.toPn(wid));
+            if (parts.server == "c.us" || parts.server == "s.whatsapp.net") add(deps.lidUtils.toLid(wid));
+            else if (parts.server == "lid") add(deps.lidUtils.toPn(wid));
         }
     }
     catch (e) { /* no mapping known */ }
@@ -190,6 +214,7 @@ function resolveChat(deps, jid, messageId)
     var candidates = lookupCandidateJids(jid, deps);
     for (var i = 0; i < candidates.length; i++)
     {
+        if (!isChatLookupJid(candidates[i])) continue;
         try
         {
             var chat = collection.get(deps.createWid(candidates[i]));
@@ -230,12 +255,23 @@ function liveChatLookupDeps()
 }
 
 // the other id forms of a JID (LID for a PN, PN for a LID) from WhatsApp's own mapping; [] when unknown
+// The same JID is asked for on every outgoing packet: remember the answer for a short time (small cap)
+var lidCounterpartCache = new Map();
+var LID_COUNTERPART_TTL_MS = 30000;
+var LID_COUNTERPART_CACHE_MAX = 500;
+
 function liveLidCounterparts(jid)
 {
+    if (!isUserJid(jid)) return [];
     var deps = liveChatLookupDeps();
     if (!deps) return [];
     var normalized = normalizeJID(String(jid));
-    return lookupCandidateJids(jid, { lidUtils: deps.lidUtils, createWid: deps.createWid, lidPnMap: null }).filter(function(c) { return c != normalized; });
+    var cached = lidCounterpartCache.get(normalized);
+    if (cached && Date.now() - cached.at < LID_COUNTERPART_TTL_MS) return cached.value;
+    var value = lookupCandidateJids(jid, { lidUtils: deps.lidUtils, createWid: deps.createWid, lidPnMap: null }).filter(function(c) { return c != normalized; });
+    if (lidCounterpartCache.size >= LID_COUNTERPART_CACHE_MAX) lidCounterpartCache.clear();
+    lidCounterpartCache.set(normalized, { value: value, at: Date.now() });
+    return value;
 }
 
 // The PN form of a chat's id (for LID chats), as a normalized JID, or null

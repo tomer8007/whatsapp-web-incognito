@@ -229,3 +229,15 @@ test("jidCandidates also uses WhatsApp's own LID mapping when it is available", 
     s.liveLidCounterparts = (jid) => (jid == "628@c.us" ? ["9@lid"] : []);
     assert.deepStrictEqual([...s.jidCandidates("628@c.us", null)], ["628@c.us", "9@lid"]);
 });
+
+test("isBlockedForContact does no lookups for JIDs without a user part, and still follows the rules for contacts and groups", () => {
+    const sandbox = loadScripts(createSandbox(), ["core/options_schema.js", "core/utils.js", "core/contact_rules.js", "core/node_handler.js"]);
+    let lookups = 0;
+    sandbox.liveLidCounterparts = () => { lookups++; return []; };
+    sandbox.contactRules = { "1@c.us": { readReceipts: "allow" }, "9@g.us": { readReceipts: "block" } };
+    for (const jid of ["", "s.whatsapp.net", "call", null, undefined]) assert.strictEqual(sandbox.NodeHandler.isBlockedForContact(jid, "readReceipts", true), true, String(jid));
+    assert.strictEqual(lookups, 0);
+    assert.strictEqual(sandbox.NodeHandler.isBlockedForContact("1@c.us", "readReceipts", true), false);
+    assert.strictEqual(sandbox.NodeHandler.isBlockedForContact("9@g.us", "readReceipts", false), true);
+    assert.strictEqual(sandbox.NodeHandler.isBlockedForContact("2@c.us", "readReceipts", true), true);
+});
