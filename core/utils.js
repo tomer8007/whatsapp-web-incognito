@@ -149,10 +149,156 @@ function isChatBlocked(jid)
     return false;
 }
 
-async function getChatByJID(jid)
+//
+// Chat lookup that understands both phone-number (PN) and LID ids. WhatsApp keys most chats by LID now, but incoming nodes
+// are rewritten to the sender's PN, and ChatCollection.get(pnWid) returns nothing for a LID chat (verified on the live build:
+// 0 of 40 found by PN, 40 of 40 through toLid). Order: the JID as given, its LID/PN counterpart (WAWebLidMigrationUtils, then our
+// own lidPnMap), and as a last resort a scan of the loaded chats for the message id (known for edits and revokes).
+//
+// deps: { collection: {get(wid), getModelsArray()}, createWid(jid), lidUtils: {toLid(wid), toPn(wid)}, lidPnMap: Map }
+// {user, server} of a "user@server" JID, or null when either part is missing ("s.whatsapp.net", "@s.whatsapp.net", "", null)
+function jidParts(jid)
 {
-    if (jid == undefined) debugger;
+    var text = String(jid == null ? "" : jid);
+    var at = text.indexOf("@");
+    if (at < 1 || at == text.length - 1) return null;
+    return { user: text.slice(0, at), server: text.slice(at + 1) };
+}
+
+// a person's JID (phone number or LID): the only kind WhatsApp's LID mapping knows. Other JIDs never reach createWid on the hot path.
+function isUserJid(jid)
+{
+    var parts = jidParts(jid);
+    return !!parts && (parts.server == "c.us" || parts.server == "s.whatsapp.net" || parts.server == "lid");
+}
+
+// a JID WhatsApp's wid factory accepts for a chat lookup (people, groups, status)
+function isChatLookupJid(jid)
+{
+    var parts = jidParts(jid);
+    return !!parts && (isUserJid(jid) || parts.server == "g.us" || parts.server == "broadcast");
+}
+
+function lookupCandidateJids(jid, deps)
+{
+    var candidates = [];
+    function add(value)
+    {
+        if (value == null) return;
+        var text = normalizeJID(String(value));
+        if (candidates.indexOf(text) == -1) candidates.push(text);
+    }
+
+    add(jid);
+    var parts = jidParts(jid);
+    try
+    {
+        // only a person's JID is turned into a wid (anything else logs "Domain not supported" in WhatsApp and is wasted work)
+        if (parts && deps.lidUtils && deps.createWid && isUserJid(jid))
+        {
+            var wid = deps.createWid(normalizeJID(String(jid)));
+            if (parts.server == "c.us" || parts.server == "s.whatsapp.net") add(deps.lidUtils.toLid(wid));
+            else if (parts.server == "lid") add(deps.lidUtils.toPn(wid));
+        }
+    }
+    catch (e) { /* no mapping known */ }
+    if (deps.lidPnMap) add(deps.lidPnMap.get(normalizeJID(String(jid))));
+    return candidates;
+}
+
+function resolveChat(deps, jid, messageId)
+{
+    var collection = deps.collection;
+    if (!collection) return null;
+
+    var candidates = lookupCandidateJids(jid, deps);
+    for (var i = 0; i < candidates.length; i++)
+    {
+        if (!isChatLookupJid(candidates[i])) continue;
+        try
+        {
+            var chat = collection.get(deps.createWid(candidates[i]));
+            if (chat) return chat;
+        }
+        catch (e) { /* try the next form */ }
+    }
+
+    if (messageId && collection.getModelsArray)
+    {
+        var chats = collection.getModelsArray();
+        for (var c = 0; c < chats.length; c++)
+        {
+            try
+            {
+                var models = chats[c].msgs && chats[c].msgs.getModelsArray ? chats[c].msgs.getModelsArray() : [];
+                for (var m = 0; m < models.length; m++)
+                    if (models[m].id && models[m].id.id == messageId) return chats[c];
+            }
+            catch (e) { /* skip this chat */ }
+        }
+    }
+    return null;
+}
+
+// the live dependencies, or null while WhatsApp is not ready
+function liveChatLookupDeps()
+{
+    if (!window.WhatsAppAPI || !WhatsAppAPI.ChatCollection || !WhatsAppAPI.WAWebWidFactory) return null;
+    var lidUtils = null;
+    try { lidUtils = require("WAWebLidMigrationUtils"); } catch (e) { lidUtils = null; }
+    return {
+        collection: WhatsAppAPI.ChatCollection,
+        createWid: function(jid) { return WhatsAppAPI.WAWebWidFactory.createWid(jid); },
+        lidUtils: lidUtils,
+        lidPnMap: typeof lidPnMap != "undefined" ? lidPnMap : null,
+    };
+}
+
+// the other id forms of a JID (LID for a PN, PN for a LID) from WhatsApp's own mapping; [] when unknown
+// The same JID is asked for on every outgoing packet: remember the answer for a short time (small cap)
+var lidCounterpartCache = new Map();
+var LID_COUNTERPART_TTL_MS = 30000;
+var LID_COUNTERPART_CACHE_MAX = 500;
+
+function liveLidCounterparts(jid)
+{
+    if (!isUserJid(jid)) return [];
+    var deps = liveChatLookupDeps();
+    if (!deps) return [];
+    var normalized = normalizeJID(String(jid));
+    var cached = lidCounterpartCache.get(normalized);
+    if (cached && Date.now() - cached.at < LID_COUNTERPART_TTL_MS) return cached.value;
+    var value = lookupCandidateJids(jid, { lidUtils: deps.lidUtils, createWid: deps.createWid, lidPnMap: null }).filter(function(c) { return c != normalized; });
+    if (lidCounterpartCache.size >= LID_COUNTERPART_CACHE_MAX) lidCounterpartCache.clear();
+    lidCounterpartCache.set(normalized, { value: value, at: Date.now() });
+    return value;
+}
+
+// The PN form of a chat's id (for LID chats), as a normalized JID, or null
+function chatPnJid(chat)
+{
+    try
+    {
+        if (!chat || !chat.id || chat.id.server != "lid") return null;
+        var lidUtils = require("WAWebLidMigrationUtils");
+        var pn = lidUtils.toPn(chat.id);
+        return pn ? normalizeJID(pn.toString()) : null;
+    }
+    catch (e) { return null; }
+}
+
+// jid: a PN or LID JID. messageId (optional): lets the lookup fall back to scanning the loaded chats.
+async function getChatByJID(jid, messageId)
+{
+    if (jid == undefined) waDebugBreak();
     jid = normalizeJID(jid);
+
+    var deps = liveChatLookupDeps();
+    if (deps)
+    {
+        var resolved = resolveChat(deps, jid, messageId);
+        if (resolved) return resolved;
+    }
 
     if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
     {
@@ -190,6 +336,19 @@ function getJidOfChat(chat)
     return normalizeJID(jid);
 }
 
+// does this chat belong to the JID? Compares every form of the chat (its id, its LID and its PN)
+function chatMatchesJid(chat, jid)
+{
+    if (!chat || !chat.id || jid == null) return false;
+    var wanted = normalizeJID(String(jid));
+    var forms = [chat.id, chat.accountLid, chatPnJid(chat)];
+    for (var i = 0; i < forms.length; i++)
+    {
+        if (forms[i] && normalizeJID(forms[i].toString()) == wanted) return true;
+    }
+    return !!(chat.id.user && chat.id.user == wanted.split("@")[0]);
+}
+
 function normalizeJID(jid)
 {
     if (jid.includes("@s.whatsapp.net")) jid = jid.replace("@s.whatsapp.net", "@c.us");
@@ -209,18 +368,6 @@ const arrayBufferToBase64 = (buffer) =>
         binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
-}
-
-function showToast(message)
-{
-    var appElement = document.getElementsByClassName("app-wrapper-web")[0];
-    var toast = document.createElement("div");
-    toast.setAttribute("class", "f1UZe");
-    toast.style.transformOrigin = "left top";
-    toast.innerHTML = "<div class=\"hYvJ8\">" + message + "</div>";
-    appElement.insertBefore(toast, appElement.firstChild);
-    Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-    setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
 }
 
 function exportIdbDatabase(idbDatabase) 
@@ -370,7 +517,7 @@ function FindReact(dom, traverseUp = 0)
 
     if (reactElement == null)
     {
-        debugger;
+        waDebugBreak();
     }
 
     return reactElement;
@@ -466,4 +613,131 @@ function base64ToArrayBuffer(base64)
 function toArayBufer(array)
 {
     return array.buffer.slice(array.byteOffset, array.byteLength + array.byteOffset);
+}
+
+// Pauses in the debugger only in debug mode (type `WAdebugMode = true` in the console).
+function waDebugBreak()
+{
+    if (window.WAdebugMode)
+    {
+        debugger;
+    }
+}
+
+// Returns the first loaded module export named `exportName` (optionally only in modules whose name matches `nameHint`), or null.
+// Uses the Meta module system map (require("__debug").modulesMap). Modules that are not initialized yet are only
+// required when their name matches `nameHint`. Hits are cached; all errors are swallowed.
+var findExportCache = new Map();
+function findExport(exportName, nameHint)
+{
+    var cacheKey = exportName + "|" + (nameHint ? String(nameHint) : "");
+    if (findExportCache.has(cacheKey)) return findExportCache.get(cacheKey);
+
+    var modulesMap = null;
+    try
+    {
+        modulesMap = require("__debug").modulesMap;
+    }
+    catch (e)
+    {
+        return null;
+    }
+    if (!modulesMap) return null;
+
+    var names = Object.keys(modulesMap);
+    for (var i = 0; i < names.length; i++)
+    {
+        var name = names[i];
+        try
+        {
+            var record = modulesMap[name];
+            var exports = record ? record.exports : null;
+            if ((exports == null || typeof exports != "object") && nameHint && nameHint.test(name))
+            {
+                exports = require(name);
+            }
+            if (exports != null && (typeof exports == "object" || typeof exports == "function") && exports[exportName] != null)
+            {
+                findExportCache.set(cacheKey, exports[exportName]);
+                return exports[exportName];
+            }
+        }
+        catch (e)
+        {
+            // module failed to load: skip it
+        }
+    }
+
+    return null;
+}
+
+//
+// IndexedDB helper. It lives here (not in its own file) so it is always loaded before vault.js and interception.js.
+//
+// Self-healing IndexedDB opener (page world). Never deletes data.
+//
+// openDatabaseHealing({ indexedDB, name, upgrade, isHealthy, onOpen, onClose, log })
+//   1. Opens `name` WITHOUT a version, so any existing version works (2, 3 with or without the stores, higher).
+//      A database that does not exist yet is created at v1 and `upgrade(db, txn, 0)` builds the whole schema.
+//   2. If `isHealthy(db)` is false (a store is missing), closes and reopens at db.version + 1 and runs
+//      `upgrade(db, txn, oldVersion)`. `upgrade` must create only what is missing (guard with contains()).
+//   3. Installs `onversionchange` (close, so another tab or an old connection never blocks an upgrade)
+//      and re-opens afterwards (unless `reopenOnVersionChange: false`, for lazy openers). `onOpen(db)` is called for every usable connection, `onClose(db)` when it is released.
+// Resolves with the open connection, rejects when the open fails.
+function openDatabaseHealing(options)
+{
+    var idb = options.indexedDB;
+    var log = options.log || function() {};
+    var healAttempts = 0;
+
+    function request(version)
+    {
+        return new Promise(function(resolve, reject)
+        {
+            var req = version == null ? idb.open(options.name) : idb.open(options.name, version);
+            req.onupgradeneeded = function(event)
+            {
+                options.upgrade(req.result, req.transaction, event.oldVersion || 0);
+            };
+            req.onblocked = function()
+            {
+                // Another connection still holds an older version. It will get versionchange and close;
+                // this request then continues by itself.
+                log("WhatsIncognito: database '" + options.name + "' upgrade is waiting for other connections to close");
+            };
+            req.onerror = function() { reject(req.error); };
+            req.onsuccess = function() { resolve(req.result); };
+        });
+    }
+
+    function attach(db)
+    {
+        db.onversionchange = function()
+        {
+            try { db.close(); } catch (e) {}
+            if (options.onClose) options.onClose(db);
+            // Re-open once whoever is upgrading is done. Errors are not fatal: the next page load opens it again.
+            if (options.reopenOnVersionChange !== false)
+            {
+                openDatabaseHealing(options).catch(function(e) { log("WhatsIncognito: reopening '" + options.name + "' failed", e); });
+            }
+        };
+        db.onclose = function() { if (options.onClose) options.onClose(db); };
+        if (options.onOpen) options.onOpen(db);
+        return db;
+    }
+
+    return request(null).then(function(db)
+    {
+        var healthy = true;
+        try { healthy = options.isHealthy(db); } catch (e) { healthy = false; }
+        if (healthy || healAttempts++ > 0)
+        {
+            return attach(db);
+        }
+        var nextVersion = db.version + 1;
+        db.close();
+        log("WhatsIncognito: healing database '" + options.name + "' (v" + db.version + " -> v" + nextVersion + ")");
+        return request(nextVersion).then(attach);
+    });
 }

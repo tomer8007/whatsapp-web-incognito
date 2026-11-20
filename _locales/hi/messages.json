@@ -1,0 +1,12 @@
+{
+  "extName": {
+    "message": "WAIncognito - Incognito for WhatsApp™",
+    "description": "Extension name (brand, not translated)"
+  },
+  "extDescription": {
+    "message": "रीड रसीद और उपस्थिति अपडेट को नियंत्रित करके WhatsApp™ Web पर अदृश्य रहें"
+  },
+  "extActionTitle": {
+    "message": "WhatsApp Web खोलें"
+  }
+}

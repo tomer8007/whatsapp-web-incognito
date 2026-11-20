@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "WAIncognito - Incognito for WhatsApp™",
+  "name": "__MSG_extName__",
+  "default_locale": "en",
   "short_name": "WAIncognito",
-  "description": "Be invisible on WhatsApp™ Web by controlling read receipts and presence updates",
+  "description": "__MSG_extDescription__",
   "version": "2.6.1",
   "permissions": ["storage"],
    "icons":  { "128": "images/icon_128_blue.png" },
    "action": {
-    "default_icon": "images/icon_128_reshaped.png"
+    "default_icon": "images/icon_128_reshaped.png",
+    "default_title": "__MSG_extActionTitle__"
    },
    "background":
    {
@@ -23,8 +25,8 @@
   	},
   	{
       "matches": ["https://web.whatsapp.com/*"],
-  	  "js": ["core/ui_class_names.js", "core/ui.js", "lib/drop.js", "lib/sweetalert.min.js","core/status_download.js"],
-  	  "css": ["styles.css", "lib/css/drop-theme-basic.css"]
+  	  "js": ["core/extension_guard.js", "core/ui_class_names.js", "core/response_router.js", "core/options_schema.js", "core/contact_rules.js", "core/i18n.js", "core/i18n_strings.js", "core/diagnostics.js", "core/toast.js", "core/modal.js", "core/placement.js", "core/errors.js", "core/privacy_screen.js", "core/receipt_scheduler.js", "core/send_scheduler.js", "core/settings_dialog.js", "core/edit_chain.js", "core/ui.js", "core/status_download.js"],
+  	  "css": ["styles.css"]
   	}
    ],
 	"web_accessible_resources": [{"resources": ["lib/*", "core/*", "images/*"], "matches": ["https://web.whatsapp.com/*"]} ]

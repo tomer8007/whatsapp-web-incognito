@@ -1,0 +1,12 @@
+{
+  "extName": {
+    "message": "WAIncognito - Incognito for WhatsApp™",
+    "description": "Extension name (brand, not translated)"
+  },
+  "extDescription": {
+    "message": "Sé invisible en WhatsApp™ Web controlando los dobles checks y las actualizaciones de presencia"
+  },
+  "extActionTitle": {
+    "message": "Abrir WhatsApp Web"
+  }
+}
