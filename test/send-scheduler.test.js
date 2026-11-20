@@ -192,3 +192,44 @@ test("sendTextToChat reports an error thrown by WhatsApp", async () => {
     assert.strictEqual(result.ok, false);
     assert.ok(result.error.includes("rejected"));
 });
+
+test("alsoReceipt: onSent runs after a successful send, not after a failed one", async () => {
+    const sandbox = loadScripts(createSandbox(), ["core/send_scheduler.js"]);
+    let clock = 1000;
+    const timers = new Map();
+    let nextHandle = 1;
+    const state = { items: [] };
+    const sentTo = [];
+    let ok = true;
+    const scheduler = sandbox.createSendScheduler({
+        now: () => clock,
+        setTimer: (fn, ms) => { const h = nextHandle++; timers.set(h, { fn, at: clock + ms }); return h; },
+        clearTimer: (h) => { timers.delete(h); },
+        store: { get: async () => [], set: async (items) => { state.items = JSON.parse(JSON.stringify(items)); } },
+        send: async () => (ok ? { ok: true } : { ok: false, error: "x" }),
+        onSent: (item) => { sentTo.push(item.jid); },
+        minIntervalMs: 0,
+    });
+    await scheduler.add("1@c.us", "a", 2000, "n", { alsoReceipt: true });
+    await scheduler.add("2@c.us", "b", 2000, "n");
+    assert.strictEqual(state.items[0].alsoReceipt, true);
+    assert.strictEqual(state.items[1].alsoReceipt, undefined);
+    clock = 3000;
+    for (const [h, timer] of [...timers]) { timers.delete(h); await timer.fn(); }
+    assert.deepStrictEqual([...sentTo], ["1@c.us"]);
+    ok = false;
+    await scheduler.add("3@c.us", "c", 4000, "n", { alsoReceipt: true });
+    clock = 5000;
+    for (const [h, timer] of [...timers]) { timers.delete(h); await timer.fn(); }
+    assert.deepStrictEqual([...sentTo], ["1@c.us"]);
+});
+
+test("resolveSendLaterPreset: 10 minutes, 1 hour, tomorrow 08:00", () => {
+    const sandbox = loadScripts(createSandbox(), ["core/send_scheduler.js"]);
+    const now = new Date(2026, 10, 20, 15, 30, 0).getTime();
+    assert.strictEqual(sandbox.resolveSendLaterPreset("10m", now), now + 10 * MINUTE);
+    assert.strictEqual(sandbox.resolveSendLaterPreset("1h", now), now + 60 * MINUTE);
+    const d = new Date(sandbox.resolveSendLaterPreset("tomorrow", now));
+    assert.deepStrictEqual([d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()], [2026, 10, 21, 8, 0]);
+    assert.strictEqual(sandbox.resolveSendLaterPreset("custom", now), null);
+});

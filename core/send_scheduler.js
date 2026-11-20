@@ -6,7 +6,23 @@
 
 var SEND_SCHEDULER_MAX_TIMER_MS = 2147483647; // setTimeout fires immediately above this
 
-// items: [{id, jid, text, dueAt, name?, status: "pending" | "overdue" | "error", error?}]
+// Send-later presets: "10m", "1h", "tomorrow" (08:00 local time tomorrow). Returns a timestamp, or null for an unknown choice.
+function resolveSendLaterPreset(choice, nowMs)
+{
+    if (choice == "10m") return nowMs + 10 * 60 * 1000;
+    if (choice == "1h") return nowMs + 60 * 60 * 1000;
+    if (choice == "tomorrow")
+    {
+        var due = new Date(nowMs);
+        due.setDate(due.getDate() + 1);
+        due.setHours(8, 0, 0, 0);
+        return due.getTime();
+    }
+    return null;
+}
+
+// items: [{id, jid, text, dueAt, name?, alsoReceipt?, status: "pending" | "overdue" | "error", error?}]
+// alsoReceipt: after the message went out, deps.onSent(item) runs (the UI then sends the blue ticks of that chat).
 function createSendScheduler(deps)
 {
     var minIntervalMs = deps.minIntervalMs != null ? deps.minIntervalMs : 60000;
@@ -62,6 +78,10 @@ function createSendScheduler(deps)
             var result = await deps.send({ jid: item.jid, text: item.text });
             if (result && result.ok === false) throw new Error(result.error || "gagal mengirim");
             items = items.filter(function(other) { return other.id !== id; });
+            if (item.alsoReceipt && deps.onSent)
+            {
+                try { deps.onSent(Object.assign({}, item)); } catch (e) { /* the message is sent; the receipt is best effort */ }
+            }
         }
         catch (e)
         {
@@ -72,11 +92,12 @@ function createSendScheduler(deps)
     }
 
     return {
-        add: async function(jid, text, dueAt, name)
+        add: async function(jid, text, dueAt, name, options)
         {
             var id = "msg-" + deps.now() + "-" + (nextSequence++);
             var item = { id: id, jid: jid, text: text, dueAt: dueAt, status: "pending" };
             if (name) item.name = name;
+            if (options && options.alsoReceipt) item.alsoReceipt = true;
             items.push(item);
             arm(item, dueAt - deps.now());
             await persist();
