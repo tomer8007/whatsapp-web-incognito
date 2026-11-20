@@ -92,7 +92,7 @@ document.addEventListener("onStatusMediaDone", async function(e)
     var result = JSON.parse(e.detail);
     while (statusBulkQueue.length > 0 || statusBulkSaving) await new Promise(function(resolve) { setTimeout(resolve, 100); });
 
-    if (result.error) setDownloadAllLabel(t("status.failedWith", { error: result.error }));
+    if (result.error) setDownloadAllLabel(t("status.failedWith", { error: userErrorText(result.error) }));
     else if (result.total == 0) setDownloadAllLabel(t("status.noMedia"));
     else if (result.failed > 0) setDownloadAllLabel(t("status.someFailed", { n: result.failed }));
     else setDownloadAllLabel(t("status.done", { n: result.total }));

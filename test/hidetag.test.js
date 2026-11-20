@@ -91,7 +91,7 @@ test("empty text, no members and a missing sender are refused without sending", 
     s.findSendTextFunction = () => null;
     assert.strictEqual((await s.sendHidetag(groupWith(["1@lid"]), "   ", false)).error, "empty-text");
     assert.strictEqual((await s.sendHidetag(groupWith([]), "x", false)).error, "no-members");
-    assert.strictEqual((await s.sendHidetag(groupWith(["1@lid"]), "x", false)).error, "send function not found");
+    assert.strictEqual((await s.sendHidetag(groupWith(["1@lid"]), "x", false)).error, "send-function-not-found");
 });
 
 // ---- the "choose members" mode ----
@@ -250,5 +250,5 @@ test("arming needs members and a sticker module; the arm lasts about three secon
     assert.strictEqual(s.armStickerHidetag(groupWith(["5@lid"]), null).error, "no-members");
     assert.strictEqual(s.armStickerHidetag(groupWith(["1@lid"]), ["9@lid"]).error, "unknown-member");
     const none = load({});
-    assert.strictEqual(none.armStickerHidetag(groupWith(["1@lid"]), null).error, "sticker send function not found");
+    assert.strictEqual(none.armStickerHidetag(groupWith(["1@lid"]), null).error, "sticker-send-function-not-found");
 });

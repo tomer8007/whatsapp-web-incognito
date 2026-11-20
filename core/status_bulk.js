@@ -84,7 +84,7 @@ async function getStatusMediaForContact(jid)
         var entry = jid ? findStatusEntry(jid) : null;
         if (!entry || !entry.msgs || !entry.msgs.getModelsArray)
         {
-            dispatchStatusBulkEvent("onStatusMediaDone", { total: 0, failed: 0, error: "status tidak ditemukan" });
+            dispatchStatusBulkEvent("onStatusMediaDone", { total: 0, failed: 0, error: "status-not-found" });
             return;
         }
 
@@ -108,7 +108,7 @@ async function getStatusMediaForContact(jid)
     catch (exception)
     {
         console.warn("WAIncognito: bulk status download failed");
-        dispatchStatusBulkEvent("onStatusMediaDone", { total: 0, failed: 0, error: "gagal mengunduh status" });
+        dispatchStatusBulkEvent("onStatusMediaDone", { total: 0, failed: 0, error: "status-download-failed" });
     }
     finally
     {

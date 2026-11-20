@@ -125,12 +125,12 @@ test("a failing send keeps the item with status error", async () => {
 });
 
 test("a send that answers ok:false also becomes status error", async () => {
-    const t = setup({ send: async () => ({ ok: false, error: "send function not found" }) });
+    const t = setup({ send: async () => ({ ok: false, error: "send-function-not-found" }) });
     await t.scheduler.add("1@c.us", "halo", 2000);
     await t.advance(1000);
     const item = plain(t.scheduler.list())[0];
     assert.strictEqual(item.status, "error");
-    assert.strictEqual(item.error, "send function not found");
+    assert.strictEqual(item.error, "send-function-not-found");
 });
 
 test("a failed item can be retried with sendNow", async () => {
@@ -177,11 +177,11 @@ test("sendTextToChat reports a missing send function and a missing chat", async 
     const s = loadInterception({});
     s.getChatByJID = async () => ({ id: "chat" });
     s.findExport = () => null;
-    assert.deepStrictEqual({ ...(await s.sendTextToChat("1@c.us", "halo")) }, { ok: false, error: "send function not found" });
+    assert.deepStrictEqual({ ...(await s.sendTextToChat("1@c.us", "halo")) }, { ok: false, error: "send-function-not-found" });
 
     s.findExport = () => async () => {};
     s.getChatByJID = async () => null;
-    assert.deepStrictEqual({ ...(await s.sendTextToChat("1@c.us", "halo")) }, { ok: false, error: "chat not found" });
+    assert.deepStrictEqual({ ...(await s.sendTextToChat("1@c.us", "halo")) }, { ok: false, error: "chat-not-found" });
 });
 
 test("sendTextToChat reports an error thrown by WhatsApp", async () => {

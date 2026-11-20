@@ -182,13 +182,13 @@ async function sendHidetag(chat, text, dryRun, selectedJids, quotedMsg)
         if (dryRun)
         {
             var create = findCreateTextMsgData();
-            if (!create) return { ok: false, error: "create function not found", count: plan.count, big: plan.big };
+            if (!create) return { ok: false, error: "create-function-not-found", count: plan.count, big: plan.big };
             var data = await create(chat, text, options);
             return { ok: true, dry: summarizeMessageData(data, text), count: plan.count, big: plan.big };
         }
 
         var sendText = findSendTextFunction();
-        if (!sendText) return { ok: false, error: "send function not found", count: plan.count, big: plan.big };
+        if (!sendText) return { ok: false, error: "send-function-not-found", count: plan.count, big: plan.big };
         var result = await sendText(chat, text, options);
         var okValue = "OK";
         try { okValue = require("WAWebSendMsgResultAction").SendMsgResult.OK; } catch (e) { /* keep the default */ }
@@ -290,7 +290,7 @@ function armStickerHidetag(chat, selectedJids)
 {
     var plan = buildHidetagPlan(chat, hidetagSelfForms(), selectedJids);
     if (!plan.ok || plan.count == 0) return { ok: false, error: plan.ok ? "no-members" : plan.error, count: 0 };
-    if (!ensureStickerHook()) return { ok: false, error: "sticker send function not found", count: plan.count };
+    if (!ensureStickerHook()) return { ok: false, error: "sticker-send-function-not-found", count: plan.count };
     stickerArm = { options: buildHidetagOptions(plan), useQuote: true, expires: Date.now() + 3000 };
     return { ok: true, count: plan.count };
 }

@@ -29,23 +29,6 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
 });
 
 
-function validateSafetyDelay()
-{
-    var string = document.getElementById("incognito-option-safety-delay").value;
-    var isValid = false;
-    var number = Math.floor(Number(string));
-    if ((String(number) === string && number >= 1 && number <= 30) || string == "") isValid = true;
-    if (!isValid)
-    {
-        document.getElementById("incognito-option-safety-delay").disabled = true;
-        document.getElementById("incognito-option-safety-delay").value = "";
-        document.getElementById("incognito-radio-disable-safety-delay").checked = true;
-        document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-
-        showToast("The safety delay must be an integer number in range 1-30 !");
-    }
-}
-
 document.addEventListener('onOptionsUpdate', function (e)
 {
     // update enforcing globals
@@ -353,7 +336,7 @@ document.addEventListener("downloadEphemeralMedia", async function(e)
     try
     {
         var record = await loadEphemeralRecord(data.id);
-        if (!record || !record.mediaMeta) throw new Error("tidak ada media");
+        if (!record || !record.mediaMeta) throw new Error("no-media");
         var meta = record.mediaMeta;
         var decrypted = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: meta.directPath, encFilehash: meta.fileEncSha256,
             filehash: meta.fileSha256, mediaKey: meta.mediaKey, type: meta.type, signal: (new AbortController).signal });
@@ -363,7 +346,7 @@ document.addEventListener("downloadEphemeralMedia", async function(e)
     }
     catch (exception)
     {
-        reply.error = "Media tidak bisa diunduh (mungkin sudah kedaluwarsa di server)";
+        reply.error = "media-unavailable"; // for example expired on the server
     }
     document.dispatchEvent(new CustomEvent("onEphemeralMediaReceived", { detail: JSON.stringify(reply) }));
 });
@@ -376,7 +359,7 @@ document.addEventListener("waIncognitoSendText", async function(e)
     document.dispatchEvent(new CustomEvent("onSendTextResult", { detail: JSON.stringify({ id: data.id, messageID: data.id, ok: result.ok, error: result.error || null }) }));
 });
 
-// The original versions of an edited message (core/edit_tracker.js), asked for by the "↺ asli" button
+// The original versions of an edited message (core/edit_tracker.js), asked for by the "Original" button
 document.addEventListener("getEditHistory", async function(e)
 {
     var data = JSON.parse(e.detail);
@@ -401,7 +384,7 @@ document.addEventListener("waIncognitoVaultCommand", async function(e)
     var reply = {messageID: data.messageID, ok: false, error: null};
     try
     {
-        if (typeof Vault == "undefined") throw new Error("vault not loaded");
+        if (typeof Vault == "undefined") throw new Error("vault-not-loaded");
         if (data.cmd == "setup")
         {
             await Vault.setup(data.passphrase);
@@ -411,7 +394,7 @@ document.addEventListener("waIncognitoVaultCommand", async function(e)
         else if (data.cmd == "unlock")
         {
             reply.ok = await Vault.unlock(data.passphrase);
-            if (!reply.ok) reply.error = "Passphrase salah";
+            if (!reply.ok) reply.error = "wrong-passphrase";
         }
         else if (data.cmd == "lock")
         {

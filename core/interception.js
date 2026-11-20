@@ -882,10 +882,10 @@ async function sendTextToChat(jid, text)
     {
         var sendText = findSendTextFunction();
         var addAndSend = sendText ? null : findAddAndSendFunction();
-        if (!sendText && !addAndSend) return { ok: false, error: "send function not found" };
+        if (!sendText && !addAndSend) return { ok: false, error: "send-function-not-found" };
 
         var chat = await getChatByJID(jid);
-        if (!chat) return { ok: false, error: "chat not found" };
+        if (!chat) return { ok: false, error: "chat-not-found" };
 
         if (sendText) await sendText(chat, text, {});
         else await addAndSend(chat, { type: "chat", body: text, t: Math.floor(Date.now() / 1000), local: true, isNewMsg: true }, {});

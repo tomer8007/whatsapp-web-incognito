@@ -65,6 +65,20 @@ function applyLanguage(preference)
     document.documentElement.style.setProperty("--incognito-deleted-label", JSON.stringify(t("deleted.label")));
     var toasts = document.getElementById("incognito-toasts");
     if (toasts) toasts.setAttribute("dir", isRtlLanguage() ? "rtl" : "ltr");
+    relabelStaticUi();
+}
+
+// Texts of elements that stay on screen (tooltips and aria-labels) follow a language switch at once
+function relabelStaticUi()
+{
+    var nav = document.querySelector(".menu-item-incognito [role=button], .menu-item-incognito[role=button]");
+    if (nav) { nav.setAttribute("title", t("nav.title")); nav.setAttribute("aria-label", t("nav.title")); }
+    var header = document.querySelector(".incognito-header-button:not(.incognito-composer-button)");
+    if (header) { header.setAttribute("title", t("header.button")); header.setAttribute("aria-label", t("header.button")); }
+    var composer = document.querySelector(".incognito-composer-button");
+    if (composer) { composer.setAttribute("title", t("hidetag.composer.tooltip")); composer.setAttribute("aria-label", t("hidetag.composer.tooltip")); }
+    var item = document.querySelector('[data-testid="mi-incognito-sticker-hidetag"]');
+    if (item) item.remove(); // rebuilt with the new text the next time WhatsApp opens the menu
 }
 
 document.addEventListener("onOptionsUpdate", function(e)
@@ -341,7 +355,7 @@ function requestPageDiagnostics()
         diagnosticsResponses.waitFor(requestId, function(data) { done = true; resolve(data.results || []); });
         setTimeout(function()
         {
-            if (!done) resolve([{feature: "core", kind: "hook", id: "page-world", status: "missing", detail: "page world tidak merespons"}]);
+            if (!done) resolve([{feature: "core", kind: "hook", id: "page-world", status: "missing", detail: t("diag.pageWorldSilent")}]);
         }, 1500);
         document.dispatchEvent(new CustomEvent("waIncognitoDiagnosticsRequest", { detail: JSON.stringify({messageID: requestId}) }));
     });
@@ -375,7 +389,7 @@ async function openVaultModal()
     var result = await sendVaultCommand("status");
     if (!result.ok || !result.status)
     {
-        WAModal.fire({ title: t("vault.unavailable"), text: result.error || t("vault.pageNotReady"), icon: "error", confirmButtonText: t("common.ok") });
+        WAModal.fire({ title: t("vault.unavailable"), text: result.error ? userErrorText(result.error) : t("vault.pageNotReady"), icon: "error", confirmButtonText: t("common.ok") });
         return;
     }
     var status = result.status;
@@ -406,7 +420,7 @@ async function openVaultModal()
         if (setupResult.ok)
             WAModal.fire({ title: t("vault.created.title"), text: t("vault.created.text", { count: setupResult.migrated }), icon: "success", confirmButtonText: t("common.ok") });
         else
-            WAModal.fire({ title: t("vault.createFailed"), text: setupResult.error || "", icon: "error", confirmButtonText: t("common.ok") });
+            WAModal.fire({ title: t("vault.createFailed"), text: setupResult.error ? userErrorText(setupResult.error) : "", icon: "error", confirmButtonText: t("common.ok") });
         return;
     }
 
@@ -433,7 +447,7 @@ async function openVaultModal()
     var info = await WAModal.fire({
         title: t("vault.unlocked.title"),
         html: "<div style='font-size: 14px'>" + vaultThreatModelHTML() + "<br><br>" +
-              escapeHTML(t("vault.contents", { count: status.count, size: (status.bytes / (1024 * 1024)).toFixed(2) })) + "</div>",
+              escapeHTML(t("vault.contents", { count: status.count, size: formatNumber(status.bytes / (1024 * 1024), 2) })) + "</div>",
         showCancelButton: true,
         confirmButtonText: t("vault.lock"),
         cancelButtonText: t("common.close"),
@@ -691,8 +705,8 @@ async function openEphemeralModal(context)
                 ephemeralMediaResponses.waitFor(requestId, function(reply)
                 {
                     target.disabled = false;
-                    if (!reply.ok) { target.textContent = t("eph.failed", { error: reply.error || "" }); return; }
-                    downloadBase64AsFile(reply.b64, reply.mimetype, "pesan-sementara_" + Date.now() + "." + mimeToExtension(reply.mimetype));
+                    if (!reply.ok) { target.textContent = t("eph.failed", { error: userErrorText(reply.error) }); return; }
+                    downloadBase64AsFile(reply.b64, reply.mimetype, "disappearing-message_" + Date.now() + "." + mimeToExtension(reply.mimetype));
                 });
                 document.dispatchEvent(new CustomEvent("downloadEphemeralMedia", { detail: JSON.stringify({ messageID: requestId, id: target.dataset.ephId }) }));
             });
@@ -943,7 +957,7 @@ async function onComposerHidetagClick(button)
             selected = await openHidetagModal(context, { pickOnly: true });
             if (!selected) return;
         }
-        var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagFromComposer", "hcomp", { ok: false, error: t("sched.noAnswer") },
+        var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagFromComposer", "hcomp", { ok: false, error: "no-answer" },
                                                 { jid: context.primaryJid, selected: selected }, 40000);
         if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || info.count }), icon: "success", toast: true, timer: 6000 });
         else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
@@ -1067,7 +1081,7 @@ async function startStickerHidetag(saved, rect)
             selected = await openHidetagModal(context, { pickOnly: true });
             if (!selected) return;
         }
-        var armed = await requestFromPageWorld(stickerArmResponses, "waIncognitoStickerArm", "sarm", { ok: false, error: t("sched.noAnswer") }, { jid: context.primaryJid, selected: selected });
+        var armed = await requestFromPageWorld(stickerArmResponses, "waIncognitoStickerArm", "sarm", { ok: false, error: "no-answer" }, { jid: context.primaryJid, selected: selected });
         if (!armed.ok) { WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(armed.error) }), icon: "error", toast: true, timer: 8000 }); return; }
         var tile = resolveStickerTile(saved);
         if (tile) tile.click(); // outside WhatsApp's menu, so it closes by itself; the send wrapper adds the mentions
@@ -1093,12 +1107,7 @@ new MutationObserver(function(mutations)
 
 function hidetagErrorText(error)
 {
-    if (error == "disabled") return t("hidetag.disabled");
-    if (error == "not-a-group") return t("hidetag.notGroup");
-    if (error == "empty-selection" || error == "no-members") return t("hidetag.noneSelected");
-    if (error == "empty-text") return t("hidetag.empty");
-    if (error == "unknown-member") return t("hidetag.unknownMember");
-    return String(error || t("sched.unknown"));
+    return userErrorText(error);
 }
 
 async function openHidetagFromActiveChat()
@@ -1336,7 +1345,7 @@ async function openHidetagModal(context, opts)
     if (!confirmed.isConfirmed) return;
 
     if (typed.value.mode == "selected") saveHidetagSelection(context.primaryJid, typed.value.selected);
-    var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagSend", "hsend", { ok: false, error: t("sched.noAnswer") },
+    var result = await requestFromPageWorld(hidetagSendResponses, "waIncognitoHidetagSend", "hsend", { ok: false, error: "no-answer" },
                                             { jid: context.primaryJid, text: typed.value.text, dryRun: false, selected: typed.value.selected, reply: typed.value.reply }, 40000);
     if (result.ok) WAModal.fire({ title: t("hidetag.sent", { n: result.count || targetCount }), icon: "success", toast: true, timer: 6000 });
     else WAModal.fire({ title: t("hidetag.failed", { error: hidetagErrorText(result.error) }), icon: "error", toast: true, timer: 8000 });
@@ -1563,11 +1572,11 @@ function sendTextViaPageWorld(message)
         {
             if (finished) return;
             finished = true;
-            if (!result.ok) showScheduleToast(t("sched.failed", { error: result.error || t("sched.unknown") }), "error");
+            if (!result.ok) showScheduleToast(t("sched.failed", { error: userErrorText(result.error) }), "error");
             resolve(result);
         }
         sendTextResponses.waitFor(requestId, finish);
-        setTimeout(function() { finish({ ok: false, error: t("sched.noAnswer") }); }, 30000);
+        setTimeout(function() { finish({ ok: false, error: "no-answer" }); }, 30000);
         document.dispatchEvent(new CustomEvent("waIncognitoSendText", { detail: JSON.stringify({ id: requestId, jid: message.jid, text: message.text }) }));
     });
 }
@@ -1584,7 +1593,7 @@ function scheduledMessagesHTML(items)
     if (items.length == 0) return "";
     return "<div style='margin-top: 12px; font-size: 13px'><b>" + escapeHTML(t("sched.list")) + "</b>" + items.map(function(item)
     {
-        var status = item.status == "error" ? " " + escapeHTML(t("sched.error", { error: item.error || "" })) : (item.status == "overdue" ? " " + escapeHTML(t("sched.overdueTag")) : "");
+        var status = item.status == "error" ? " " + escapeHTML(t("sched.error", { error: userErrorText(item.error) })) : (item.status == "overdue" ? " " + escapeHTML(t("sched.overdueTag")) : "");
         return "<div style='margin-top: 6px'>" + escapeHTML(formatEditTime(item.dueAt)) + status + "<br><span style='opacity: 0.8'>" +
                escapeHTML(item.text.length > 60 ? item.text.slice(0, 60) + "…" : item.text) + "</span> " +
                "<button class='wam-btn wam-btn-secondary wam-btn-small' style='margin-left: 8px' data-sched-cancel='" + escapeHTML(item.id) + "'>" + escapeHTML(t("common.cancel")) + "</button></div>";

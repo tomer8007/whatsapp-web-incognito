@@ -145,7 +145,14 @@ function settingsIconSVG(name)
 // "12.5 MB" style size
 function formatMegabytes(bytes)
 {
-    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    return formatNumber(bytes / (1024 * 1024), 2) + " " + t("unit.mb");
+}
+
+// "1.5x" in the active language's number format ("1,5x" in German)
+function rateLabel(rate)
+{
+    var digits = (String(rate).split(".")[1] || "").length;
+    return formatNumber(Number(rate), digits) + "x";
 }
 
 var LOCK_IDLE_PRESETS = [1, 5, 10, 15, 30];
@@ -346,7 +353,7 @@ function openSettingsDialog(initial)
 
     var options = {};
     var activeId = null;
-    var currentContact = initialContact || null; // the contact whose page is open inside "Privasi per kontak"
+    var currentContact = initialContact || null; // the contact whose page is open inside the "Per-contact privacy" category
 
     function labelFor(item)
     {
@@ -568,7 +575,7 @@ function openSettingsDialog(initial)
         control.setAttribute("aria-label", t("opt." + item.key));
         entry.choices.forEach(function(choice)
         {
-            var option = make("option", "", choice + "x");
+            var option = make("option", "", rateLabel(choice));
             option.value = String(choice);
             control.appendChild(option);
         });
@@ -608,7 +615,7 @@ function openSettingsDialog(initial)
         box.textContent = t("vault.checking");
         sendVaultCommand("status").then(function(result)
         {
-            if (!result.ok || !result.status) { box.textContent = t("vault.status.unavailable", { reason: result.error || t("vault.pageNotReady") }); return; }
+            if (!result.ok || !result.status) { box.textContent = t("vault.status.unavailable", { reason: result.error ? userErrorText(result.error) : t("vault.pageNotReady") }); return; }
             var status = result.status;
             if (!status.isSetUp) box.textContent = t("vault.status.none");
             else if (!status.isUnlocked) box.textContent = t("vault.status.locked");
@@ -890,12 +897,12 @@ function openSettingsDialog(initial)
         var control = make("select", "wam-select");
         control.setAttribute("aria-label", t(item.labelKey));
         var globalValue = item.option ? optionValue(item.option) : null;
-        var def = make("option", "", t("seg.global") + (globalValue != null ? " (" + globalValue + "x)" : ""));
+        var def = make("option", "", t("seg.global") + (globalValue != null ? " (" + rateLabel(globalValue) + ")" : ""));
         def.value = "default";
         control.appendChild(def);
         entry.choices.forEach(function(choice)
         {
-            var label = item.choiceLabels && item.choiceLabels[choice] ? t(item.choiceLabels[choice]) : choice + "x";
+            var label = item.choiceLabels && item.choiceLabels[choice] ? t(item.choiceLabels[choice]) : rateLabel(choice);
             var option = make("option", "", label);
             option.value = String(choice);
             control.appendChild(option);
@@ -993,8 +1000,8 @@ function openSettingsDialog(initial)
                         var stored = contactRuleValue(contactRulesCache, context.jids, item.key);
                         if (entry.kind == "choice")
                         {
-                            var globalRate = item.option ? optionValue(item.option) + "x" : t("state.off");
-                            effect.textContent = stored == "default" ? t("contact.globalNow", { state: globalRate }) : t("contact.forThis", { state: item.choiceLabels && item.choiceLabels[stored] ? t(item.choiceLabels[stored]) : stored + "x" });
+                            var globalRate = item.option ? rateLabel(optionValue(item.option)) : t("state.off");
+                            effect.textContent = stored == "default" ? t("contact.globalNow", { state: globalRate }) : t("contact.forThis", { state: item.choiceLabels && item.choiceLabels[stored] ? t(item.choiceLabels[stored]) : rateLabel(stored) });
                             return;
                         }
                         var state = contactStateOf(entry, stored);
@@ -1061,7 +1068,7 @@ function openSettingsDialog(initial)
         var list = make("div", "wam-list");
         items.forEach(function(item)
         {
-            var status = item.status == "error" ? " " + t("sched.error", { error: item.error || t("sched.unknown") }) : (item.status == "overdue" ? " " + t("sched.overdueTag") : "");
+            var status = item.status == "error" ? " " + t("sched.error", { error: userErrorText(item.error) }) : (item.status == "overdue" ? " " + t("sched.overdueTag") : "");
             var preview = item.text.length > 70 ? item.text.slice(0, 70) + "…" : item.text;
             list.appendChild(scheduledRow(chatLabel(item) + " · " + formatEditTime(item.dueAt), preview + status, function() { return sendScheduler.cancel(item.id); }));
         });

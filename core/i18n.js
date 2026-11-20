@@ -69,6 +69,19 @@ function setLanguage(preference)
 
 function getLanguage() { return i18nActiveLanguage; }
 
+// Number in the active language's format (decimal separator, digits). Falls back to a plain toFixed when Intl is missing.
+function formatNumber(value, fractionDigits)
+{
+    try
+    {
+        return new Intl.NumberFormat(i18nActiveLanguage, { minimumFractionDigits: fractionDigits || 0, maximumFractionDigits: fractionDigits || 0 }).format(value);
+    }
+    catch (e)
+    {
+        return Number(value).toFixed(fractionDigits || 0);
+    }
+}
+
 function isRtlLanguage(code)
 {
     var language = I18N_LANGUAGES.find(function(l) { return l.code == (code || i18nActiveLanguage); });
