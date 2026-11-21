@@ -1,4 +1,4 @@
-﻿// This file defines a list of GUI element types that the WhatsApp Web page uses.
+// This file defines a list of GUI element types that the WhatsApp Web page uses.
 // The list can change in major WhatsApp Web updates. TODO: identify these dynamically based on React elements
 
 
@@ -31,5 +31,11 @@ var UIClassNames = {};
      
      UIClassNames.CHAT_MESSAGE = "x1n2onr6";
      UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV = "x1n2onr6 x1mzt3pk x126k92a x6ikm8r x10wlt62";
+
+     // Marker spans added by core/ui.js to restore messages that were revoked/deleted,
+     // and stickers in the chat list — classless styling hooks, styled via
+     // [deleted-message="true"] in styles.css.
+     UIClassNames.DELETED_MESSAGE_SPAN = "deleted-message-marker";
+     UIClassNames.STICKER_MESSAGE_TAG = "sticker-message-tag";
 
 })();

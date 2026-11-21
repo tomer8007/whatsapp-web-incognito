@@ -1,0 +1,300 @@
+#!/usr/bin/env node
+// Package the Android GeckoView app into an installable, reproducible APK.
+//
+//   node scripts/package-android.mjs            builds release APK
+//   node scripts/package-android.mjs --debug    builds debug APK
+//   node scripts/package-android.mjs --check    diagnostic check of Android toolchain
+//
+// Mirroring scripts/package-ext.mjs, this script:
+// 1. Verifies and stages the extension assets automatically (node scripts/build.mjs --target=geckoview)
+// 2. Checks Java & Android SDK environments, auto-detecting compatible JDKs (17/21)
+// 3. Executes the Gradle build hermetically via ./gradlew
+// 4. Stashes the final APK into release/android/ with standard naming and sha256 checksums
+
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname, resolve, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const ANDROID_DIR = join(ROOT, 'app', 'android');
+const OUTDIR = join(ROOT, 'release', 'android');
+
+const argv = process.argv.slice(2);
+const flag = (name) => argv.includes(`--${name}`);
+const opt = (name) => argv.find((a) => a.startsWith(`--${name}=`))?.split('=')[1];
+
+if (flag('help') || flag('h')) {
+  console.log(`
+  Package the Android GeckoView app into an installable APK.
+
+    node scripts/package-android.mjs [--debug] [--check] [--abi=<name>]
+
+    --debug       Build debug variant (assembleDebug) instead of release
+    --check       Only check JDK, Gradle wrapper, and Android SDK prerequisites
+    --abi=<name>  Filter packaged APK by ABI (e.g. arm64-v8a, x86_64, universal)
+`);
+  process.exit(0);
+}
+
+const isDebug = flag('debug');
+const isCheckOnly = flag('check');
+const targetAbi = opt('abi');
+
+// ---------------------------------------------------------------- helpers
+
+function human(n) {
+  return n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+}
+
+function getVersion() {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  if (!pkg.version) throw new Error('package.json has no version field');
+  return pkg.version;
+}
+
+function sha256(filePath) {
+  const data = readFileSync(filePath);
+  return createHash('sha256').update(data).digest('hex');
+}
+
+// ---------------------------------------------------------------- toolchain detection
+
+function getJdkMajorVersion(dir) {
+  if (!dir || !existsSync(join(dir, 'bin', 'javac'))) return null;
+  const relFile = join(dir, 'release');
+  if (existsSync(relFile)) {
+    try {
+      const content = readFileSync(relFile, 'utf8');
+      const match = content.match(/JAVA_VERSION="?(\d+)/);
+      if (match) return parseInt(match[1], 10);
+    } catch {}
+  }
+  try {
+    const res = spawnSync(join(dir, 'bin', 'java'), ['-version'], { encoding: 'utf8' });
+    const text = (res.stderr || '') + (res.stdout || '');
+    const match = text.match(/(?:version|Runtime Environment)\s+"?(\d+)/i) || text.match(/openjdk (\d+)/i);
+    if (match) return parseInt(match[1], 10);
+  } catch {}
+  return null;
+}
+
+function detectJdk() {
+  const isCompatible = (v) => v !== null && v >= 17 && v <= 21;
+
+  // 1. Check existing JAVA_HOME if compatible (reject Java >= 24 which causes IllegalArgumentException)
+  const envJavaHome = process.env.JAVA_HOME;
+  if (envJavaHome && existsSync(join(envJavaHome, 'bin', 'javac'))) {
+    const ver = getJdkMajorVersion(envJavaHome);
+    if (isCompatible(ver)) {
+      return { path: envJavaHome, version: ver, source: 'JAVA_HOME' };
+    }
+    if (ver && ver >= 24) {
+      console.warn(`\n[!] Notice: Current JAVA_HOME points to Java ${ver} (${envJavaHome}).`);
+      console.warn('    Gradle 8.11 / AGP 8.7 require JDK 17 or 21 (Java 25 throws java.lang.IllegalArgumentException).');
+      console.warn('    Searching for an installed compatible JDK (17/21)...\n');
+    }
+  }
+
+  // 2. Candidate locations
+  const candidateDirs = [
+    join(process.env.HOME || '', '.gradle', 'jdks'),
+    join(process.env.HOME || '', '.sdkman', 'candidates', 'java'),
+    '/usr/lib/jvm',
+    join(process.env.HOME || '', '.asdf', 'installs', 'java'),
+    join(process.env.HOME || '', '.jenv', 'versions'),
+  ];
+
+  for (const parent of candidateDirs) {
+    if (!existsSync(parent)) continue;
+    try {
+      const entries = readdirSync(parent);
+      for (const entry of entries) {
+        if (entry === 'current') continue;
+        const candidatePath = join(parent, entry);
+        const ver = getJdkMajorVersion(candidatePath);
+        if (isCompatible(ver)) {
+          return { path: candidatePath, version: ver, source: parent };
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Android Studio / JetBrains bundled JBR
+  const specificPaths = [
+    join(process.env.HOME || '', 'android-studio', 'jbr'),
+    '/opt/android-studio/jbr',
+    '/snap/android-studio/current/android-studio/jbr',
+  ];
+  for (const p of specificPaths) {
+    const ver = getJdkMajorVersion(p);
+    if (isCompatible(ver)) {
+      return { path: p, version: ver, source: p };
+    }
+  }
+
+  // 4. System default
+  const sysVer = getJdkMajorVersion('/usr/lib/jvm/default-java');
+  if (isCompatible(sysVer)) {
+    return { path: '/usr/lib/jvm/default-java', version: sysVer, source: 'system default' };
+  }
+
+  return null;
+}
+
+function detectAndroidSdk() {
+  const envSdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
+  if (envSdk && existsSync(envSdk)) {
+    const hasPlatforms = existsSync(join(envSdk, 'platforms'));
+    return { path: envSdk, hasPlatforms, source: 'ENV' };
+  }
+
+  const standardPaths = [
+    join(process.env.HOME || '', 'Android', 'Sdk'),
+    join(process.env.HOME || '', '.android', 'sdk'),
+    '/opt/android-sdk',
+    '/usr/lib/android-sdk',
+  ];
+
+  for (const p of standardPaths) {
+    if (existsSync(p)) {
+      const hasPlatforms = existsSync(join(p, 'platforms'));
+      return { path: p, hasPlatforms, source: p };
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------- main
+
+console.log(`\nWAIncognito Android Packager — version ${getVersion()}\n`);
+
+// 1. Stage assets
+console.log('1. Staging extension assets into Android project...');
+try {
+  execFileSync(process.execPath, [join(ROOT, 'scripts', 'build.mjs'), '--target=geckoview'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+  });
+} catch (e) {
+  console.error('\nFailed to stage assets for GeckoView:', e.message);
+  process.exit(1);
+}
+
+// 2. Validate Gradle Wrapper & properties
+const gradlewPath = join(ANDROID_DIR, 'gradlew');
+if (!existsSync(gradlewPath)) {
+  console.error('\nError: Gradle Wrapper (app/android/gradlew) is missing.');
+  console.error('Run `npm run doctor:android` to initialize the wrapper.');
+  process.exit(1);
+}
+
+const gradlePropsPath = join(ANDROID_DIR, 'gradle.properties');
+if (!existsSync(gradlePropsPath)) {
+  writeFileSync(gradlePropsPath, 'android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8\n', 'utf8');
+}
+
+// 3. Check JDK
+const jdk = detectJdk();
+const env = { ...process.env };
+if (jdk) {
+  console.log(`\n2. JDK: using Java ${jdk.version} at ${jdk.path} (${jdk.source})`);
+  env.JAVA_HOME = jdk.path;
+  env.PATH = `${join(jdk.path, 'bin')}:${env.PATH}`;
+} else {
+  console.error('\nError: No compatible JDK 17 or 21 found.');
+  console.error('Gradle 8.11 / AGP 8.7 require Java 17 or 21. Java 24+ is unsupported (throws java.lang.IllegalArgumentException: 25.0.1).');
+  console.error('Install JDK 21 (e.g. `sdk install java 21.0.6-tem` or `sudo apt install openjdk-21-jdk`).');
+  process.exit(1);
+}
+
+// 4. Check Android SDK
+const androidSdk = detectAndroidSdk();
+if (androidSdk && androidSdk.hasPlatforms) {
+  console.log(`3. Android SDK: located at ${androidSdk.path}`);
+  env.ANDROID_HOME = androidSdk.path;
+  env.ANDROID_SDK_ROOT = androidSdk.path;
+} else if (androidSdk && !androidSdk.hasPlatforms) {
+  console.log(`3. Android SDK: located at ${androidSdk.path} (missing platforms directory)`);
+  console.log('   (A full Android SDK with platforms/android-35 is required to build the APK)');
+} else {
+  console.log('3. Android SDK: not detected in standard paths.');
+  console.log('   (Ensure ANDROID_HOME is exported, e.g. export ANDROID_HOME=$HOME/Android/Sdk)');
+}
+
+if (isCheckOnly) {
+  console.log('\nCheck complete.');
+  process.exit(0);
+}
+
+if (!androidSdk || !androidSdk.hasPlatforms) {
+  console.error('\nCannot assemble APK without an Android SDK platform.');
+  console.error('Set ANDROID_HOME or install Android SDK platforms:');
+  console.error('  sdkmanager "platforms;android-35" "build-tools;35.0.0"');
+  process.exit(1);
+}
+
+// 5. Run Gradle build
+const targetTask = isDebug ? 'assembleDebug' : 'assembleRelease';
+console.log(`\n4. Running Gradle ${targetTask}...`);
+
+try {
+  execFileSync('./gradlew', [targetTask, '--stacktrace'], {
+    cwd: ANDROID_DIR,
+    env,
+    stdio: 'inherit',
+  });
+} catch (e) {
+  console.error('\nGradle build failed.');
+  process.exit(1);
+}
+
+// 6. Collect output APKs
+const variant = isDebug ? 'debug' : 'release';
+const apkDir = join(ANDROID_DIR, 'app', 'build', 'outputs', 'apk', variant);
+if (!existsSync(apkDir)) {
+  console.error(`\nError: expected output directory does not exist: ${apkDir}`);
+  process.exit(1);
+}
+
+let apks = readdirSync(apkDir).filter((f) => f.endsWith('.apk'));
+if (!apks.length) {
+  console.error('\nNo APK was emitted by the Gradle build.');
+  process.exit(1);
+}
+
+if (targetAbi) {
+  const filtered = apks.filter((f) => f.includes(targetAbi));
+  if (filtered.length) {
+    apks = filtered;
+  } else {
+    console.warn(`\n[!] Warning: No APK matched --abi=${targetAbi}. Available: ${apks.join(', ')}`);
+  }
+}
+
+mkdirSync(OUTDIR, { recursive: true });
+
+console.log(`\n== Output Artifacts (${variant}) ==\n`);
+for (const apkName of apks) {
+  const emittedApk = join(apkDir, apkName);
+
+  // Extract ABI tag from APK name (e.g. app-arm64-v8a-debug.apk -> -arm64-v8a)
+  let abiTag = '';
+  const match = apkName.match(/^app-(.+)-(?:debug|release)\.apk$/);
+  if (match) {
+    abiTag = `-${match[1]}`;
+  }
+
+  const destApkName = `WAIncognito-${getVersion()}${abiTag}-${variant}.apk`;
+  const destApk = join(OUTDIR, destApkName);
+
+  copyFileSync(emittedApk, destApk);
+
+  const size = statSync(destApk).size;
+  const hash = sha256(destApk);
+
+  console.log(`  Artifact: ${relative(ROOT, destApk)}`);
+  console.log(`    Size:    ${human(size)}`);
+  console.log(`    SHA-256: ${hash}\n`);
+}

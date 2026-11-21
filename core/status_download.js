@@ -4,24 +4,41 @@
 
 var allowStatusDownload = true;
 
+// Walks up `depth` ancestors of `node`; returns null when the chain runs out early.
+function ancestorAtDepth(node, depth)
+{
+    var current = node;
+    for (var i = 0; i < depth && current; i++) current = current.parentElement;
+    return current;
+}
+
 function determineIfNodeIsStatus(node) 
 {
+    if (!node || node.nodeType !== 1) return false;
     var isNodeStatus = false;
     // is node a picture
     if (node.nodeName == "IMG")
     {
-        // get the element 12 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        if (parent?.getAttribute("data-animate-status-viewer") != null)
+        if (node.closest && node.closest('[data-animate-status-viewer]'))
+        {
+            return true;
+        }
+        // fallback: status containers above the media
+        var parent = ancestorAtDepth(node, 13);
+        if (parent && parent.getAttribute("data-animate-status-viewer") != null)
         {
             isNodeStatus = true;
         }
     }
     else if (node.nodeName == "VIDEO")
     {
-        // get the element 8 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
-        if (parent?.getAttribute("data-testid") == "status-video")
+        if (node.closest && node.closest('[data-testid="status-video"]'))
+        {
+            return true;
+        }
+        // fallback: status containers above the media
+        var parent = ancestorAtDepth(node, 8);
+        if (parent && parent.getAttribute("data-testid") == "status-video")
         {
             isNodeStatus = true;
         }
@@ -80,6 +97,7 @@ function createDownloadButton(src)
 function handleSRCAdd(src, node)
 {
     if (!allowStatusDownload) return;
+    if (src == null) return;
 
     if (determineIfNodeIsStatus(node))
     {
@@ -104,77 +122,69 @@ function handleSRCRemove(src, node)
 
 function checkNodeAndChildrenForSRC(node, functionToCall)
 {
-    // if the node is an img or video
-    if (node.nodeName == "IMG" ||
-        node.nodeName == "VIDEO") 
+    if (!node || node.nodeType !== 1) return;
+    if (node.nodeName == "IMG" || node.nodeName == "VIDEO") 
     {
-        // pass the element's src to the handler
-        functionToCall(node.src, node)
+        functionToCall(node.src, node);
     }
-    // then check if the node has any children and check them, recursively
-    if (node.children !== undefined)
+    if (node.firstElementChild && node.querySelectorAll)
     {
-        if (node.children.length > 0) 
+        var mediaList = node.querySelectorAll("img, video");
+        for (var j = 0; j < mediaList.length; j++) 
         {
-            for (var j = 0; j < node.children.length; j++) 
-            {
-                checkNodeAndChildrenForSRC(node.children[j], functionToCall)
-            }
+            functionToCall(mediaList[j].src, mediaList[j]);
         }
-    } 
+    }
 }
 
-// create a mutation observer that looks for any img or video tags being added to the page, any of their src attributes changing, or any of them being removed
-var observer = new MutationObserver(function (mutations) 
+// Subscribe to shared body MutationObserver (WAIPageBus.DOMObserver) for img/video status changes
+function onStatusMutations(mutations)
 {
-    mutations.forEach(function (mutation) 
+    if (!allowStatusDownload) return;
+
+    mutations.forEach(function (mutation)
     {
-        if (mutation.type == "childList") 
+        if (mutation.type == "childList")
         {
             // if a child is added, loop through the added nodes
-            for (var i = 0; i < mutation.addedNodes.length; i++) 
+            for (var i = 0; i < mutation.addedNodes.length; i++)
             {
-                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
+                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd);
             }
             // if a child is removed, loop through the removed nodes
-            for(var i = 0; i < mutation.removedNodes.length; i++)
+            for (var i = 0; i < mutation.removedNodes.length; i++)
             {
-                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
+                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove);
             }
-        } 
-        else if (mutation.type == "attributes") 
+        }
+        else if (mutation.type == "attributes")
         {
             // if an attribute is changed, and it's the src attribute
-            if (mutation.attributeName == "src") 
+            if (mutation.attributeName == "src")
             {
                 // check that the oldValue is different from the new value
-                if (mutation.oldValue == mutation.target.src) 
+                if (mutation.oldValue == mutation.target.src)
                 {
                     // if it's not, then the mutation is not a change in src
                     return;
                 }
                 // pass the element's old src to the handler
-                handleSRCRemove(mutation.oldValue)
+                handleSRCRemove(mutation.oldValue);
                 // pass the element's new src to the handler
-                handleSRCAdd(mutation.target.src, mutation.target)
+                handleSRCAdd(mutation.target.src, mutation.target);
             }
         }
-    }
-);
-});
+    });
+}
 
-// start observing the body for changes
-observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeOldValue: true,
-});
+WAIPageBus.DOMObserver.subscribe(onStatusMutations);
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
-    // update enforcing globals
-    // TODO: move outside injected_ui.js
-    var options = JSON.parse(e.detail);
-    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    try
+    {
+        var options = typeof e.detail === "string" ? JSON.parse(e.detail) : e.detail;
+        if (options && 'allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    }
+    catch (err) {}
 });
