@@ -128,8 +128,8 @@ Messages
 	box-sizing: border-box;
 	height: 23px;
 	min-width: 30px;
-	background-color: var(--WDS-accent, #21c063);
-	color: var(--WDS-content-on-accent, #0a0a0a);
+	background-color: rgba(0,255,0,0.3);
+	color: rgb(255, 255, 255);
 	font-size: 12px;
 	font-weight: 500;
 	line-height: normal;
@@ -140,7 +140,7 @@ Messages
 
 .incognito-send-button:hover
 {
-	filter: brightness(1.1);
+	background-color: rgba(0,255,0,0.6);
 }
 
 @keyframes blink {
