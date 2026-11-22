@@ -158,6 +158,7 @@ wsHook.after = function (messageEvent, url)
             // sanity check that our node parsing is deterministic (decodes + re-encodes the frame: debug mode only)
             if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
 
+            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.setBatch(i, decryptedFrames.length); } catch (e) { /* diagnostics only */ }
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
             if (!isAllowed)

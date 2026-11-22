@@ -20,6 +20,7 @@ async function injectScripts()
 	await injectScript('core/i18n.js');
 	await injectScript('core/i18n_strings.js');
 	await injectScript('core/diagnostics.js');
+	await injectScript('core/offline_sync_log.js');
 	await injectScript('core/vault.js');
 	await injectScript('core/contact_rules.js');
 	await injectScript('core/edit_tracker.js');
