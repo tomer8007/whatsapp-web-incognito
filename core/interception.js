@@ -211,10 +211,38 @@ wsHook.after = function (messageEvent, url)
 //
 
 
+// Ids (only ids) of the messages whose revoke we blocked this page load. The row of such a message may be rendered long after the
+// block (offline backlog: the original and its revoke arrive in one packet), so the "Deleted" mark must not depend on the row
+// existing at block time: see markBlockedRevokeRows (re-tried) and the getDeletedMessageByID answer (injected_ui.js).
+var blockedRevokedIds = new Set();
+var BLOCKED_REVOKED_IDS_CAP = 2000;
+var BLOCKED_REVOKE_REMARK_DELAYS_MS = [1000, 3000, 6000, 10000];
+
+function rememberBlockedRevoke(deletedMessageId)
+{
+    if (deletedMessageId == null) return;
+    blockedRevokedIds.add(String(deletedMessageId));
+    if (blockedRevokedIds.size > BLOCKED_REVOKED_IDS_CAP) blockedRevokedIds.delete(blockedRevokedIds.values().next().value);
+}
+
+// Marks the rendered rows of a deleted message in red (styles.css). Honors the contact's "markDeleted" toggle. Returns how many rows were marked.
+function markBlockedRevokeRows(deletedMessageId, remoteJid)
+{
+    try
+    {
+        if (!NodeHandler.contactToggle(remoteJid, "markDeleted", true)) return 0;
+        var rows = document.querySelectorAll("[data-id*='" + deletedMessageId + "']");
+        for (var n = 0; n < rows.length; n++) rows[n].setAttribute("data-incognito-deleted", "true");
+        return rows.length;
+    }
+    catch (e) { return 0; }
+}
+
 // called from node_handler.js when a message node is blocked
 function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId, participant)
 {
     var isStatus = remoteJid == STATUS_BROADCAST_JID;
+    if (!isStatus) rememberBlockedRevoke(deletedMessageId);
 
     // do GUI operations after a small timeout. TODO: move it to injected_ui.js
     setTimeout(function()
@@ -230,16 +258,20 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                     var statusWaitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
                     setTimeout(async function()
                     {
-                        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, 0, participant);
+                        try { await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, 0, participant); }
+                        catch (e) { console.warn("WAIncognito: saving a deleted status failed"); }
                     }, statusWaitTime);
                 }
                 return;
             }
 
-            // In case the message already appears on screen, mark it in red
-            var messageNodes = document.querySelectorAll("[data-id*='" + deletedMessageId + "']");
-            if (NodeHandler.contactToggle(remoteJid, "markDeleted", true))
-                for (var n = 0; n < messageNodes.length; n++) messageNodes[n].setAttribute("data-incognito-deleted", "true"); // red mark, see styles.css
+            // In case the message already appears on screen, mark it in red; rows that appear later are marked when they render
+            var markedNow = markBlockedRevokeRows(deletedMessageId, remoteJid);
+            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.noteRevoke(deletedMessageId, { markedOnScreen: markedNow > 0 }); } catch (e) { /* diagnostics only */ }
+            BLOCKED_REVOKE_REMARK_DELAYS_MS.forEach(function(delay)
+            {
+                setTimeout(function() { markBlockedRevokeRows(deletedMessageId, remoteJid); }, delay);
+            });
 
             notifyDeletedMessage("delete", remoteJid, deletedMessageId);
 
@@ -247,7 +279,8 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
             setTimeout(async function() 
             {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+                try { await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId); }
+                catch (e) { console.warn("WAIncognito: saving a deleted message failed"); }
             }, waitTime);
         }
         catch (e)
@@ -382,42 +415,58 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
     }
     else
     {
-        var chat = await getChatByJID(remoteJid, deletedMessageId);
-        if (chat)
+        try
         {
-            if (chat.loadEarlierMsgs)
-                await chat.loadEarlierMsgs();
-            else
-                await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
-
-            var msgs = chat.msgs.getModelsArray();
-            for (let i = 0; i < msgs.length; i++)
+            var chat = await getChatByJID(remoteJid, deletedMessageId);
+            if (chat)
             {
-                if (msgs[i].id.id == deletedMessageId)
+                if (chat.loadEarlierMsgs)
+                    await chat.loadEarlierMsgs();
+                else
+                    await WhatsAppAPI.LoadEarlierMessages.loadEarlierMsgs({chat: chat});
+
+                var msgs = chat.msgs.getModelsArray();
+                for (let i = 0; i < msgs.length; i++)
                 {
-                    saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                    return;
+                    if (msgs[i].id.id == deletedMessageId)
+                    {
+                        var saved = await saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                        if (saved)
+                        {
+                            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.noteRevoke(deletedMessageId, { savedToDb: true }); } catch (e) { /* diagnostics only */ }
+                            markBlockedRevokeRows(deletedMessageId, remoteJid);
+                        }
+                        return;
+                    }
                 }
+                // We are probably starting up and the original message is not added yet to the message store
             }
-            // We are probably starting up and the original message is not added yet to the message store
+            else
+            {
+                console.warn("WAIncognito: Could not find the chat of a deleted message yet");
+            }
         }
-        else
+        catch (e)
         {
-            console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message yet");
+            // a failed lookup must not end the retries (the chat may simply not be ready yet)
+            console.warn("WAIncognito: looking up a deleted message failed, will retry");
         }
     }
 
     if (attempt >= MAX_DELETED_MSG_SAVE_ATTEMPTS)
     {
-        console.warn("WAIncognito: Giving up on saving deleted message " + deletedMessageId);
+        console.warn("WAIncognito: Giving up on saving a deleted message");
         return;
     }
 
     console.warn("WAIncognito: Scheduling deleted message save for later");
+    // short waits first (the original usually shows up within a few seconds), then once a second; still bounded by MAX_DELETED_MSG_SAVE_ATTEMPTS
+    var retryDelay = attempt < 4 ? 500 : 1000;
     setTimeout(async function() 
     {
-        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1, participant);
-    }, 1000);
+        try { await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId, attempt + 1, participant); }
+        catch (e) { console.warn("WAIncognito: saving a deleted message failed"); }
+    }, retryDelay);
 }
 
 async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID, kind = "deleted")
@@ -478,7 +527,8 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
         try
         {
             await Vault.put(Object.assign({ kind: kind, ts: Date.now(), chatJid: deletedMsgRecord.Jid }, deletedMsgRecord));
-            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " to the vault.");
+            console.log("WhatsIncognito: Saved a deleted message to the vault.");
+            return true;
         }
         catch (e)
         {
@@ -488,30 +538,37 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     }
     else if ("id" in deletedMsgRecord)
     {
-        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
-        let request = transcation.objectStore("msgs").add(deletedMsgRecord);
-        request.onerror = (e) =>
+        return await new Promise(function(resolve)
         {
-            if (request.error.name == "ConstraintError")
+            const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
+            let request = transcation.objectStore("msgs").add(deletedMsgRecord);
+            request.onerror = (e) =>
             {
-                // ConstraintError occurs when an object with the same id already exists
-                // This will happen when we get the revoke message again from the server
-                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-            } 
-            else
+                if (request.error.name == "ConstraintError")
+                {
+                    // ConstraintError occurs when an object with the same id already exists
+                    // This will happen when we get the revoke message again from the server
+                    console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
+                    resolve(true); // it is in the DB
+                } 
+                else
+                {
+                    console.log("WhatsIncognito: Unexpected error saving deleted message");
+                    resolve(false);
+                }
+            };
+            request.onsuccess = (e) =>
             {
-                console.log("WhatsIncognito: Unexpected error saving deleted message");
+                console.log("WhatsIncognito: Saved a deleted message successfully.");
+                resolve(true);
             }
-        };
-        request.onsuccess = (e) =>
-        {
-            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
-        }
+        });
     }
     else
     {
         console.log("WhatsIncognito: Deleted message contents not found");
     }
+    return false;
 }
 
 //

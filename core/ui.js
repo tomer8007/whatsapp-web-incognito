@@ -1911,6 +1911,13 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
             return;
         }
 
+        if (data.blockedRevoke && messageData == undefined)
+        {
+            // the revoke of this message was blocked this page load; the original may not be in our DB yet (offline backlog): still mark it
+            markMessageDeleted(messageNode);
+            return;
+        }
+
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;

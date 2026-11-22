@@ -262,7 +262,14 @@ document.addEventListener("getDeletedMessageByID", async function(e)
         }
     }
 
-    if (window.deletedMessagesDB == null) return;
+    // A message whose revoke we blocked this page load is marked even if its original is not in the DB (yet)
+    var blockedRevoke = typeof blockedRevokedIds != "undefined" && blockedRevokedIds.has(String(msgID));
+
+    if (window.deletedMessagesDB == null)
+    {
+        if (blockedRevoke) document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: undefined, blockedRevoke: true, messageID: msgID})}));
+        return;
+    }
 
     var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
     var msgsStore = transcation.objectStore("msgs");
@@ -286,7 +293,7 @@ document.addEventListener("getDeletedMessageByID", async function(e)
         {
             var messageData = requestByOriginalID.result;
 
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, blockedRevoke: blockedRevoke, messageID: msgID})}));
         }
     }
     

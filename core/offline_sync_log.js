@@ -20,6 +20,7 @@ function createOfflineSyncLog(deps)
     var sequence = 0;
     var counters = { messages: 0, revokes: 0, revokesBlocked: 0, revokesWithOriginalSeen: 0, revokesWithoutOriginal: 0, offlineNodes: 0, batched: 0, errors: 0 };
     var batch = { index: 0, size: 1 };
+    var revokeEntries = new Map(); // target id -> its entry (ids stay private, never exposed)
 
     function chatKind(jid)
     {
@@ -102,6 +103,10 @@ function createOfflineSyncLog(deps)
                     var targetId = message.protocolMessage && message.protocolMessage.key ? message.protocolMessage.key.id : null;
                     entry.originalSeenThisSession = targetId != null && seenIds.has(String(targetId));
                     entry.blocked = !!blocked;
+                    entry.markedOnScreen = false;
+                    entry.savedToDb = false;
+                    if (targetId != null) revokeEntries.set(String(targetId), entry);
+                    if (revokeEntries.size > OFFLINE_SYNC_SEEN_CAP) revokeEntries.delete(revokeEntries.keys().next().value);
                     counters.revokes++;
                     if (entry.blocked) counters.revokesBlocked++;
                     if (entry.originalSeenThisSession) counters.revokesWithOriginalSeen++; else counters.revokesWithoutOriginal++;
@@ -113,6 +118,19 @@ function createOfflineSyncLog(deps)
 
                 entries.push(entry);
                 if (entries.length > OFFLINE_SYNC_LOG_CAP) entries.shift();
+            }
+            catch (e) { counters.errors++; }
+        },
+
+        // later facts about a blocked revoke: { markedOnScreen: boolean, savedToDb: boolean } (booleans only)
+        noteRevoke: function(targetId, facts)
+        {
+            try
+            {
+                var entry = revokeEntries.get(String(targetId));
+                if (!entry) return;
+                if (facts.markedOnScreen === true) entry.markedOnScreen = true;
+                if (facts.savedToDb === true) entry.savedToDb = true;
             }
             catch (e) { counters.errors++; }
         },
