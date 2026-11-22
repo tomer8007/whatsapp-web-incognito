@@ -69,6 +69,10 @@ var SETTINGS_CATEGORIES = [
             { type: "toggle", key: "saveEdits", icon: "edit" },
             { type: "toggle", key: "keepDisappearing", icon: "clock" },
         ] },
+        { titleKey: "sec.revoke", items: [
+            { type: "toggle", key: "deleteForEveryoneAnyTime", icon: "trash" },
+            { type: "note", textKey: "note.revokeWindow" },
+        ] },
         { titleKey: "sec.notes", items: [ { type: "note", textKey: "note.messages" } ] },
       ] },
     { id: "notifications", icon: "bell",

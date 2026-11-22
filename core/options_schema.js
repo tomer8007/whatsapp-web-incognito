@@ -20,6 +20,7 @@ var OPTIONS_SCHEMA = [
     { key: "toastOnEdit", type: "bool", default: false },
 
     { key: "saveEdits", type: "bool", default: false },
+    { key: "deleteForEveryoneAnyTime", type: "bool", default: false },
     { key: "keepDisappearing", type: "bool", default: false },
     { key: "saveDeletedStatus", type: "bool", default: false },
     { key: "vaultRetentionDays", type: "number", default: 90 },

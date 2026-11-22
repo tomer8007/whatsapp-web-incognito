@@ -16,6 +16,7 @@ const DEFAULTS = {
     toastOnDelete: false,
     toastOnEdit: false,
     saveEdits: false,
+    deleteForEveryoneAnyTime: false,
     keepDisappearing: false,
     saveDeletedStatus: false,
     vaultRetentionDays: 90,
