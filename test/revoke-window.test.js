@@ -44,3 +44,14 @@ test("the option exists, defaults to off, and has a settings row", () => {
     const injection = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "core_injection.js"), "utf8");
     assert.ok(injection.includes("core/revoke_window.js"));
 });
+
+test("an options update applies its own value, even before injected_ui.js has merged it", () => {
+    const s = load();
+    const constants = { REVOKE_WINDOW: 216000, REVOKE_WINDOW_RECEIVER_MARGIN: 43200 };
+    s.require = () => constants;
+    s.window.WAIncognitoOptions = { deleteForEveryoneAnyTime: false }; // the stale value
+    s.syncRevokeWindow(0, true);
+    assert.ok(constants.REVOKE_WINDOW >= 10 * 365 * 24 * 3600);
+    s.syncRevokeWindow(0, false);
+    assert.strictEqual(constants.REVOKE_WINDOW, 216000);
+});

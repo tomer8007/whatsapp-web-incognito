@@ -42,9 +42,11 @@ function revokeConstantsModule()
 }
 
 // Brings the module in line with the option. Retries quietly (up to ~2 minutes) while WhatsApp has not loaded the module.
-function syncRevokeWindow(attempt)
+// `override` is the option value carried by the update event itself: injected_ui.js merges it into WAIncognitoOptions in its own
+// listener, which runs after this file's, so reading WAIncognitoOptions here would see the previous value.
+function syncRevokeWindow(attempt, override)
 {
-    var enabled = !!(window.WAIncognitoOptions || {}).deleteForEveryoneAnyTime;
+    var enabled = typeof override == "boolean" ? override : !!(window.WAIncognitoOptions || {}).deleteForEveryoneAnyTime;
     var constants = revokeConstantsModule();
     if (constants)
     {
@@ -54,12 +56,18 @@ function syncRevokeWindow(attempt)
     }
     if (!enabled && !revokeWindowActive) return;
     if (revokeWindowRetryTimer) clearTimeout(revokeWindowRetryTimer);
-    if ((attempt || 0) < 40) revokeWindowRetryTimer = setTimeout(function() { syncRevokeWindow((attempt || 0) + 1); }, 3000);
+    if ((attempt || 0) < 40) revokeWindowRetryTimer = setTimeout(function() { syncRevokeWindow((attempt || 0) + 1, override); }, 3000);
 }
 
 if (typeof document != "undefined" && document.addEventListener)
 {
-    document.addEventListener("onOptionsUpdate", function() { try { syncRevokeWindow(0); } catch (e) { /* retried on the next update */ } });
+    document.addEventListener("onOptionsUpdate", function(e)
+    {
+        var override;
+        try { var options = JSON.parse(e.detail); if (options && typeof options.deleteForEveryoneAnyTime == "boolean") override = options.deleteForEveryoneAnyTime; }
+        catch (exception) { /* fall back to the stored options */ }
+        try { syncRevokeWindow(0, override); } catch (exception) { /* retried on the next update */ }
+    });
     setTimeout(function() { try { syncRevokeWindow(0); } catch (e) {} }, 5000);
 }
 
