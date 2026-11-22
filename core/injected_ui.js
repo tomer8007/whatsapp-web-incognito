@@ -190,7 +190,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     exceptionsList.push(normalizeJID(data.jid));
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
     
-    WhatsAppAPI.Seen.sendSeen(chatContainer).then(result =>
+    Promise.resolve().then(function() { return WhatsAppAPI.Seen.sendSeen(chatContainer); }).then(result =>
     {
         // TODO: remove the old blinking chats code
         if (data.jid in blinkingChats)
@@ -204,14 +204,13 @@ document.addEventListener('sendReadConfirmation', async function (e)
         }
     });
 
-    chat.unreadCount -= data.unreadCount;
+    if (chat) chat.unreadCount -= data.unreadCount;
 
     // animate out the incognito message
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-    if (warningMessage != null && warningMessage.messageID.startsWith(data.jid))
+    if (warningMessage != null && String(warningMessage.messageID || "").startsWith(data.jid))
     {
-        Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-        setTimeout(function() {warningMessage.remove();}, 300);
+        animateBarOutAndRemove(warningMessage, 300);
     }
 
     //var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
@@ -652,7 +651,7 @@ function markChatAsBlocked(chat)
 
     // if it didn't exist previously, animate it in
     if (blockedChats[chat.id] == undefined || warningWasEmpty)
-        Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+        animateBarIn(warningMessage);
 
     if (warningMessage)
         warningMessage.firstChild.textContent = t("receipt.blocked");
