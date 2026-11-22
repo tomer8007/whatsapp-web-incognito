@@ -8,7 +8,9 @@ function load() {
         deepClone: (o) => JSON.parse(JSON.stringify(o)),
     });
     sandbox.STATUS_BROADCAST_JID = "status@broadcast";
-    loadScripts(sandbox, ["core/offline_sync_log.js", "core/options_schema.js", "core/edit_tracker.js", "core/node_handler.js"]);
+    sandbox.saveDeletedMsgsHookEnabled = false;
+    sandbox.optionsReceivedAt = null;
+    loadScripts(sandbox, ["core/offline_sync_log.js", "core/options_schema.js", "core/contact_rules.js", "core/edit_tracker.js", "core/node_handler.js"]);
     sandbox.__timers.length = 0;
     return sandbox;
 }
@@ -59,6 +61,7 @@ test("a revoke whose original was seen this session is flagged, and so is a bloc
 
 test("a failing recorder never changes the allow/block result of onReceivedE2EMessage", async () => {
     const s = load();
+    s.optionsReceivedAt = Date.now(); s.contactRulesReceived = true;
     s.NodeHandler.shouldBlockRevoke = () => true;
     s.onDeletionMessageBlocked = () => {};
     const healthy = await s.NodeHandler.onReceivedE2EMessage(node("R9"), revoke("A1"));
@@ -80,3 +83,15 @@ test("the diagnostic is registered and the hooks are wired", () => {
     assert.ok(read("core_injection.js").includes("core/offline_sync_log.js"));
     assert.ok(/OfflineSyncLog\.setBatch\(i, decryptedFrames\.length\)/.test(read("core/interception.js")));
 });
+
+test("entries record the settings state as booleans and numbers: hookOn, shouldBlock, optionsSeen, msSinceOptions", () => {
+    const s = load();
+    s.OfflineSyncLog.record(node("A"), revoke("X"), false, false);
+    s.optionsReceivedAt = Date.now() - 50; s.saveDeletedMsgsHookEnabled = true;
+    s.OfflineSyncLog.record(node("B"), revoke("X"), true, true);
+    const [before, after] = plain(s.OfflineSyncLog.snapshot()).entries;
+    assert.deepStrictEqual([before.hookOn, before.shouldBlock, before.optionsSeen, before.msSinceOptions], [false, false, false, null]);
+    assert.deepStrictEqual([after.hookOn, after.shouldBlock, after.optionsSeen], [true, true, true]);
+    assert.ok(after.msSinceOptions >= 40);
+});
+

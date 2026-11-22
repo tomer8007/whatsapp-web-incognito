@@ -379,7 +379,8 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     NodeHandler.trackEdits(e2eMessage, messageId, remoteJid);
     NodeHandler.keepEphemeral(e2eMessage, messageId, remoteJid, participant ? participant.toString() : remoteJid);
 
-    if (!NodeHandler.shouldBlockRevoke(remoteJid))
+    var shouldBlock = NodeHandler.shouldBlockRevoke(remoteJid);
+    if (!shouldBlock)
     {
         isAllowed = true;
     }
@@ -389,7 +390,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         isAllowed = false;
     }
 
-    try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.record(messageNode, e2eMessage, !isAllowed); } catch (e) { /* diagnostics only */ }
+    try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.record(messageNode, e2eMessage, !isAllowed, shouldBlock); } catch (e) { /* diagnostics only */ }
 
     return isAllowed;
 }

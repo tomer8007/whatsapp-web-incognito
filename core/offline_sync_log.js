@@ -69,7 +69,7 @@ function createOfflineSyncLog(deps)
         },
 
         // messageNode: the <message> stanza, message: the decoded E2E message, blocked: the allow/block result
-        record: function(messageNode, message, blocked)
+        record: function(messageNode, message, blocked, shouldBlock)
         {
             try
             {
@@ -87,6 +87,12 @@ function createOfflineSyncLog(deps)
                     batchIndex: batch.index,
                     batchSize: batch.size,
                 };
+                // settings state at that moment (booleans and a number only)
+                var state = deps && deps.getState ? deps.getState() : {};
+                entry.hookOn = !!state.hookOn;
+                entry.shouldBlock = !!shouldBlock;
+                entry.optionsSeen = state.optionsReceivedAt != null;
+                entry.msSinceOptions = state.optionsReceivedAt != null ? now() - state.optionsReceivedAt : null;
                 counters.messages++;
                 if (entry.offline) counters.offlineNodes++;
                 if (batch.size > 1) counters.batched++;
@@ -120,6 +126,13 @@ function createOfflineSyncLog(deps)
 
 var OfflineSyncLog = createOfflineSyncLog({
     now: function() { return Date.now(); },
+    getState: function()
+    {
+        return {
+            hookOn: typeof saveDeletedMsgsHookEnabled != "undefined" ? saveDeletedMsgsHookEnabled : false,
+            optionsReceivedAt: typeof optionsReceivedAt != "undefined" ? optionsReceivedAt : null,
+        };
+    },
     revokeType: typeof Message != "undefined" && Message.ProtocolMessage ? Message.ProtocolMessage.Type.REVOKE.value : 0,
 });
 
