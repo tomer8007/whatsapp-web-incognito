@@ -11,6 +11,7 @@ function load(options, rules) {
     sandbox.__timers.length = 0;
     sandbox.WAIncognitoOptions = { ...sandbox.defaultOptions(), ...options };
     sandbox.contactRules = rules || {};
+    sandbox.optionsReceivedAt = Date.now(); sandbox.contactRulesReceived = true; // settings are loaded
     return sandbox;
 }
 

@@ -13,6 +13,7 @@ function load({ collection } = {}) {
     loadScripts(sandbox, ["core/options_schema.js", "core/edit_tracker.js", "core/node_handler.js", "core/interception.js"]);
     sandbox.__timers.length = 0;
     sandbox.WAIncognitoOptions = { ...sandbox.defaultOptions() };
+    sandbox.optionsReceivedAt = Date.now(); // settings are loaded
     return sandbox;
 }
 

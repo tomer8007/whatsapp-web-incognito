@@ -7,6 +7,9 @@ var readConfirmationsHookEnabled = true;
 var onlineUpdatesHookEnabled = false;
 var typingUpdatesHookEnabled = false;
 var saveDeletedMsgsHookEnabled = false;
+// When the first real options update reached this world (ms timestamp), null before. Until then the defaults above are only
+// placeholders: right after a reconnect the offline backlog can arrive before the options do (see NodeHandler.shouldBlockRevoke).
+var optionsReceivedAt = null;
 var showDeviceTypesEnabled = true;
 var autoReceiptOnReplay = true;
 var safetyDelay = 0;

@@ -93,6 +93,17 @@ document.addEventListener("onOptionsUpdate", function(e)
     catch (exception) {}
 });
 
+// The page world announces that its listeners exist: send the options and contact rules again (the first push may have been too early)
+document.addEventListener("waIncognitoPageReady", function()
+{
+    try
+    {
+        safeSendMessage({ name: "getOptions" }, function(options) { if (options) document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) })); });
+        loadAndPushContactRules();
+    }
+    catch (exception) { /* the next push (UI ready) still happens */ }
+});
+
 function initialize()
 {
     applyLanguage("en"); // English until the saved language arrives

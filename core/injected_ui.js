@@ -4,6 +4,10 @@
 
 window.WAIncognitoOptions = window.WAIncognitoOptions || defaultOptions();
 
+// Tell the isolated world (ui.js) that this listener side is ready, so it sends the options and contact rules again
+// (the first push may have happened before our listeners existed).
+setTimeout(function() { try { document.dispatchEvent(new CustomEvent('waIncognitoPageReady')); } catch (e) { /* best effort */ } }, 0);
+
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
@@ -43,6 +47,7 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if ('saveDeletedMsgs' in options && optionsReceivedAt == null) optionsReceivedAt = Date.now(); // a full options object, not a partial update
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;

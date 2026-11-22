@@ -32,6 +32,7 @@ var CONTACT_RULE_SCHEMA = [
 var CONTACT_RULE_FIELDS = CONTACT_RULE_SCHEMA.map(function(entry) { return entry.key; });
 var CONTACT_RULE_VALUES = ["default", "block", "allow"]; // kept for older callers
 
+var contactRulesReceived = false; // true once the isolated world has pushed the rules (even an empty set)
 var contactRules = {};          // {normalizedJid: {key: value}} (pushed by the isolated world: onContactRulesUpdate)
 var lidPnMap = new Map();       // lid <-> phone number JIDs seen on incoming nodes, in both directions
 
@@ -181,5 +182,6 @@ if (typeof document !== "undefined" && document.addEventListener)
     {
         try { contactRules = JSON.parse(e.detail) || {}; }
         catch (exception) { console.warn("WAIncognito: ignoring invalid contact rules"); }
+        contactRulesReceived = true;
     });
 }

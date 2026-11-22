@@ -396,8 +396,18 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 }
 
 // Revokes in chats are blocked with "saveDeletedMsgs". Revokes of statuses are blocked with "saveDeletedStatus" or "saveDeletedMsgs".
+// Until the first real options update AND the contact rules have arrived, the settings are only defaults. Right after a reconnect
+// the offline backlog (including revokes) can arrive before them, so in that window every revoke is blocked and its original saved,
+// exactly as with "saveDeletedMsgs" on: the conservative choice, nothing is lost. After that the real setting and the rules decide.
+NodeHandler.settingsReady = function()
+{
+    return typeof optionsReceivedAt != "undefined" && optionsReceivedAt != null &&
+           (typeof contactRulesReceived == "undefined" || contactRulesReceived === true);
+}
+
 NodeHandler.shouldBlockRevoke = function(remoteJid)
 {
+    if (!NodeHandler.settingsReady()) return true;
     if (remoteJid == STATUS_BROADCAST_JID) return saveDeletedMsgsHookEnabled || !!(window.WAIncognitoOptions || {}).saveDeletedStatus;
     return NodeHandler.contactToggle(remoteJid, "saveDeletedMsgs", saveDeletedMsgsHookEnabled); // a contact can force it on or off
 }
