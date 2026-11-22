@@ -44,3 +44,11 @@ test("the edit toast shows before and after, no emoji, truncated", () => {
     assert.ok(long.body.length < 200);
     assert.strictEqual(s.formatToast({ kind: "edit", chatName: "Budi", preview: "baru", before: "lama" }, { hidePreview: true }).body, "Budi");
 });
+
+test("the Original button is judged by its presence in the DOM, not by a remembered flag (re-entering a chat)", () => {
+    const code = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "core", "ui.js"), "utf8");
+    assert.ok(!/incognitoEditBtn/.test(code), "no stale dataset flag");
+    assert.ok(/function hasOriginalButton/.test(code));
+    assert.ok(/info\.holder\.querySelector\("\.incognito-edit-original"\)/.test(code));
+    assert.ok(/scanForEditedLabels\(document\.getElementById\("main"\)\)/.test(code), "periodic rescan of the open chat");
+});

@@ -489,7 +489,7 @@ function scanForEditedLabels(root)
     for (var i = 0; i < candidates.length; i++)
     {
         var label = candidates[i];
-        if (label.children.length > 0 || label.dataset.incognitoEditBtn) continue;
+        if (label.children.length > 0 || hasOriginalButton(label.parentNode)) continue;
         if (!isEditedLabelText(label.textContent)) continue;
         addOriginalButton(label);
     }
@@ -520,20 +520,24 @@ function makeOriginalButton(messageId)
     return button;
 }
 
+// The button counts only while it is really in the DOM: WhatsApp re-renders message rows (for example when a chat is
+// entered again) and drops our node, so a remembered flag on the row would hide the button for good.
+function hasOriginalButton(container)
+{
+    return !!(container && container.querySelector && container.querySelector(":scope > .incognito-edit-original"));
+}
+
 function addOriginalButton(label)
 {
     var info = messageIdOfElement(label);
-    if (!info || info.holder.dataset.incognitoEditBtn) return;
-    info.holder.dataset.incognitoEditBtn = "true";
-    label.dataset.incognitoEditBtn = "true";
+    if (!info || info.holder.querySelector(".incognito-edit-original")) return;
     label.parentNode.insertBefore(makeOriginalButton(info.id), label.nextSibling);
 }
 
 // no label found: put the button in the message's meta row (time + ticks), else at the end of the bubble
 function addOriginalButtonToMessage(info)
 {
-    if (info.holder.dataset.incognitoEditBtn) return;
-    info.holder.dataset.incognitoEditBtn = "true";
+    if (info.holder.querySelector(".incognito-edit-original")) return;
     var meta = info.holder.querySelector("[data-testid='msg-meta']");
     var button = makeOriginalButton(info.id);
     if (meta) meta.insertBefore(button, meta.firstChild);
@@ -800,7 +804,7 @@ function sendReceiptNow(jid)
 }
 
 
-setInterval(function() { try { ensureConversationHeaderButton(); refreshHidetagState(); } catch (e) {} }, 2000);
+setInterval(function() { try { ensureConversationHeaderButton(); refreshHidetagState(); scanForEditedLabels(document.getElementById("main")); } catch (e) {} }, 2000);
 
 //
 // Hidetag (core/hidetag.js in the page world): a message to a group that mentions every member without any "@name" in the text.
