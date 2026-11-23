@@ -30,10 +30,10 @@ async function runFrame(p, direction) {
 }
 
 for (const direction of ["incoming", "outgoing"]) {
-    test(`${direction}: encoder sanity check is skipped outside debug mode`, async () => {
+    test(`${direction}: encoder sanity check runs outside debug mode too`, async () => {
         const p = loadPipeline();
         await runFrame(p, direction);
-        assert.strictEqual(p.sanityChecks(), 0);
+        assert.strictEqual(p.sanityChecks(), 1);
         assert.ok(!("isIncoming" in p.sandbox), "isIncoming leaked");
     });
 

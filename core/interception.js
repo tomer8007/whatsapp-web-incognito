@@ -62,8 +62,8 @@ wsHook.before = function (originalData, url)
                 if (WAPassthroughWithDebug) return originalData;
             }
 
-            // sanity check that our node parsing is complete (decodes + re-encodes the frame: debug mode only)
-            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ false);
+            // sanity check that our node parsing is complete (decodes + re-encodes the frame; runs in every mode)
+            await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ false);
         }
 
         var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, /* isIncoming */ false);
@@ -138,8 +138,8 @@ wsHook.after = function (messageEvent, url)
                 if (WAPassthroughWithDebug) return messageEvent;
             }
 
-            // sanity check that our node parsing is deterministic (decodes + re-encodes the frame: debug mode only)
-            if (WAdebugMode) await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
+            // sanity check that our node parsing is deterministic (decodes + re-encodes the frame; runs in every mode)
+            await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
 
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
