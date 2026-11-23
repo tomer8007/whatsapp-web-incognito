@@ -483,8 +483,31 @@ function isEditedLabelText(text)
 // ids of messages the page world saw being edited (text independent hook)
 var editedMessageIds = new Set();
 
+// The per-message element and id of `element`: the nearest ancestor (itself included) whose data-id has the usual
+// true_/false_<jid>_<id> shape (3+ parts) or whose data-testid is conv-msg-<id>. A wrapper that holds several messages
+// (data-id with one part) must not be taken for the message. Only when nothing better exists does the nearest
+// [data-id] / conv-msg element count, as before.
+function strictMessageIdOfElement(element)
+{
+    for (var node = element; node && node.getAttribute; node = node.parentElement)
+    {
+        var dataId = node.getAttribute("data-id");
+        if (dataId)
+        {
+            var parts = dataId.split("_");
+            if (parts.length >= 3) return { holder: node, id: parts[2] };
+        }
+        var testId = String(node.getAttribute("data-testid") || "");
+        if (testId.indexOf("conv-msg-") == 0 && testId.length > 9) return { holder: node, id: testId.slice(9) };
+    }
+    return null;
+}
+
 function messageIdOfElement(element)
 {
+    var strict = strictMessageIdOfElement(element);
+    if (strict) return strict;
+
     var holder = element.closest ? element.closest("[data-id], [data-testid^='conv-msg']") : null;
     if (!holder) return null;
     var dataId = holder.getAttribute("data-id") || String(holder.getAttribute("data-testid") || "").replace(/^conv-msg-/, "");
@@ -500,7 +523,7 @@ function scanForEditedLabels(root)
     for (var i = 0; i < candidates.length; i++)
     {
         var label = candidates[i];
-        if (label.children.length > 0 || hasOriginalButton(label.parentNode)) continue;
+        if (label.children.length > 0 || labelHasOriginalButton(label)) continue;
         if (!isEditedLabelText(label.textContent)) continue;
         addOriginalButton(label);
     }
@@ -511,7 +534,7 @@ function scanForEditedLabels(root)
         var rows = root.matches && root.matches("[data-id], [data-testid^='conv-msg']") ? [root] : Array.from(root.querySelectorAll("[data-id], [data-testid^='conv-msg']"));
         rows.forEach(function(row)
         {
-            var info = messageIdOfElement(row);
+            var info = strictMessageIdOfElement(row);
             if (info && editedMessageIds.has(info.id)) addOriginalButtonToMessage(info);
         });
     }
@@ -538,10 +561,18 @@ function hasOriginalButton(container)
     return !!(container && container.querySelector && container.querySelector(":scope > .incognito-edit-original"));
 }
 
+function labelHasOriginalButton(label)
+{
+    var next = label && label.nextSibling;
+    return !!(next && next.classList && next.classList.contains("incognito-edit-original"));
+}
+
 function addOriginalButton(label)
 {
     var info = messageIdOfElement(label);
-    if (!info || info.holder.querySelector(".incognito-edit-original")) return;
+    if (!info) return;
+    // one button per label: several edited messages can share a wrapper element
+    if (labelHasOriginalButton(label)) return;
     label.parentNode.insertBefore(makeOriginalButton(info.id), label.nextSibling);
 }
 
