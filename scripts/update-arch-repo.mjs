@@ -4,7 +4,7 @@
 
 import {
   readFileSync, writeFileSync, mkdirSync, copyFileSync,
-  existsSync, readdirSync, unlinkSync
+  existsSync, readdirSync, unlinkSync, statSync, createReadStream
 } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,6 +95,18 @@ for (const pkg of pkgs) {
   stagedPkgsByArch[arch].push(destPath);
 }
 
+const hashFile = (filePath, algorithms) => new Promise((resolve, reject) => {
+  const hashes = algorithms.map((algorithm) => ({ algorithm, hash: createHash(algorithm) }));
+  const stream = createReadStream(filePath);
+  stream.on('data', (chunk) => {
+    for (const { hash } of hashes) hash.update(chunk);
+  });
+  stream.on('error', reject);
+  stream.on('end', () => {
+    resolve(Object.fromEntries(hashes.map(({ algorithm, hash }) => [algorithm, hash.digest('hex')])));
+  });
+});
+
 // Update repositories for each architecture
 for (const arch of archs) {
   const archDir = join(outDir, arch);
@@ -127,10 +139,8 @@ for (const arch of archs) {
 
     for (const pkgFile of existingPkgs) {
       const fullPath = join(archDir, pkgFile);
-      const data = readFileSync(fullPath);
-      const csize = data.length;
-      const md5 = createHash('md5').update(data).digest('hex');
-      const sha256 = createHash('sha256').update(data).digest('hex');
+      const csize = statSync(fullPath).size;
+      const { md5, sha256 } = await hashFile(fullPath, ['md5', 'sha256']);
 
       // Extract .PKGINFO from package if possible
       let pkgname = 'waincognito-bin';

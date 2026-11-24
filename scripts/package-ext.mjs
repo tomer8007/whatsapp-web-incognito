@@ -32,7 +32,7 @@
 // scripts/verify-bundles.mjs, which packs twice and compares checksums.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, rmSync, copyFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, rmSync, copyFileSync, utimesSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -156,8 +156,9 @@ for (const browser of targets) {
   }
 
   // Reproducible bytes: normalise every mtime to the commit date before zipping.
+  const epochSeconds = Number(EPOCH.value);
   for (const f of files) {
-    try { execFileSync('touch', ['-d', `@${EPOCH.value}`, join(src, f)]); } catch { /* best effort */ }
+    try { utimesSync(join(src, f), epochSeconds, epochSeconds); } catch { /* best effort */ }
   }
 
   const out = explicitOut || join(OUTDIR, `WAIncognito-${VERSION}-${browser}.zip`);

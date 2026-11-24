@@ -20,6 +20,9 @@ var waiModalBackdrop = null;
 var waiPreviousFocusEl = null;
 var waiPendingDeletedMsgs = new Map();
 var waiPendingDeviceTypes = new Map();
+// AG-4: short-lived msgID->result caches to avoid repeated lookups on re-added nodes.
+var waiMsgResultCache = { deleted: new Map(), device: new Map(), viewOnce: new Map() };
+var WAI_MSG_CACHE_MAX = 400;
 var svgCache = {};
 var cachedViewOnceDB = null;
 
@@ -319,6 +322,10 @@ function initializeUI()
     {
         var msgID = data && data.messageID;
         if (!msgID || !waiPendingDeletedMsgs.has(msgID)) return;
+        if (data.messageData != undefined)
+        {
+            waiCacheSet(waiMsgResultCache.deleted, msgID, data.messageData);
+        }
         var entries = waiPendingDeletedMsgs.get(msgID);
         waiPendingDeletedMsgs.delete(msgID);
         for (var i = 0; i < entries.length; i++)
@@ -332,6 +339,10 @@ function initializeUI()
     {
         var msgID = data && data.messageID;
         if (!msgID || !waiPendingDeviceTypes.has(msgID)) return;
+        if (data.deviceType)
+        {
+            waiCacheSet(waiMsgResultCache.device, msgID, data.deviceType);
+        }
         var entries = waiPendingDeviceTypes.get(msgID);
         waiPendingDeviceTypes.delete(msgID);
         for (var i = 0; i < entries.length; i++)
@@ -868,10 +879,40 @@ function onNewMessageNodeAdded(messageNode)
     if (data_id == null) return;
 
     var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
+    if (!msgID) return;
 
-    restoreViewOnceMessageIfNeeded(messageNode, msgID);
-    restoreDeletedMessageIfNeeded(messageNode, msgID);
-    markMessageNodeDeviceIfPossible(messageNode, msgID);
+    // AG-4: single per-node classification pass to determine needed enrichments once.
+    var nodeText = null;
+    function getNodeText()
+    {
+        if (nodeText === null) nodeText = messageNode.textContent || "";
+        return nodeText;
+    }
+
+    // QW-1: cheap DOM precheck before any view-once IDB lookup.
+    var viewOnceExplanation = findViewOnceExplanation(messageNode);
+    if (viewOnceExplanation)
+    {
+        restoreViewOnceMessageIfNeeded(messageNode, msgID, viewOnceExplanation);
+    }
+
+    // QW-2: only look up deleted messages for known pseudo IDs or deleted placeholders.
+    if (pseudoMsgsIDs.has(msgID) || getNodeText().indexOf("message was deleted") !== -1)
+    {
+        restoreDeletedMessageIfNeeded(messageNode, msgID);
+    }
+
+    // QW-3: skip device-type lookups when the option is explicitly disabled.
+    var showDeviceTypes = !(waiCurrentOptions && waiCurrentOptions.showDeviceTypes === false);
+    if (showDeviceTypes)
+    {
+        var isOutgoingMessage = messageNode.classList.contains("message-out") ||
+            (messageNode.querySelector && messageNode.querySelector('[aria-label="You:"]') !== null);
+        if (!isOutgoingMessage)
+        {
+            markMessageNodeDeviceIfPossible(messageNode, msgID);
+        }
+    }
 }
 
 function getViewOnceDB(callback)
@@ -899,8 +940,74 @@ function getViewOnceDB(callback)
     viewOnceDBOpenRequest.onerror = function () {};
 }
 
-function restoreViewOnceMessageIfNeeded(messageNode, msgID)
+function renderViewOnceMessage(viewOnceExplanation, value)
 {
+    if (!viewOnceExplanation || !value) return;
+    viewOnceExplanation.innerHTML = "";
+    if (value.dataURI.startsWith("data:image"))
+    {
+        var img = document.createElement("img");
+        img.src = value.dataURI;
+        img.style.cssText = "width: 100%;";
+        viewOnceExplanation.appendChild(img);
+    }
+    else if (value.dataURI.startsWith("data:video"))
+    {
+        var video = document.createElement("video");
+        video.controls = true;
+        video.src = value.dataURI;
+        viewOnceExplanation.appendChild(video);
+    }
+    else if (value.dataURI.startsWith("data:audio"))
+    {
+        var audio = document.createElement("audio");
+        audio.controls = true;
+        audio.src = value.dataURI;
+        viewOnceExplanation.appendChild(audio);
+    }
+
+    if (value.caption != null)
+    {
+        var textSpan = document.createElement("span");
+        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+        textSpan.style.cssText = textSpanStyle;
+        textSpan.className = "copyable-text selectable-text";
+        textSpan.textContent = value.caption;
+        viewOnceExplanation.appendChild(textSpan);
+    }
+
+    var learnMore = document.createElement("a");
+    learnMore.className = "incognito-view-once-learn-more";
+    learnMore.href = "#";
+    learnMore.innerHTML = "Sent as view once: Learn more";
+    learnMore.addEventListener("click", function () {
+        Swal.fire({
+            title: "View-once message",
+            html: 'This message was sent as a view-once. \
+                        <br><br> Note that the recipient\'s device will show this as unopened \
+                        <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+            icon: "info",
+            width: 600,
+            confirmButtonColor: "#000",
+            confirmButtonText: "Got it",
+        });
+    });
+    viewOnceExplanation.appendChild(learnMore);
+}
+
+function restoreViewOnceMessageIfNeeded(messageNode, msgID, viewOnceExplanation)
+{
+    // QW-1: caller classifies view-once candidates; keep a defensive cheap guard.
+    var explanation = viewOnceExplanation || findViewOnceExplanation(messageNode);
+    if (!explanation) return;
+
+    var cached = waiCacheGet(waiMsgResultCache.viewOnce, msgID);
+    if (cached !== undefined)
+    {
+        renderViewOnceMessage(explanation, cached);
+        return;
+    }
+
     getViewOnceDB(function (viewOnceDB)
     {
         try
@@ -911,71 +1018,46 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
             {
                 var value = req.result;
                 if (!value) return;
+                waiCacheSet(waiMsgResultCache.viewOnce, msgID, value);
 
-                var viewOnceExplanation = null;
-                var aElements = messageNode.getElementsByTagName("a");
-                for (var i = 0; i < aElements.length; i++)
-                {
-                    if (aElements[i].innerHTML.includes("Learn more"))
-                    {
-                        viewOnceExplanation = aElements[i].parentElement;
-                    }
-                }
-                if (!viewOnceExplanation) return;
-                viewOnceExplanation.innerHTML = "";
-                if (value.dataURI.startsWith("data:image"))
-                {
-                    var img = document.createElement("img");
-                    img.src = value.dataURI;
-                    img.style.cssText = "width: 100%;";
-                    viewOnceExplanation.appendChild(img);
-                }
-                else if (value.dataURI.startsWith("data:video"))
-                {
-                    var video = document.createElement("video");
-                    video.controls = true;
-                    video.src = value.dataURI;
-                    viewOnceExplanation.appendChild(video);
-                }
-                else if (value.dataURI.startsWith("data:audio"))
-                {
-                    var audio = document.createElement("audio");
-                    audio.controls = true;
-                    audio.src = value.dataURI;
-                    viewOnceExplanation.appendChild(audio);
-                }
-
-                if (value.caption != null)
-                {
-                    var textSpan = document.createElement("span");
-                    var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
-                    textSpan.style.cssText = textSpanStyle;
-                    textSpan.className = "copyable-text selectable-text";
-                    textSpan.textContent = value.caption;
-                    viewOnceExplanation.appendChild(textSpan);
-                }
-
-                var learnMore = document.createElement("a");
-                learnMore.className = "incognito-view-once-learn-more";
-                learnMore.href = "#";
-                learnMore.innerHTML = "Sent as view once: Learn more";
-                learnMore.addEventListener("click", function () {
-                    Swal.fire({
-                        title: "View-once message",
-                        html: 'This message was sent as a view-once. \
-                        <br><br> Note that the recipient\'s device will show this as unopened \
-                        <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
-                        icon: "info",
-                        width: 600,
-                        confirmButtonColor: "#000",
-                        confirmButtonText: "Got it",
-                    });
-                });
-                viewOnceExplanation.appendChild(learnMore);
+                var targetExplanation = (explanation && explanation.isConnected) ? explanation : findViewOnceExplanation(messageNode);
+                if (!targetExplanation) return;
+                renderViewOnceMessage(targetExplanation, value);
             };
         }
         catch (e) {}
     });
+}
+
+function waiCacheGet(cache, key)
+{
+    if (!cache.has(key)) return undefined;
+    return cache.get(key);
+}
+
+function waiCacheSet(cache, key, value)
+{
+    if (cache.has(key)) cache.delete(key);
+    cache.set(key, value);
+    if (cache.size > WAI_MSG_CACHE_MAX)
+    {
+        var oldest = cache.keys().next().value;
+        cache.delete(oldest);
+    }
+}
+
+// AG-4: find the view-once "Learn more" anchor container without issuing IDB lookups.
+function findViewOnceExplanation(messageNode)
+{
+    var aElements = messageNode.getElementsByTagName("a");
+    for (var i = 0; i < aElements.length; i++)
+    {
+        if (aElements[i].innerHTML.includes("Learn more"))
+        {
+            return aElements[i].parentElement;
+        }
+    }
+    return null;
 }
 
 // One-shot callback scheduled to fire (or be dropped) after a timeout, tracked in
@@ -1002,6 +1084,10 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
 {
     if (!msgID) return;
 
+    // QW-2: gate expensive lookup unless this can actually be a deleted-message case.
+    var hasDeletedPlaceholder = (messageNode.textContent || "").indexOf("message was deleted") !== -1;
+    if (!pseudoMsgsIDs.has(msgID) && !hasDeletedPlaceholder) return;
+
     function onDeletedMessageReceived(messageData)
     {
         var span = document.createElement("span");
@@ -1009,7 +1095,7 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
 
         var didFindInDeletedMessagesDB = messageData != undefined;
-        var shouldTryToSyntehesizeMessage = messageNode.textContent.includes("message was deleted");
+        var shouldTryToSyntehesizeMessage = (messageNode.textContent || "").indexOf("message was deleted") !== -1;
 
         if (!didFindInDeletedMessagesDB && !shouldTryToSyntehesizeMessage)
         {
@@ -1044,8 +1130,15 @@ function restoreDeletedMessageIfNeeded(messageNode, msgID)
         tryToSynthesizeMessage(messageSubElement, messageData);
     }
 
-    createPendingEntry(waiPendingDeletedMsgs, msgID, onDeletedMessageReceived, 10000);
+    // AG-4: reuse cached deleted-message results when safe.
+    var cached = waiCacheGet(waiMsgResultCache.deleted, msgID);
+    if (cached !== undefined)
+    {
+        onDeletedMessageReceived(cached);
+        return;
+    }
 
+    createPendingEntry(waiPendingDeletedMsgs, msgID, onDeletedMessageReceived, 10000);
     WAIPageBus.sendToPage('deletedMsg:lookup', { messageID: msgID });
 }
 
@@ -1160,6 +1253,9 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
 function markMessageNodeDeviceIfPossible(messageNode, msgID)
 {
     if (!msgID) return;
+    // QW-3: skip device-type lookup entirely when disabled in options.
+    if (waiCurrentOptions && waiCurrentOptions.showDeviceTypes === false) return;
+
     var isOutgoingMessage = messageNode.classList.contains("message-out") ||
                             (messageNode.querySelector && messageNode.querySelector('[aria-label="You:"]') !== null);
     if (isOutgoingMessage)
@@ -1172,13 +1268,17 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         if (!deviceType) return;
         try
         {
-            var possibleNodes = document.querySelectorAll('[data-id*="' + CSS.escape(String(msgID)) + '"]');
-            if (possibleNodes.length > 0 && possibleNodes[0].childNodes.length > 0)
-                messageNode = possibleNodes[0].childNodes[0];
+            // QW-3: prefer captured node when still connected; only fallback when detached.
+            if (!messageNode || !messageNode.isConnected)
+            {
+                var possibleNode = document.querySelector('[data-id*="' + CSS.escape(String(msgID)) + '"]');
+                if (possibleNode && possibleNode.childNodes.length > 0)
+                    messageNode = possibleNode.childNodes[0];
+            }
         }
         catch (err) {}
 
-        if (!messageNode || messageNode.getElementsByClassName("device-type-image").length > 0) return;
+        if (!messageNode || !messageNode.isConnected || messageNode.getElementsByClassName("device-type-image").length > 0) return;
 
         var imageURL = "";
         if (deviceType == "computer")
@@ -1190,6 +1290,7 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
 
         generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19).then(function (imageElement)
         {
+            if (!messageNode || !messageNode.isConnected || messageNode.getElementsByClassName("device-type-image").length > 0) return;
             imageElement.className = "device-type-image";
 
             var topMessageNode = messageNode.parentNode && messageNode.parentNode.parentNode && messageNode.parentNode.parentNode.parentNode;
@@ -1205,8 +1306,15 @@ function markMessageNodeDeviceIfPossible(messageNode, msgID)
         });
     }
 
-    createPendingEntry(waiPendingDeviceTypes, msgID, onDeviceTypeReceived, 5000);
+    // AG-4: reuse cached device-type results when safe.
+    var cached = waiCacheGet(waiMsgResultCache.device, msgID);
+    if (cached !== undefined)
+    {
+        onDeviceTypeReceived(cached);
+        return;
+    }
 
+    createPendingEntry(waiPendingDeviceTypes, msgID, onDeviceTypeReceived, 5000);
     WAIPageBus.sendToPage('deviceType:lookup', { messageID: msgID });
 }
 

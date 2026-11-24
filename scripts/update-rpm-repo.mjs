@@ -3,8 +3,8 @@
 // Usage: node scripts/update-rpm-repo.mjs --artifacts=<dir> --out=<dir> [--gpg-key=<keyid>]
 
 import {
-  readFileSync, writeFileSync, mkdirSync, copyFileSync,
-  existsSync, readdirSync
+  writeFileSync, mkdirSync, copyFileSync,
+  existsSync, readdirSync, statSync, createReadStream
 } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,15 +92,26 @@ try {
   }
 }
 
+const hashFile = (filePath, algorithms) => new Promise((resolve, reject) => {
+  const hashes = algorithms.map((algorithm) => ({ algorithm, hash: createHash(algorithm) }));
+  const stream = createReadStream(filePath);
+  stream.on('data', (chunk) => {
+    for (const { hash } of hashes) hash.update(chunk);
+  });
+  stream.on('error', reject);
+  stream.on('end', () => {
+    resolve(Object.fromEntries(hashes.map(({ algorithm, hash }) => [algorithm, hash.digest('hex')])));
+  });
+});
+
 if (!generatedWithCreaterepo) {
   const currentRpms = readdirSync(packagesDir).filter((f) => f.endsWith('.rpm'));
   const packagesList = [];
 
   for (const filename of currentRpms) {
     const fullPath = join(packagesDir, filename);
-    const data = readFileSync(fullPath);
-    const pkgSize = data.length;
-    const sha256 = createHash('sha256').update(data).digest('hex');
+    const pkgSize = statSync(fullPath).size;
+    const { sha256 } = await hashFile(fullPath, ['sha256']);
 
     // Query RPM attributes if rpm binary is available, otherwise derive from filename
     let pkgName = 'waincognito';

@@ -5,6 +5,7 @@
 var MultiDevice = {};
 
 var originalImportKey = crypto.subtle.importKey;
+MultiDevice.MAX_NOISE_COUNTER_SLOTS = 10;
 
 MultiDevice.initialize = function()
 {
@@ -31,14 +32,18 @@ MultiDevice.initialize = function()
             {
                 MultiDevice.writeKey = keyData;
                 MultiDevice.writeKeyImported = key;
-                MultiDevice.writeCounters.push(0);
+                // New key means old counter slots are for a stale key; reset conservatively.
+                MultiDevice.writeCounters = [0];
+                MultiDevice.writeCounterIndex = 0;
                 console.log("WAIncognito: Noise encryption key has been replaced.");
             }
             else if (keyUsages.includes("decrypt"))
             {
                 MultiDevice.readKey = keyData;
                 MultiDevice.readKeyImported = key;
-                MultiDevice.readCounters.push(0);
+                // New key means old counter slots are for a stale key; reset conservatively.
+                MultiDevice.readCounters = [0];
+                MultiDevice.readCounterIndex = 0;
                 console.log("WAIncognito: Noise decryption key has been replaced.");
             }
         }
@@ -85,12 +90,10 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
         var frame = binaryReader.readBuffer(size);
 
-        var counterIndex = await MultiDevice.getGoodCounterIndexForDecryption(frame, isIncoming);
-        var counter = isIncoming ? MultiDevice.readCounters[counterIndex]++ : MultiDevice.writeCounters[counterIndex]++;
+        var frameResult = await MultiDevice.getGoodCounterIndexForDecryption(frame, isIncoming);
+        var counter = isIncoming ? MultiDevice.readCounters[frameResult.counterIndex]++ : MultiDevice.writeCounters[frameResult.counterIndex]++;
         
-        var frameInfo = {frame: frame, counter: counter};
-
-        frames.push(frameInfo);
+        frames.push({frame: frame, counter: counter, decryptedFrame: frameResult.decryptedFrame});
     }
 
     try
@@ -98,14 +101,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         for (var i = 0; i < frames.length; i++)
         {
             var frameInfo = frames[i];
-            
-            var currentFrame = frameInfo.frame;
+            var decryptedFrame = frameInfo.decryptedFrame;
             var counter = frameInfo.counter;
-            
-            var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
-            var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
-    
-            var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+
             var flags = new Uint8Array(decryptedFrame)[0];
             var decryptedFrameOpened = decryptedFrame.slice(1);
             if (flags & 2)
@@ -119,22 +117,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     }
     catch (exception)
     {
-        if (isOperationError(exception))
-        {
-            // undo the per-frame increment, in case this is another socket's frame
-            if (isIncoming) MultiDevice.readCounters[MultiDevice.readCounterIndex]--;
-            else MultiDevice.writeCounters[MultiDevice.writeCounterIndex]--;
-
-            var counter = isIncoming ? MultiDevice.readCounters[MultiDevice.readCounterIndex] : MultiDevice.writeCounters[MultiDevice.writeCounterIndex];
-
-            throw waiNoiseError("Couldn't decrypt Noise packet: wrong counter (" + counter + ") in decryption, isIncoming: " + isIncoming);
-        }
-        else
-        {
-            console.error("Could not decrypt Noise packet");
-            console.error(exception);
-            throw exception;
-        }
+        console.error("Could not process decrypted Noise packet");
+        console.error(exception);
+        throw exception;
     }
 
     return frames;
@@ -513,70 +498,89 @@ MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, coun
 // Helper functions
 //
 
-MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIncoming)
+MultiDevice.getNoiseCounterState = function(isIncoming)
 {
-    // we'll try to decrypt the frame with all the counters, to see which one is the counter that belongs to the current socket
-    var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
+    return isIncoming ?
+        {counters: MultiDevice.readCounters, indexName: "readCounterIndex"} :
+        {counters: MultiDevice.writeCounters, indexName: "writeCounterIndex"};
+};
 
-    var foundCounterIndex = -1;
+MultiDevice.noteNoiseCounterSuccess = function(isIncoming, counterIndex)
+{
+    var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
+    if (counterIndex < 0 || counterIndex >= countersArray.length) return;
 
-    // Prepeare the known tracked counters,
+    // Keep last-good-first probing by moving the active slot to the front (MRU).
+    var counterValue = countersArray[counterIndex];
+    countersArray.splice(counterIndex, 1);
+    countersArray.unshift(counterValue);
+
+    if (isIncoming) MultiDevice.readCounterIndex = 0;
+    else MultiDevice.writeCounterIndex = 0;
+};
+
+MultiDevice.addNoiseCounterSlot = function(isIncoming, counterValue)
+{
     var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
 
+    // Bound slot growth; drop least-recently-active slots before adding a new one.
+    while (countersArray.length >= MultiDevice.MAX_NOISE_COUNTER_SLOTS && countersArray.length > 1)
+    {
+        countersArray.pop();
+    }
+
+    countersArray.push(counterValue);
+    return countersArray.length - 1;
+};
+
+MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIncoming)
+{
+    // Try to decrypt the frame with known counters and return the decrypted plaintext
+    // to avoid a second AES-GCM decrypt in decryptNoisePacket.
+    var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
+    var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
+    var rememberedIndex = isIncoming ? MultiDevice.readCounterIndex : MultiDevice.writeCounterIndex;
+
+    var probeOrder = [];
+    if (rememberedIndex >= 0 && rememberedIndex < countersArray.length)
+    {
+        probeOrder.push(rememberedIndex);
+    }
     for (var i = 0; i < countersArray.length; i++)
     {
-        var counter = countersArray[i];
+        if (i !== rememberedIndex) probeOrder.push(i);
+    }
 
-        var isCounterCorrect = await MultiDevice.testFrameDecryption(counter, key, currentFrame);
-        if (isCounterCorrect)
+    for (var j = 0; j < probeOrder.length; j++)
+    {
+        var counterIndex = probeOrder[j];
+        var counter = countersArray[counterIndex];
+        var decryptedFrame = await MultiDevice.testFrameDecryption(counter, key, currentFrame);
+        if (decryptedFrame)
         {
-            // decryption seemed successful
-            foundCounterIndex = i;
-            // remember the good one
-            if (isIncoming)
-            {
-                MultiDevice.readCounterIndex = i;
-            }
-            else
-            {
-                MultiDevice.writeCounterIndex = i;
-            }
-
-            break;
+            MultiDevice.noteNoiseCounterSuccess(isIncoming, counterIndex);
+            return {ok: true, decryptedFrame: decryptedFrame, counterIndex: 0};
         }
     }
 
-    if (foundCounterIndex == -1)
+    // Try the one stolen from within WA's javascript state
+    if (WhatsAppAPI.Communication.socket)
     {
-        // try the one stolen from within WA's javascript state
-        if (WhatsAppAPI.Communication.socket)
+        var socketCounter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
+        if (socketCounter != null)
         {
-            var counter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
-            if (MultiDevice.testFrameDecryption(counter, key, currentFrame))
+            var socketDecryptedFrame = await MultiDevice.testFrameDecryption(socketCounter, key, currentFrame);
+            if (socketDecryptedFrame)
             {
-                // add this counter
-                if (isIncoming) 
-                {
-                    MultiDevice.readCounters.push(WhatsAppAPI.Communication.socket.$7);
-                    foundCounterIndex = MultiDevice.readCounters.length - 1;
-                }
-                else
-                {
-                    MultiDevice.writeCounters.push(WhatsAppAPI.Communication.socket.$8);
-                    foundCounterIndex = MultiDevice.writeCounters.length - 1;
-                }
+                var foundCounterIndex = MultiDevice.addNoiseCounterSlot(isIncoming, socketCounter);
+                MultiDevice.noteNoiseCounterSuccess(isIncoming, foundCounterIndex);
+                return {ok: true, decryptedFrame: socketDecryptedFrame, counterIndex: 0};
             }
         }
-       
     }
 
-    if (foundCounterIndex == -1)
-    {
-        console.warn("WAIncognito: decryption is not working, COUNTER PROBLEM");
-        throw waiNoiseError("Couldn't get the correct counter (isIncoming: " + isIncoming + ")");
-    }
-
-    return foundCounterIndex;
+    console.warn("WAIncognito: decryption is not working, COUNTER PROBLEM");
+    throw waiNoiseError("Couldn't get the correct counter (isIncoming: " + isIncoming + ")");
 }
 
 MultiDevice.testFrameDecryption = async function(counter, key, currentFrame)
@@ -585,20 +589,18 @@ MultiDevice.testFrameDecryption = async function(counter, key, currentFrame)
 
     try
     {
-        var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+        return await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
     }
     catch (exception)
     {
         if (isOperationError(exception))
         {
             // wrong counter
-            return false;
+            return null;
         }
         else
             throw exception;
     }
-
-    return true;
 }
 
 MultiDevice.HMAC_SHA256 = async function(toSign, key)
@@ -680,6 +682,10 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
         // reset the counters on a new connection to avoid weird stuff
         MultiDevice.readKey = null;
         MultiDevice.writeKey = null;
+        MultiDevice.readCounters = [0];
+        MultiDevice.writeCounters = [0];
+        MultiDevice.readCounterIndex = 0;
+        MultiDevice.writeCounterIndex = 0;
     }
 
     return looksLikeHandshakePacket;

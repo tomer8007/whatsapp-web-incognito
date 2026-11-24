@@ -1854,8 +1854,61 @@ function installCrashRecovery() {
 
 // ---------------------------------------------------------------- tray wiring
 
-function startTray() {
-  state.tray = createTray({
+function disableTrayForMissingWatcher(watcher) {
+  const lib = desktopIntegration.hasAppIndicatorLib();
+  warn('no StatusNotifier watcher on D-Bus: the tray icon has nowhere to render. ' +
+    'Enable the GNOME "AppIndicator and KStatusNotifierItem Support" extension. ' +
+    `(indicator lib ${lib.present ? `found (${lib.found.join(', ')})` : 'NOT found'}; ` +
+    `desktop=${desktopIntegration.detectDesktop().raw || 'unknown'}). ` +
+    'Closing the window will quit instead of hiding until a watcher appears.');
+  if (state.tray) {
+    try { state.tray.destroy(); } catch (e) { /* ignore */ }
+    state.tray = null;
+  }
+  return watcher;
+}
+
+function reconcileTrayWatcher(opts) {
+  const options = opts && typeof opts === 'object' ? opts : {};
+  const cacheFile = typeof options.cacheFile === 'string' && options.cacheFile ? options.cacheFile : null;
+  const totalTimeoutMs = Number(options.totalTimeoutMs) > 0 ? Number(options.totalTimeoutMs) : 1200;
+  const probe = () => desktopIntegration.hasStatusNotifierWatcherAsync({ cacheFile, totalTimeoutMs })
+    .then((watcher) => {
+      if (watcher && watcher.present) {
+        if (!state.tray) {
+          // A watcher appeared after a previously missing/unknown state. Create a tray
+          // now so the existing semantics ("enabled when watcher present") hold.
+          guard('tray create after watcher appeared', () => {
+            state.tray = createTray({
+              app,
+              getWindow: () => state.win,
+              getStatus: () => (state.watchdog ? state.watchdog.snapshot() : { status: 'UNKNOWN' }),
+              getPrefs: () => state.prefs.get(),
+              setPref: (patch) => { applyPatch(patch); return state.prefs.get(); },
+              resetPrefs: resetAllPrefs,
+              openSettings,
+              quit: () => { state.quitting = true; app.quit(); },
+            });
+          })();
+        }
+        debug(`StatusNotifier watcher present (${watcher.method})`);
+        return watcher;
+      }
+      if (state.tray) disableTrayForMissingWatcher(watcher);
+      return watcher;
+    })
+    .catch((e) => {
+      debug(`tray watcher probe failed: ${(e && e.message) || e}`);
+      return { present: false, method: null };
+    });
+  return probe();
+}
+
+function startTray(opts) {
+  const options = opts && typeof opts === 'object' ? opts : {};
+  const cacheFile = typeof options.cacheFile === 'string' && options.cacheFile ? options.cacheFile : null;
+
+  const create = () => createTray({
     app,
     getWindow: () => state.win,
     getStatus: () => (state.watchdog ? state.watchdog.snapshot() : { status: 'UNKNOWN' }),
@@ -1865,36 +1918,35 @@ function startTray() {
     openSettings,
     quit: () => { state.quitting = true; app.quit(); },
   });
+
+  // On Linux a Tray can be created but render nowhere when no StatusNotifier
+  // watcher is on the session bus. Probe asynchronously so startup is never
+  // blocked by D-Bus; reconcile tray visibility when the result arrives.
+  if (process.platform === 'linux') {
+    const cached = desktopIntegration.readStatusNotifierWatcherCache
+      ? desktopIntegration.readStatusNotifierWatcherCache(cacheFile)
+      : null;
+    const knownMissing = cached && cached.present === false;
+    if (!knownMissing) {
+      state.tray = create();
+      if (!state.tray) {
+        warn('no system tray available: the window will minimize to the dock instead of hiding');
+      }
+    } else {
+      debug('StatusNotifier watcher previously missing; skipping tray until revalidated');
+    }
+    guard('tray watcher reconcile', () => { reconcileTrayWatcher({ cacheFile }); })();
+    return state.tray;
+  }
+
+  state.tray = create();
   if (!state.tray) {
     // Without a tray there is nothing to reopen a hidden window from. On Linux the
     // close handler minimizes to the dock/taskbar instead (see minimizeToTaskbar),
     // so background protection keeps working tray-less, Windows-style.
     warn('no system tray available: the window will minimize to the dock instead of hiding');
-    return;
   }
-  // On Linux a successfully created Tray can still render nowhere: GNOME has no
-  // legacy systray, and without the AppIndicator extension there is no
-  // StatusNotifier watcher on the session bus. Detect that explicitly — an
-  // invisible-but-non-null tray would hide the window on close with no way back.
-  // (Inside an AppImage the host /lib is still visible, so a missing *library* is
-  // rarely the cause; a missing *watcher* is. Both are logged for diagnosis.)
-  if (process.platform === 'linux') {
-    guard('tray watcher check', () => {
-      const watcher = desktopIntegration.hasStatusNotifierWatcher();
-      if (watcher.present) {
-        debug(`StatusNotifier watcher present (${watcher.method})`);
-        return;
-      }
-      const lib = desktopIntegration.hasAppIndicatorLib();
-      warn('no StatusNotifier watcher on D-Bus: the tray icon has nowhere to render. ' +
-        'Enable the GNOME "AppIndicator and KStatusNotifierItem Support" extension. ' +
-        `(indicator lib ${lib.present ? `found (${lib.found.join(', ')})` : 'NOT found'}; ` +
-        `desktop=${desktopIntegration.detectDesktop().raw || 'unknown'}). ` +
-        'Closing the window will quit instead of hiding until a watcher appears.');
-      try { state.tray.destroy(); } catch (e) { /* ignore */ }
-      state.tray = null;
-    })();
-  }
+  return state.tray;
 }
 
 // ---------------------------------------------------------------- boot
@@ -2013,14 +2065,16 @@ function boot() {
     installUserAgent(appSession);
     installSessionGuards(appSession);
 
-    startTray();
+    // Create/show the window before tray D-Bus probing so startup is not blocked by
+    // Linux StatusNotifier watcher detection (AG-3).
+    const win = createWindow(state.prefs.get());
 
     // Task 11: sync window background color when OS theme changes (avoids white flash on theme toggle)
     nativeTheme.on('updated', () => {
-      const win = state.win;
-      if (!win || win.isDestroyed()) return;
+      const w = state.win;
+      if (!w || w.isDestroyed()) return;
       guard('theme-update', () => {
-        win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#111b21' : '#ffffff');
+        w.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#111b21' : '#ffffff');
       })();
     });
 
@@ -2031,7 +2085,7 @@ function boot() {
     // (not tied to autostart) and best effort.
     guard('notification entry', () => syncNotificationEntry())();
 
-    const win = createWindow(state.prefs.get());
+    startTray({ cacheFile: path.join(userDataDir, 'watcher-cache.json') });
     startWatchdog(win);
     startDevBridge(win);
 
