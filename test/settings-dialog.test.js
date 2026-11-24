@@ -12,7 +12,7 @@ test("the settings popup has the nine categories in order, named in English", ()
     const s = load();
     s.setLanguage("en");
     assert.deepStrictEqual([...s.SETTINGS_CATEGORIES.map((c) => s.t("cat." + c.id))],
-        ["Privacy", "Per-contact privacy", "Messages", "Notifications", "Screen & Lock", "Vault", "Scheduling", "Utilities", "Diagnostics"]);
+        ["Privacy", "Per-contact privacy", "Messages", "Notifications", "Screen", "Vault", "Scheduling", "Utilities", "Diagnostics"]);
 });
 
 test("every option of the schema is in exactly one category (safetyDelay has been hidden since the old menu)", () => {
@@ -70,11 +70,6 @@ test("no feature code still calls SweetAlert or the Drop menu, and the manifest 
     assert.ok(scripts.indexOf("core/modal.js") > -1 && scripts.indexOf("core/modal.js") < scripts.indexOf("core/settings_dialog.js"));
     assert.ok(scripts.indexOf("core/settings_dialog.js") < scripts.indexOf("core/ui.js"));
     assert.deepStrictEqual([...manifest.permissions], ["storage"]);
-});
-
-test("lock idle presets: 1, 5, 10, 15, 30 or custom", () => {
-    const { lockIdleChoice } = load();
-    assert.deepStrictEqual([1, 5, 10, 15, 30, 7, 0].map(lockIdleChoice), ["1", "5", "10", "15", "30", "custom", "custom"]);
 });
 
 test("contacts: custom-rule indicator and search", () => {

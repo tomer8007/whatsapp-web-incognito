@@ -5,80 +5,8 @@ const path = require("node:path");
 const { createSandbox, loadScripts, ROOT } = require("./helpers/sandbox");
 
 function load() {
-    return loadScripts(createSandbox({ crypto: globalThis.crypto, TextEncoder, atob }), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/privacy_screen.js"]);
+    return loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/privacy_screen.js"]);
 }
-
-function makeLock(overrides = {}) {
-    const { createLock } = load();
-    let clock = 0;
-    const lock = createLock({
-        now: () => clock,
-        verify: async (code) => code === "1234",
-        idleMs: 10 * 60 * 1000,
-        ...overrides,
-    });
-    return { lock, advance: (ms) => { clock += ms; } };
-}
-
-test("a new lock starts locked; a wrong code keeps it locked, the right one unlocks", async () => {
-    const { lock } = makeLock();
-    assert.strictEqual(lock.state(), "locked");
-    assert.strictEqual(await lock.unlock("0000"), false);
-    assert.strictEqual(lock.state(), "locked");
-    assert.strictEqual(await lock.unlock("1234"), true);
-    assert.strictEqual(lock.state(), "unlocked");
-});
-
-test("tick relocks once idle for idleMs", async () => {
-    const { lock, advance } = makeLock();
-    await lock.unlock("1234");
-    advance(10 * 60 * 1000 - 1);
-    lock.tick();
-    assert.strictEqual(lock.state(), "unlocked");
-    advance(1);
-    lock.tick();
-    assert.strictEqual(lock.state(), "locked");
-});
-
-test("activity resets the idle timer", async () => {
-    const { lock, advance } = makeLock();
-    await lock.unlock("1234");
-    advance(9 * 60 * 1000);
-    lock.activity();
-    advance(9 * 60 * 1000);
-    lock.tick();
-    assert.strictEqual(lock.state(), "unlocked");
-    advance(2 * 60 * 1000);
-    lock.tick();
-    assert.strictEqual(lock.state(), "locked");
-});
-
-test("lockNow locks immediately, and activity does not unlock", async () => {
-    const { lock } = makeLock();
-    await lock.unlock("1234");
-    lock.lockNow();
-    assert.strictEqual(lock.state(), "locked");
-    lock.activity();
-    assert.strictEqual(lock.state(), "locked");
-});
-
-test("a verify that throws counts as a wrong code", async () => {
-    const { lock } = makeLock({ verify: async () => { throw new Error("boom"); } });
-    assert.strictEqual(await lock.unlock("x"), false);
-    assert.strictEqual(lock.state(), "locked");
-});
-
-test("hashPasscode is deterministic per salt and differs between salts", async () => {
-    const { hashPasscode } = load();
-    const a1 = await hashPasscode("1234", "garam-a");
-    const a2 = await hashPasscode("1234", "garam-a");
-    const b = await hashPasscode("1234", "garam-b");
-    const other = await hashPasscode("4321", "garam-a");
-    assert.strictEqual(a1, a2);
-    assert.notStrictEqual(a1, b);
-    assert.notStrictEqual(a1, other);
-    assert.ok(!a1.includes("1234"));
-});
 
 test("blurClassesFor maps the options to body classes", () => {
     const { blurClassesFor, defaultOptions } = load();
@@ -98,24 +26,8 @@ test("every blur selector used for diagnostics is really in styles.css", () => {
     }
 });
 
-test("the lock UI shows the required disclaimer (English)", () => {
+test("the screen lock is gone: no lock options, no lock code", () => {
     const s = load();
-    s.setLanguage("en");
-    assert.strictEqual(s.t("lock.disclaimer"), "This lock is a privacy screen, not data security. To protect your data, use the Vault.");
-});
-
-test("shouldLockAfterHidden: only after N minutes, never when disabled", () => {
-    const { shouldLockAfterHidden } = load();
-    assert.strictEqual(shouldLockAfterHidden(0, 119999, 2), false);
-    assert.strictEqual(shouldLockAfterHidden(0, 120000, 2), true);
-    assert.strictEqual(shouldLockAfterHidden(null, 999999, 2), false);
-    assert.strictEqual(shouldLockAfterHidden(0, 999999, 0), false);
-});
-
-test("Ctrl+Alt+L is the lock shortcut", () => {
-    const { isLockShortcut } = load();
-    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, key: "l" }), true);
-    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, key: "L" }), true);
-    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: false, key: "l" }), false);
-    assert.strictEqual(isLockShortcut({ ctrlKey: true, altKey: true, shiftKey: true, key: "l" }), false);
+    assert.ok(![...s.OPTIONS_SCHEMA].some((o) => /^lock/.test(o.key)));
+    for (const name of ["createLock", "hashPasscode", "isLockShortcut", "shouldLockAfterHidden"]) assert.strictEqual(typeof s[name], "undefined", name);
 });

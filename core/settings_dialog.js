@@ -39,7 +39,7 @@ var SETTINGS_ICONS = {
 };
 
 // item types: toggle {key}, number {key, unit}, select {key}, action {action, labelKey, descKey}, note {textKey},
-// lock-card {keys}, contacts, vault-status, scheduled-receipts, scheduled-messages, diagnostics.
+// contacts, vault-status, scheduled-receipts, scheduled-messages, diagnostics.
 // Texts are translation keys: category cat.<id> / cat.<id>.intro, sections sec.*, options opt.<key> and opt.<key>.desc.
 var SETTINGS_CATEGORIES = [
     { id: "privacy", icon: "eyeOff",
@@ -83,11 +83,8 @@ var SETTINGS_CATEGORIES = [
             { type: "note", textKey: "note.toasts" },
         ] },
       ] },
-    { id: "screen", icon: "lock",
+    { id: "screen", icon: "eye",
       sections: [
-        { titleKey: "sec.lockWhenIdle", items: [
-            { type: "lock-card", keys: ["lockEnabled", "lockIdleMinutes", "lockOnHidden", "lockOnHiddenMinutes"] },
-        ] },
         { titleKey: "sec.blur", items: [
             { type: "toggle", key: "blurChatList", icon: "list" },
             { type: "toggle", key: "blurMessages", icon: "message" },
@@ -130,7 +127,7 @@ var SETTINGS_CATEGORIES = [
       sections: [ { titleKey: "sec.results", items: [ { type: "diagnostics" } ] } ] },
 ];
 
-// every option key shown by an item (the lock card shows several)
+// every option key shown by an item
 function settingsItemKeys(item)
 {
     return item.keys ? item.keys : (item.key ? [item.key] : []);
@@ -157,14 +154,6 @@ function rateLabel(rate)
 {
     var digits = (String(rate).split(".")[1] || "").length;
     return formatNumber(Number(rate), digits) + "x";
-}
-
-var LOCK_IDLE_PRESETS = [1, 5, 10, 15, 30];
-
-// "custom" when the minutes are not one of the presets
-function lockIdleChoice(minutes)
-{
-    return LOCK_IDLE_PRESETS.indexOf(Number(minutes)) > -1 ? String(minutes) : "custom";
 }
 
 // does the contact have a rule other than "default"?
@@ -337,7 +326,7 @@ function openSettingsDialog(initial)
     if (icon) icon.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito");
 
     var split = make("div", "wam-split");
-    var side = make("div", "wam-side"); // the category list with the language picker and the lock button pinned below it
+    var side = make("div", "wam-side"); // the category list with the language picker pinned below it
     var nav = make("nav", "wam-nav");
     nav.setAttribute("role", "tablist");
     nav.setAttribute("aria-orientation", "vertical");
@@ -346,19 +335,11 @@ function openSettingsDialog(initial)
     languageButton.type = "button";
     languageButton.setAttribute("aria-haspopup", "listbox");
     languageButton.setAttribute("aria-expanded", "false");
-    var lockButton = make("button", "wam-nav-item wam-side-button");
-    lockButton.type = "button";
-    lockButton.addEventListener("click", function()
-    {
-        if (window.WAIncognitoLock && window.WAIncognitoLock.hasPasscode()) window.WAIncognitoLock.lockNow();
-        else select("screen");
-    });
     var languageMenu = make("div", "wam-menu");
     languageMenu.setAttribute("role", "listbox");
     languageMenu.hidden = true;
     foot.appendChild(languageMenu);
     foot.appendChild(languageButton);
-    foot.appendChild(lockButton);
     side.appendChild(nav);
     side.appendChild(foot);
     var panel = make("section", "wam-panel");
@@ -438,9 +419,6 @@ function openSettingsDialog(initial)
         languageButton.lastChild.textContent = currentLanguageName();
         languageButton.setAttribute("aria-label", t("settings.language") + ": " + currentLanguageName());
         languageButton.title = t("settings.language");
-        lockButton.innerHTML = settingsIconSVG("lock") + "<span class='wam-side-label'></span>";
-        lockButton.lastChild.textContent = t("lock.now");
-        lockButton.title = t("lock.shortcut");
         languageMenu.setAttribute("aria-label", t("settings.language"));
     }
 
@@ -639,136 +617,6 @@ function openSettingsDialog(initial)
             else box.textContent = t("vault.status.open", { count: status.count, size: formatMegabytes(status.bytes) });
         });
         return box;
-    }
-
-    // the "lock WhatsApp when idle" card: everything about the screen lock in one place
-    function renderLockCard()
-    {
-        var stack = make("div", "wam-stack");
-        stack.appendChild(renderToggle({ key: "lockEnabled", icon: "lock", onChange: refreshPasscodeWarning }));
-
-        // idle time: presets and a custom value
-        var idleRow = rowShell({ labelKey: "lock.idleAfter", descKey: "opt.lockIdleMinutes.desc", icon: "clock" });
-        var idleField = make("span", "wam-row-control");
-        var preset = make("select", "wam-select");
-        preset.setAttribute("aria-label", t("lock.idleAfter"));
-        LOCK_IDLE_PRESETS.forEach(function(minutes)
-        {
-            var option = make("option", "", t("lock.minutes", { n: minutes }));
-            option.value = String(minutes);
-            preset.appendChild(option);
-        });
-        var customOption = make("option", "", t("lock.custom"));
-        customOption.value = "custom";
-        preset.appendChild(customOption);
-        var custom = numberControl("lockIdleMinutes");
-        preset.value = lockIdleChoice(optionValue("lockIdleMinutes"));
-        custom.hidden = preset.value != "custom";
-        preset.addEventListener("change", function()
-        {
-            if (preset.value == "custom") { custom.hidden = false; custom.focus(); return; }
-            custom.hidden = true;
-            var minutes = Number(preset.value);
-            custom.value = minutes;
-            options.lockIdleMinutes = minutes;
-            setOptionFromMenu("lockIdleMinutes", minutes);
-        });
-        idleField.appendChild(preset);
-        idleField.appendChild(custom);
-        idleRow.appendChild(idleField);
-        stack.appendChild(idleRow);
-
-        // lock when the tab is hidden
-        stack.appendChild(renderToggle({ key: "lockOnHidden", icon: "eyeOff" }));
-        var hiddenRow = rowShell({ labelKey: "opt.lockOnHiddenMinutes", icon: "clock" });
-        var hiddenField = make("span", "wam-row-control");
-        hiddenField.appendChild(numberControl("lockOnHiddenMinutes"));
-        hiddenField.appendChild(make("span", "wam-unit", t("unit.minutes")));
-        hiddenRow.appendChild(hiddenField);
-        stack.appendChild(hiddenRow);
-
-        // passcode, inline
-        var passRow = rowShell({ labelKey: "lock.passcode", icon: "key" });
-        var passText = passRow.querySelector(".wam-row-text");
-        var passStatus = make("span", "wam-row-desc", "");
-        passText.appendChild(passStatus);
-        var passButton = make("button", "wam-btn wam-btn-secondary wam-btn-small", t("lock.setPasscode"));
-        passButton.type = "button";
-        passRow.appendChild(passButton);
-        stack.appendChild(passRow);
-
-        var form = make("div", "wam-passform");
-        form.hidden = true;
-        var pass1 = make("input", "wam-input");
-        pass1.type = "password";
-        pass1.placeholder = t("lock.pass1");
-        pass1.autocomplete = "new-password";
-        pass1.setAttribute("aria-label", t("lock.pass1"));
-        var pass2 = make("input", "wam-input");
-        pass2.type = "password";
-        pass2.placeholder = t("lock.pass2");
-        pass2.autocomplete = "new-password";
-        pass2.setAttribute("aria-label", t("lock.pass2"));
-        var error = make("div", "wam-validation");
-        error.hidden = true;
-        var save = make("button", "wam-btn wam-btn-primary wam-btn-small", t("lock.saveBtn"));
-        save.type = "button";
-        var formActions = make("div", "wam-passform-actions");
-        formActions.appendChild(save);
-        form.appendChild(pass1);
-        form.appendChild(pass2);
-        form.appendChild(error);
-        form.appendChild(formActions);
-        stack.appendChild(form);
-
-        var warning = make("p", "wam-note wam-note-warn", t("lock.needPasscode"));
-        warning.hidden = true;
-        stack.appendChild(warning);
-
-        var actions = make("div", "wam-row wam-row-static wam-lock-actions");
-        var lockNow = make("button", "wam-btn wam-btn-primary", t("lock.now"));
-        lockNow.type = "button";
-        lockNow.addEventListener("click", function() { settingsLockNow(); });
-        actions.appendChild(lockNow);
-        actions.appendChild(make("span", "wam-row-desc", t("lock.shortcut")));
-        stack.appendChild(actions);
-        stack.appendChild(make("p", "wam-note", t("lock.disclaimer")));
-
-        var hasPasscode = false;
-        function refreshPasscodeWarning()
-        {
-            warning.hidden = !(optionValue("lockEnabled") && !hasPasscode);
-        }
-        function loadPasscodeState()
-        {
-            extensionStorageGet(["lockPasscode"]).then(function(stored)
-            {
-                hasPasscode = !!stored.lockPasscode;
-                passStatus.textContent = hasPasscode ? t("lock.passcodeSet") : t("lock.passcodeNone");
-                passButton.textContent = hasPasscode ? t("lock.changePasscode") : t("lock.setPasscode");
-                refreshPasscodeWarning();
-            });
-        }
-        passButton.addEventListener("click", function() { form.hidden = !form.hidden; if (!form.hidden) pass1.focus(); });
-        save.addEventListener("click", async function()
-        {
-            error.hidden = true;
-            if (pass1.value.length < 4) { error.textContent = t("lock.err.short"); error.hidden = false; return; }
-            if (pass1.value !== pass2.value) { error.textContent = t("lock.err.mismatch"); error.hidden = false; return; }
-            await savePasscode(pass1.value);
-            pass1.value = pass2.value = "";
-            form.hidden = true;
-            WAModal.fire({ title: t("lock.saved"), icon: "success", toast: true, timer: 3000 });
-            loadPasscodeState();
-        });
-        loadPasscodeState();
-        return stack;
-    }
-
-    function settingsLockNow()
-    {
-        if (window.WAIncognitoLock && window.WAIncognitoLock.hasPasscode()) window.WAIncognitoLock.lockNow();
-        else WAModal.fire({ title: t("lock.noPasscode"), text: t("lock.noPasscodeText"), icon: "info", confirmButtonText: t("common.ok") });
     }
 
     // "Per-contact privacy": a searchable, filterable, paged list of the user's chats (names only, never messages)
@@ -1154,7 +1002,7 @@ function openSettingsDialog(initial)
 
     var renderers = {
         toggle: renderToggle, number: renderNumber, select: renderSelect, action: renderAction, note: renderNote,
-        "lock-card": renderLockCard, contacts: renderContacts,
+        contacts: renderContacts,
         "vault-status": renderVaultStatus, "scheduled-receipts": renderScheduledReceipts,
         "scheduled-messages": renderScheduledMessages, diagnostics: renderDiagnostics,
     };

@@ -401,68 +401,6 @@ body #main[data-incognito-noblur~="avatars"] header img
   filter: none !important;
 }
 
-#incognito-lock
-{
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* fully opaque: the chats behind must not be readable */
-  background: var(--WDS-surface-default, var(--app-background, #111b21));
-  color: var(--WDS-content-default, var(--primary-strong, #e9edef));
-  font-family: "Roboto Variable", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
-}
-
-.incognito-lock-box
-{
-  width: min(340px, 90vw);
-  padding: 32px 28px 24px 28px;
-  box-sizing: border-box;
-  text-align: center;
-  border-radius: 16px;
-  background: var(--WDS-surface-highlight, rgba(255, 255, 255, 0.06));
-}
-
-.incognito-lock-title
-{
-  font-size: 20px;
-  font-weight: 500;
-  margin-bottom: 18px;
-}
-
-#incognito-lock input
-{
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 16px;
-  text-align: center;
-}
-
-#incognito-lock input:focus { outline: none; border-color: var(--WDS-accent, #21c063); box-shadow: 0 0 0 1px var(--WDS-accent, #21c063); }
-
-.incognito-lock-error
-{
-  min-height: 18px;
-  margin-top: 8px;
-  color: #f15c6d;
-  font-size: 13px;
-}
-
-.incognito-lock-note
-{
-  margin-top: 16px;
-  font-size: 12px;
-  color: var(--WDS-content-deemphasized, rgba(255, 255, 255, 0.6));
-}
-
 .download-all-button-incognito
 {
   position: absolute;
@@ -878,14 +816,10 @@ body #main[data-incognito-noblur~="avatars"] header img
   .wam-switch-track, .wam-switch-track::after { transition: none; }
 }
 
-/* header tools, lock card, contacts list, conversation header button */
+/* header tools, contacts list, conversation header button */
 .wam-header { gap: 12px; }
 .wam-stack > * + * { border-top: 1px solid var(--wam-border); }
 .wam-row-static { cursor: default; }
-.wam-passform { padding: 4px 16px 14px 16px; }
-.wam-passform-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
-.wam-lock-actions { flex-wrap: wrap; }
-.wam-note-warn { color: #f5a623; }
 .wam-search { margin: 0 0 8px 0; }
 .wam-contacts > .wam-note { padding-inline: 4px; }
 .wam-contact-list { border: 1px solid var(--wam-border); border-radius: 14px; overflow: hidden; max-height: 46vh; overflow-y: auto; }

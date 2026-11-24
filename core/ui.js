@@ -1543,55 +1543,6 @@ document.addEventListener("onScheduleReceiptClick", function(e)
 
 
 //
-// Screen lock passcode (core/privacy_screen.js). Only {salt, hash} is stored, in chrome.storage.local["lockPasscode"].
-//
-async function openLockSetupModal()
-{
-    var stored = await extensionStorageGet(["lockPasscode"]);
-    var hasPasscode = !!stored.lockPasscode;
-
-    var result = await WAModal.fire({
-        title: hasPasscode ? t("lock.title") : t("lock.createTitle"),
-        html: "<div style='font-size: 14px'>" + escapeHTML(t("lock.disclaimer")) + "<br><br>" +
-              escapeHTML(t("lock.enableHint", { option: t("opt.lockEnabled") })) +
-              (hasPasscode ? "<br><br>" + escapeHTML(t("lock.existing")) : "") + "</div>" +
-              "<input type='password' id='incognito-lock-pass1' class='wam-input' placeholder='" + escapeHTML(t("lock.pass1")) + "'>" +
-              "<input type='password' id='incognito-lock-pass2' class='wam-input' placeholder='" + escapeHTML(t("lock.pass2")) + "'>",
-        showCancelButton: true,
-        showDenyButton: hasPasscode,
-        denyButtonText: t("lock.now"),
-        confirmButtonText: t("lock.saveBtn"),
-        cancelButtonText: t("common.close"),
-        preConfirm: function()
-        {
-            var pass1 = document.getElementById("incognito-lock-pass1").value;
-            var pass2 = document.getElementById("incognito-lock-pass2").value;
-            if (pass1.length < 4) { WAModal.showValidationMessage(t("lock.err.short")); return false; }
-            if (pass1 !== pass2) { WAModal.showValidationMessage(t("lock.err.mismatch")); return false; }
-            return pass1;
-        },
-    });
-
-    if (result.isDenied)
-    {
-        if (window.WAIncognitoLock) window.WAIncognitoLock.lockNow();
-    }
-    else if (result.isConfirmed)
-    {
-        await savePasscode(result.value);
-        WAModal.fire({ title: t("lock.saved"), icon: "success", timer: 2000, confirmButtonText: t("common.ok") });
-    }
-}
-
-async function savePasscode(code)
-{
-    var saltBytes = crypto.getRandomValues(new Uint8Array(16));
-    var salt = btoa(String.fromCharCode.apply(null, saltBytes));
-    var hash = await hashPasscode(code, salt);
-    await extensionStorageSet({ lockPasscode: { salt: salt, hash: hash } });
-}
-
-//
 // Scheduled messages (core/send_scheduler.js). The page world sends through WhatsApp's own function.
 //
 function showScheduleToast(title, icon)

@@ -88,11 +88,10 @@ test("our CSS takes surface, text and icon colors from WhatsApp's theme variable
     }
 });
 
-test("header and nav icons use WhatsApp's own strong icon color, and the lock-screen and toasts use theme variables", () => {
+test("header and nav icons use WhatsApp's own strong icon color, and the toasts use theme variables", () => {
     const css = read("styles.css");
     const header = css.slice(css.indexOf(".incognito-header-button\n{"), css.indexOf(".incognito-header-icon"));
     assert.ok(/color:\s*var\(--WDS-content-default/.test(header));
     assert.ok(/\.menu-item-incognito[^{]*\{[^}]*var\(--WDS-content-default/.test(css));
-    assert.ok(/#incognito-lock\s*\{[^}]*var\(--WDS-surface-default/.test(css));
     assert.ok(/\.incognito-toast\s*\{[^}]*var\(--WDS-surface-default/.test(css));
 });

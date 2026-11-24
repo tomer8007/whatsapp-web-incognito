@@ -30,11 +30,7 @@ var OPTIONS_SCHEMA = [
     { key: "blurMessages", type: "bool", default: false },
     { key: "blurMedia", type: "bool", default: false },
     { key: "blurAvatars", type: "bool", default: false },
-    { key: "lockEnabled", type: "bool", default: false },
-    { key: "lockIdleMinutes", type: "number", default: 10 },
 
-    { key: "lockOnHidden", type: "bool", default: false },
-    { key: "lockOnHiddenMinutes", type: "number", default: 2 },
 
     // English is the default for new installs. A user who already has "auto" stored (earlier builds saved the default) keeps browser
     // detection: stored values always win over this default. "auto" stays selectable in the picker.
