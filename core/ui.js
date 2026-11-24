@@ -5,6 +5,7 @@ This is a content script responsible for some UI.
 
 // Global variables
 var mutationObserver = null;
+let shownMenuTooltip;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var deletedMessagesDB = null;
@@ -43,6 +44,8 @@ function initialize()
 
 function onMutationsObserved(mutations)
 {
+    if (shownMenuTooltip && !shownMenuTooltip.target.isConnected) shownMenuTooltip.hide();
+
     var found = false;
     for (var i = 0; i < mutations.length; i++)
     {
@@ -113,6 +116,7 @@ function onMutationsObserved(mutations)
                 var dropItem = document.getElementsByClassName("drop")[0];
                 if (menuItem != undefined) menuItem.remove();
                 if (dropItem != undefined) dropItem.remove();
+                shownMenuTooltip?.hide();
 
                 found = true;
                 break;
@@ -143,17 +147,65 @@ async function addIconIfNeeded()
     var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
     if (firstMenuItem != undefined)
     {
-        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
+        const label = "Incognito options";
+        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, label, 24, "button");
+        if (!firstMenuItem.isConnected || document.getElementsByClassName("menu-item-incognito").length > 0) return;
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
-        firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
+        const nativeButton = firstMenuItem.closest('button, [role="button"], [role="tab"]') ?? firstMenuItem;
+        const wrapper = nativeButton.parentElement;
+        const tooltipWrapper = wrapper?.matches('[title], [aria-describedby], [data-tooltip], [data-testid*="tooltip"]');
+        let insertionPoint = tooltipWrapper ? wrapper : nativeButton;
+        const nextItem = Array.from(document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS))
+            .find(item => !insertionPoint.contains(item));
+        if (nextItem)
+        {
+            // Insert beside the native item even when its tooltip wrapper has no identifying attributes.
+            for (let branch = insertionPoint, depth = 0; branch.parentElement && depth < 3; branch = branch.parentElement, depth++)
+            {
+                if (!branch.parentElement.contains(nextItem)) continue;
+                insertionPoint = branch;
+                break;
+            }
+        }
+        insertionPoint.before(menuItemElem);
+
+        const tooltip = document.createElement("div");
+        tooltip.className = "incognito-menu-tooltip";
+        tooltip.textContent = label;
+        tooltip.setAttribute("aria-hidden", "true");
+        const button = menuItemElem.firstElementChild;
+        let drop;
+        function hideTooltip()
+        {
+            tooltip.remove();
+            if (shownMenuTooltip?.hide === hideTooltip) shownMenuTooltip = undefined;
+        }
+        function showTooltip()
+        {
+            if (tooltip.isConnected || drop?.isOpened()) return;
+            shownMenuTooltip?.hide();
+            const rect = button.getBoundingClientRect();
+            tooltip.style.left = rect.right + 10 + "px";
+            tooltip.style.top = rect.top + rect.height / 2 + "px";
+            document.body.appendChild(tooltip);
+            shownMenuTooltip = { target: menuItemElem, hide: hideTooltip };
+        }
+        for (const event of ["mouseover", "pointerover", "focusin"])
+            menuItemElem.addEventListener(event, event => event.stopPropagation());
+        menuItemElem.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") showTooltip(); });
+        menuItemElem.addEventListener("pointerleave", hideTooltip);
+        button.addEventListener("focus", () => { if (button.matches(":focus-visible")) showTooltip(); });
+        button.addEventListener("blur", hideTooltip);
+        button.addEventListener("keydown", event => { if (event.key === "Escape") hideTooltip(); });
 
         browser.runtime.sendMessage({ name: "getOptions" }, function (options)
         {
+            if (!menuItemElem.isConnected) return;
             document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
 
             var dropContent = generateDropContent(options);
-            var drop = new Drop(
+            drop = new Drop(
             {
                 target: menuItemElem,
                 content: dropContent,
@@ -173,6 +225,7 @@ async function addIconIfNeeded()
             }
             drop.on("open", function ()
             {
+                hideTooltip();
                 if (!checkInterception()) return;
                 var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
                 document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
@@ -734,14 +787,13 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
     var response = await fetch(svgImagePath);
     var text = await response.text();
     var viewBoxText = text.split('viewBox="')[1].split('"')[0];
-    var viewboxSize = parseInt(text.split('viewBox="')[1].split(' ')[2]);
 
     var menuItemElem = document.createElement("div");
-
-    menuItemElem.innerHTML = `<div aria-disabled="false" role="${role}" tabindex="0" class="${clazz}" title="${title}" \
-                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${viewBoxText}" \
-                            width="${size}" height="${size}" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>`;
-    var path = menuItemElem.getElementsByTagName("path")[0];
+    const tag = role === "button" ? "button" : "div";
+    const attributes = tag === "button" ? 'type="button"' : `tabindex="0" title="${title}"`;
+    menuItemElem.innerHTML = `<${tag} ${attributes} class="${clazz}" aria-label="${title}">\
+                            <span><svg viewBox="${viewBoxText}" width="${size}" height="${size}"><path fill="currentColor" d="">\
+                            </path></svg></span></${tag}><span></span>`;
     var svg = menuItemElem.getElementsByTagName("svg")[0];
 
     var dom = new DOMParser().parseFromString(text, 'text/html');
