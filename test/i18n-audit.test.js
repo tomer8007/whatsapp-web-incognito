@@ -104,17 +104,13 @@ test("CSS content strings carry no text of their own, and the manifest takes its
     assert.strictEqual(manifest.default_locale, "en");
 });
 
-test("every language has the extension texts in _locales (Chrome localizes the extension name and description)", () => {
-    const folders = ["id", "en", "es", "pt_BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh_CN"];
+test("every __MSG_*__ key of the manifest exists in _locales/en, which is the only locale", () => {
+    const fsx = require("node:fs");
+    assert.deepStrictEqual(fsx.readdirSync(path.join(ROOT, "_locales")), ["en"]);
     const en = JSON.parse(read("_locales/en/messages.json"));
-    for (const folder of folders) {
-        const messages = JSON.parse(read("_locales/" + folder + "/messages.json"));
-        assert.deepStrictEqual(Object.keys(messages).sort(), Object.keys(en).sort(), folder);
-        for (const key of ["extDescription", "extActionTitle"]) {
-            assert.ok(messages[key].message.trim() !== "", folder + " " + key);
-            if (folder != "en") assert.notStrictEqual(messages[key].message, en[key].message, folder + " " + key + " is not translated");
-        }
-    }
+    const used = [...read("manifest.json").matchAll(/__MSG_(\w+)__/g)].map((m) => m[1]);
+    assert.ok(used.length > 0);
+    for (const key of used) assert.ok(en[key] && en[key].message.trim() !== "", key);
 });
 
 test("no Indonesian words remain in code, comments, styles, tests or the manifest ", () => {
