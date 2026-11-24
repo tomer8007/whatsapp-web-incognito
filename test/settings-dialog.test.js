@@ -10,7 +10,6 @@ function load() {
 
 test("the settings popup has the nine categories in order, named in English", () => {
     const s = load();
-    s.setLanguage("en");
     assert.deepStrictEqual([...s.SETTINGS_CATEGORIES.map((c) => s.t("cat." + c.id))],
         ["Privacy", "Per-contact privacy", "Messages", "Notifications", "Screen", "Vault", "Scheduling", "Utilities", "Diagnostics"]);
 });
@@ -20,7 +19,7 @@ test("every option of the schema is in exactly one category (safetyDelay has bee
     const used = [];
     for (const c of SETTINGS_CATEGORIES) for (const s of c.sections) for (const i of s.items) used.push(...settingsItemKeys(i));
     assert.strictEqual(new Set(used).size, used.length, "an option appears twice");
-    const expected = OPTIONS_SCHEMA.map((e) => e.key).filter((k) => k !== "safetyDelay" && k !== "language");
+    const expected = OPTIONS_SCHEMA.map((e) => e.key).filter((k) => k !== "safetyDelay");
     assert.deepStrictEqual([...used].sort(), [...expected].sort());
 });
 
@@ -85,7 +84,7 @@ test("contacts: custom-rule indicator and search", () => {
     assert.strictEqual(filterContacts(all, "", 2).total, 3);
 });
 
-test("per-contact page: every key has a label and description in all 12 languages and a rule schema entry", () => {
+test("per-contact page: every key has a label and description in English and a rule schema entry", () => {
     const s = load();
     const rules = loadScripts(createSandbox(), ["core/contact_rules.js"]);
     const keys = s.contactSectionKeys();
@@ -93,11 +92,9 @@ test("per-contact page: every key has a label and description in all 12 language
     for (const section of s.CONTACT_SECTIONS) {
         assert.ok(section.titleKey);
         for (const item of section.items) {
-            for (const code of s.I18N_LANGUAGES.map((l) => l.code)) {
-                assert.ok(s.I18N_DICT[code][item.labelKey], code + " " + item.labelKey);
-                assert.ok(s.I18N_DICT[code][item.descKey], code + " " + item.descKey);
-                if (item.choiceLabels) for (const k of Object.values(item.choiceLabels)) assert.ok(s.I18N_DICT[code][k], code + " " + k);
-            }
+            assert.ok(s.I18N_DICT.en[item.labelKey], item.labelKey);
+            assert.ok(s.I18N_DICT.en[item.descKey], item.descKey);
+            if (item.choiceLabels) for (const k of Object.values(item.choiceLabels)) assert.ok(s.I18N_DICT.en[k], k);
         }
     }
 });
@@ -161,8 +158,8 @@ test("the dialog keeps the preselected contact on the first render, offers a vis
     assert.ok(!/header\.noChat/.test(ui), "no error popup when the chat cannot be resolved");
 });
 
-test("the header button text says what it does, in every language", () => {
+test("the header button text says what it does", () => {
     const s = load();
     assert.strictEqual(s.I18N_DICT.en["header.button"], "Privacy settings for this chat");
-    for (const l of s.I18N_LANGUAGES) assert.ok(s.I18N_DICT[l.code]["header.button"] && s.I18N_DICT[l.code]["contact.allContacts"], l.code);
+    assert.ok(s.I18N_DICT.en["contact.allContacts"]);
 });

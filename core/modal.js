@@ -139,7 +139,6 @@ var WAModal = (function()
         dialog.setAttribute("aria-modal", "true");
         dialog.setAttribute("aria-labelledby", id + "-title");
         dialog.setAttribute("tabindex", "-1");
-        dialog.setAttribute("dir", (typeof isRtlLanguage == "function" && isRtlLanguage()) ? "rtl" : "ltr");
         if (options.maxWidth) dialog.style.maxWidth = "min(" + options.maxWidth + "px, 94vw)";
 
         var header = make("header", "wam-header");

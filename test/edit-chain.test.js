@@ -37,7 +37,6 @@ test("identical text stays identical when the edit really did not change it, and
 
 test("the edit toast shows before and after, no emoji, truncated", () => {
     const s = loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/toast.js"]);
-    s.setLanguage("en");
     const text = s.formatToast({ kind: "edit", chatName: "Budi", preview: "baru", before: "lama" }, {});
     assert.strictEqual(text.body, "Budi: from \"lama\" to \"baru\"");
     const long = s.formatToast({ kind: "edit", chatName: "B", preview: "y".repeat(200), before: "x".repeat(200) }, {});

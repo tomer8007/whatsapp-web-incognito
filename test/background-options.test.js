@@ -25,7 +25,6 @@ const DEFAULTS = {
     blurMessages: false,
     blurMedia: false,
     blurAvatars: false,
-    language: "en",
     hidetagEnabled: false,
 };
 

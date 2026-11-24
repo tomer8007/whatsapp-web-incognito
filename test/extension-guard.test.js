@@ -10,7 +10,6 @@ function load(chromeObj) {
         WAModal: { fire(options) { calls.fired.push(options); return Promise.resolve({ isConfirmed: true }); } },
     });
     loadScripts(sandbox, ["core/i18n.js", "core/i18n_strings.js", "core/extension_guard.js"]);
-    sandbox.setLanguage("id");
     return { s: sandbox, calls };
 }
 
@@ -28,9 +27,9 @@ test("sendMessage on a dead context does not throw, shows the notice once, and a
     assert.strictEqual(s.safeSendMessage({ name: "getOptions" }, () => {}), false);
     assert.strictEqual(s.safeSendMessage({ name: "getOptions" }, () => {}), false);
     assert.strictEqual(calls.fired.length, 1, "one popup only");
-    assert.strictEqual(calls.fired[0].title, "Ekstensi diperbarui");
-    assert.strictEqual(calls.fired[0].text, "Muat ulang tab WhatsApp agar WAIncognito bekerja kembali.");
-    assert.strictEqual(calls.fired[0].confirmButtonText, "Muat ulang");
+    assert.strictEqual(calls.fired[0].title, "Extension updated");
+    assert.strictEqual(calls.fired[0].text, "Reload the WhatsApp tab so WAIncognito works again.");
+    assert.strictEqual(calls.fired[0].confirmButtonText, "Reload");
     await tick();
     assert.strictEqual(calls.reloaded, 1);
 });
@@ -63,9 +62,9 @@ test("storage helpers return empty results instead of throwing when the context 
     assert.strictEqual(fine.s.extensionUrl("p"), "chrome-extension://x/p");
 });
 
-test("the notice exists in every language and the UI no longer calls chrome.runtime / chrome.storage directly", () => {
+test("the notice exists and the UI no longer calls chrome.runtime / chrome.storage directly", () => {
     const { s } = load({});
-    for (const l of s.I18N_LANGUAGES) for (const k of ["extension.updated.title", "extension.updated.text", "extension.reload"]) assert.ok(s.I18N_DICT[l.code][k], l.code + k);
+    for (const k of ["extension.updated.title", "extension.updated.text", "extension.reload"]) assert.ok(s.I18N_DICT.en[k], k);
     const fs = require("node:fs"), path = require("node:path");
     for (const file of ["core/ui.js", "core/settings_dialog.js", "core/receipt_scheduler.js", "core/status_download.js"]) {
         const code = fs.readFileSync(path.join(require("./helpers/sandbox").ROOT, file), "utf8");

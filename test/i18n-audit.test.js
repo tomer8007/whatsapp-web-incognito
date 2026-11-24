@@ -6,79 +6,6 @@ const { createSandbox, loadScripts, ROOT } = require("./helpers/sandbox");
 
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 const load = () => loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js"]);
-const LANGUAGES = ["id", "en", "es", "pt-BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh-CN"];
-
-// A translation may equal the English text only for words that really are the same there (cognates, brand names, units, short tokens).
-// Everything else must be translated. Add an entry here only after checking that the word is correct in that language.
-const SAME_AS_ENGLISH = {
-    "cat.notifications": ["fr"],
-    "cat.messages": ["fr"],
-    "cat.vault": ["id"],
-    "common.no": ["es"],
-    "common.ok": ["id","pt-BR","fr","de","ru","ja"],
-    "contact.globalNow": ["id","es","pt-BR","de"],
-    "contact.person": ["fr"],
-    "contacts.count": ["es","de"],
-    "diag.status": ["id","pt-BR","de"],
-    "edit.original": ["es","pt-BR","fr","de"],
-    "edit.version": ["fr","de"],
-    "hidetag.title": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],
-    "restore.contactName": ["de"],
-    "sched.chat": ["id","es","de"],
-    "sched.placeholder": ["fr"],
-    "sec.blur": ["id"],
-    "sec.contacts": ["es","de"],
-    "sec.hidetag": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],
-    "sec.status": ["id","pt-BR","de"],
-    "status.progress": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],
-    "unit.mb": ["id","es","pt-BR","de","tr","hi","ja","zh-CN"],
-    "unit.minutes": ["fr"],
-    "vault.unlock.placeholder": ["de"],
-};
-
-test("every language has every key, non-empty, with the same placeholders", () => {
-    const s = load();
-    const en = s.I18N_DICT.en;
-    for (const code of LANGUAGES) {
-        const dict = s.I18N_DICT[code];
-        assert.ok(dict, code);
-        assert.deepStrictEqual(Object.keys(dict).sort(), Object.keys(en).sort(), code + " keys differ from en");
-        for (const [key, text] of Object.entries(dict)) {
-            assert.ok(typeof text == "string" && text.trim() !== "", code + " " + key + " is empty");
-            const placeholders = (value) => (value.match(/\{\w+\}/g) || []).sort().join();
-            assert.strictEqual(placeholders(text), placeholders(en[key]), code + " " + key + " placeholders");
-        }
-    }
-});
-
-test("no translation is just the English text, unless that exact (key, language) pair is a known cognate", () => {
-    const s = load();
-    const en = s.I18N_DICT.en;
-    const offenders = [];
-    for (const code of LANGUAGES.filter((c) => c != "en")) {
-        for (const [key, text] of Object.entries(s.I18N_DICT[code])) {
-            if (text === en[key] && !(SAME_AS_ENGLISH[key] || []).includes(code)) offenders.push(code + " " + key);
-        }
-    }
-    assert.deepStrictEqual(offenders, []);
-    for (const [key, codes] of Object.entries(SAME_AS_ENGLISH)) {
-        for (const code of codes) assert.strictEqual(s.I18N_DICT[code][key], en[key], "allowlist entry no longer needed: " + code + " " + key);
-    }
-});
-
-test("non-Latin languages really use their own script", () => {
-    const s = load();
-    const scripts = { ar: /[؀-ۿ]/, hi: /[ऀ-ॿ]/, ja: /[぀-ヿ一-鿿]/, "zh-CN": /[一-鿿]/, ru: /[Ѐ-ӿ]/ };
-    for (const [code, re] of Object.entries(scripts)) {
-        for (const [key, text] of Object.entries(s.I18N_DICT[code])) {
-            if ((SAME_AS_ENGLISH[key] || []).includes(code)) continue;
-            assert.ok(re.test(text), code + " " + key + " has no " + code + " characters");
-        }
-    }
-});
-
-// ---- which keys the code uses ----
-
 function sourceFiles() {
     return fs.readdirSync(path.join(ROOT, "core")).filter((f) => f.endsWith(".js") && !f.startsWith("i18n")).map((f) => "core/" + f).concat(["background.js"]);
 }
@@ -95,7 +22,7 @@ test("every translation key used by the code exists, and no key in the dictionar
     }
     for (const k of shown) { used.add("opt." + k); used.add("opt." + k + ".desc"); }
     for (const m of code.matchAll(/"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"/g)) used.add(m[1]);
-    const prefixes = /^(cat|opt|sec|note|act|vault|edit|eph|contact|contacts|hidetag|sched|rcpt|overdue|receipt|status|toast|diag|restore|device|viewonce|intercept|broken|markRead|menu|common|lang|settings|header|nav|err|extension|copt|seg|state|unit|deleted)\./;
+    const prefixes = /^(cat|opt|sec|note|act|vault|edit|eph|contact|contacts|hidetag|sched|rcpt|overdue|receipt|status|toast|diag|restore|device|viewonce|intercept|broken|markRead|menu|common|settings|header|nav|err|extension|copt|seg|state|unit|deleted)\./;
     const missing = [...used].filter((k) => prefixes.test(k) && !(k in s.I18N_DICT.en));
     assert.deepStrictEqual(missing, [], "keys used by the code but not in the dictionary");
     const unused = Object.keys(s.I18N_DICT.en).filter((k) => !used.has(k));
@@ -151,8 +78,8 @@ test("the checker catches a hard-coded label in any language", () => {
 });
 
 test("no source file contains letters of another language outside the translations (code and comments stay English)", () => {
-    // Words WhatsApp itself shows ("Edited" in 12 languages) and the native language names of the picker are the only exceptions.
-    const ALLOWED_FILES = new Set(["core/i18n.js"]);
+    // Words WhatsApp itself shows ("Edited" in 12 languages) are the only exception.
+    const ALLOWED_FILES = new Set();
     const ALLOWED_SNIPPETS = ["EDITED_LABEL_WORDS"];
     const problems = [];
     for (const file of sourceFiles().concat(["styles.css", "manifest.json"])) {
@@ -177,7 +104,7 @@ test("CSS content strings carry no text of their own, and the manifest takes its
     assert.strictEqual(manifest.default_locale, "en");
 });
 
-test("every language has the extension texts in _locales", () => {
+test("every language has the extension texts in _locales (Chrome localizes the extension name and description)", () => {
     const folders = ["id", "en", "es", "pt_BR", "fr", "de", "ru", "tr", "ar", "hi", "ja", "zh_CN"];
     const en = JSON.parse(read("_locales/en/messages.json"));
     for (const folder of folders) {
@@ -190,28 +117,7 @@ test("every language has the extension texts in _locales", () => {
     }
 });
 
-test("language choices: the schema and the picker agree, and auto detection maps the usual browser tags", () => {
-    const s = load();
-    const choices = s.OPTIONS_SCHEMA.find((o) => o.key == "language").choices;
-    assert.deepStrictEqual([...choices], ["auto", ...s.I18N_LANGUAGES.map((l) => l.code)]);
-    const expectations = { "en-US": "en", "en-GB": "en", "id-ID": "id", "pt": "pt-BR", "pt-PT": "pt-BR", "pt-BR": "pt-BR", "zh": "zh-CN", "zh-TW": "zh-CN", "zh-Hans-CN": "zh-CN",
-                           "ar-SA": "ar", "hi-IN": "hi", "ja-JP": "ja", "de-CH": "de", "fr-CA": "fr", "es-MX": "es", "ru-RU": "ru", "tr-TR": "tr", "xx": "en" };
-    for (const [tag, code] of Object.entries(expectations)) assert.strictEqual(s.resolveLanguage("auto", [tag]), code, tag);
-});
-
-test("a missing key falls back to English, then to the key itself; numbers follow the language", () => {
-    const s = load();
-    s.setLanguage("fr");
-    delete s.I18N_DICT.fr["common.close"];
-    assert.strictEqual(s.t("common.close"), "Close");
-    assert.strictEqual(s.t("no.such.key"), "no.such.key");
-    s.setLanguage("de");
-    assert.strictEqual(s.formatNumber(1234.5, 2), "1.234,50");
-    s.setLanguage("en");
-    assert.strictEqual(s.formatNumber(1234.5, 2), "1,234.50");
-});
-
-test("no Indonesian words remain in code, comments, styles, tests or the manifest (the id language table is the only place for them)", () => {
+test("no Indonesian words remain in code, comments, styles, tests or the manifest ", () => {
     const WORDS = ["pesan", "kirim", "jadwal", "jadwalkan", "privasi", "kontak", "centang", "dihapus", "hapus", "simpan", "buka", "tidak", "yang", "untuk", "dengan", "sudah",
                    "belum", "grup", "ubah", "tampil", "tampilkan", "sembunyi", "sembunyikan", "kunci", "anggota", "aktif", "nonaktif", "ikuti", "tutup", "batal", "salah",
                    "dibaca", "terkirim", "terjadwal", "diedit", "sementara", "waktu", "menit", "hari", "jeda", "ketuk", "layar", "notifikasi", "utilitas", "diagnostik"];
@@ -228,28 +134,4 @@ test("no Indonesian words remain in code, comments, styles, tests or the manifes
         });
     }
     assert.deepStrictEqual(problems, []);
-});
-
-
-test("English is the default: fresh options, the picker order, and every fallback ends in English", () => {
-    const s = load();
-    assert.strictEqual(s.defaultOptions().language, "en");
-    assert.strictEqual(s.getLanguage(), "en", "before any option arrives");
-    assert.deepStrictEqual([...s.I18N_LANGUAGES.map((l) => l.code)], ["en", "ar", "de", "es", "fr", "hi", "id", "ja", "pt-BR", "ru", "tr", "zh-CN"]);
-    assert.strictEqual(s.I18N_LANGUAGES[0].name, "English");
-    assert.strictEqual(s.resolveLanguage(undefined, ["xx"]), "en");
-    assert.strictEqual(s.resolveLanguage("", []), "en");
-    assert.strictEqual(s.resolveLanguage("klingon", ["xx-YY"]), "en", "an unknown preference with an unsupported browser language");
-    assert.strictEqual(s.resolveLanguage("auto", ["xx", "id"]), "id", "the first supported browser language wins");
-    s.setLanguage(s.defaultOptions().language);
-    assert.strictEqual(s.t("common.cancel"), "Cancel");
-    s.setLanguage("auto-but-unsupported");
-    assert.strictEqual(s.getLanguage(), "en");
-});
-
-test("the picker offers 'auto' with an English label and the stored value of existing users is untouched", () => {
-    const s = load();
-    assert.strictEqual(s.I18N_DICT.en["lang.auto"], "Automatic (browser)");
-    assert.strictEqual(s.parseOptionValue("language", "auto"), "auto", "a stored auto stays valid");
-    assert.strictEqual(s.parseOptionValue("language", "ar"), "ar");
 });

@@ -60,38 +60,11 @@ if (chrome != undefined)
 
 initialize();
 
-// The language option: set the active language, the deleted-message label and the text direction of our own UI
-function applyLanguage(preference)
+// The text of the red "Deleted" label on a message (styles.css reads it from a CSS variable)
+function applyDeletedLabel()
 {
-    setLanguage(preference);
     document.documentElement.style.setProperty("--incognito-deleted-label", JSON.stringify(t("deleted.label")));
-    var toasts = document.getElementById("incognito-toasts");
-    if (toasts) toasts.setAttribute("dir", isRtlLanguage() ? "rtl" : "ltr");
-    relabelStaticUi();
 }
-
-// Texts of elements that stay on screen (tooltips and aria-labels) follow a language switch at once
-function relabelStaticUi()
-{
-    var nav = document.querySelector(".menu-item-incognito [role=button], .menu-item-incognito[role=button]");
-    if (nav) { nav.setAttribute("title", t("nav.title")); nav.setAttribute("aria-label", t("nav.title")); }
-    var header = document.querySelector(".incognito-header-button:not(.incognito-composer-button)");
-    if (header) { header.setAttribute("title", t("header.button")); header.setAttribute("aria-label", t("header.button")); }
-    var composer = document.querySelector(".incognito-composer-button");
-    if (composer) { composer.setAttribute("title", t("hidetag.composer.tooltip")); composer.setAttribute("aria-label", t("hidetag.composer.tooltip")); }
-    var item = document.querySelector('[data-testid="mi-incognito-sticker-hidetag"]');
-    if (item) item.remove(); // rebuilt with the new text the next time WhatsApp opens the menu
-}
-
-document.addEventListener("onOptionsUpdate", function(e)
-{
-    try
-    {
-        var update = JSON.parse(e.detail);
-        if (update && "language" in update) applyLanguage(update.language);
-    }
-    catch (exception) {}
-});
 
 // The page world announces that its listeners exist: send the options and contact rules again (the first push may have been too early)
 document.addEventListener("waIncognitoPageReady", function()
@@ -106,7 +79,7 @@ document.addEventListener("waIncognitoPageReady", function()
 
 function initialize()
 {
-    applyLanguage("en"); // English until the saved language arrives
+    applyDeletedLabel();
     // load saved settings
     safeSendMessage({ name: "getOptions" }, function (options)
     {
@@ -460,7 +433,7 @@ async function openVaultModal()
     var info = await WAModal.fire({
         title: t("vault.unlocked.title"),
         html: "<div style='font-size: 14px'>" + vaultThreatModelHTML() + "<br><br>" +
-              escapeHTML(t("vault.contents", { count: status.count, size: formatNumber(status.bytes / (1024 * 1024), 2) })) + "</div>",
+              escapeHTML(t("vault.contents", { count: status.count, size: (status.bytes / (1024 * 1024)).toFixed(2) })) + "</div>",
         showCancelButton: true,
         confirmButtonText: t("vault.lock"),
         cancelButtonText: t("common.close"),
@@ -596,7 +569,7 @@ document.addEventListener("waIncognitoEdited", function(e)
 
 function formatEditTime(ts)
 {
-    try { return new Date(ts).toLocaleString(typeof getLanguage == "function" ? getLanguage() : undefined); }
+    try { return new Date(ts).toLocaleString(); }
     catch (e) { return String(ts); }
 }
 
@@ -895,11 +868,9 @@ function showHidetagPopover(anchor, info, onChoose, options)
     options = options || {};
     var old = document.querySelector(".wam-popover");
     if (old && old.__close) old.__close();
-    var rtl = isRtlLanguage();
     var pop = document.createElement("div");
     pop.className = "wam-popover";
     pop.setAttribute("role", "menu");
-    pop.setAttribute("dir", rtl ? "rtl" : "ltr");
     pop.setAttribute("aria-label", t("hidetag.popover.title"));
     var arrow = document.createElement("span");
     arrow.className = "wam-popover-arrow";
@@ -1162,7 +1133,7 @@ async function startStickerHidetag(saved, rect)
         var tile = resolveStickerTile(saved);
         if (tile) tile.click(); // outside WhatsApp's menu, so it closes by itself; the send wrapper adds the mentions
         else WAModal.fire({ title: t("hidetag.sticker.gone"), icon: "info", toast: true, timer: 6000 });
-    }, { side: isRtlLanguage() ? "left" : "right" });
+    }, { side: "right" });
 }
 
 new MutationObserver(function(mutations)
@@ -1862,7 +1833,7 @@ function restoreViewOnceMessageIfNeeded(messageNode, msgID)
 // and takes care of "deleted" messages - 
 // attempts to syntethise a message that was deleted from our DB / just mark it in red
 // Red tint, left border and a "Deleted" label (styles.css) on the message row. The row is the element with data-id: that hook
-// is stable, unlike the bubble's classes. The label text comes from the --incognito-deleted-label variable (see applyLanguage).
+// is stable, unlike the bubble's classes. The label text comes from the --incognito-deleted-label variable (see applyDeletedLabel).
 function markMessageDeleted(node)
 {
     var row = node.closest ? (node.closest("[data-id]") || node) : node;

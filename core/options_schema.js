@@ -32,11 +32,6 @@ var OPTIONS_SCHEMA = [
     { key: "blurAvatars", type: "bool", default: false },
 
 
-    // English is the default for new installs. A user who already has "auto" stored (earlier builds saved the default) keeps browser
-    // detection: stored values always win over this default. "auto" stays selectable in the picker.
-    { key: "language", type: "enum", default: "en",
-      choices: ["auto", "en", "ar", "de", "es", "fr", "hi", "id", "ja", "pt-BR", "ru", "tr", "zh-CN"] },
-
     { key: "hidetagEnabled", type: "bool", default: false },
 
 ];

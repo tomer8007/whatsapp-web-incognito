@@ -4,7 +4,6 @@ const { createSandbox, loadScripts } = require("./helpers/sandbox");
 
 function loadToast() {
     const s = loadScripts(createSandbox(), ["core/options_schema.js", "core/i18n.js", "core/i18n_strings.js", "core/toast.js"]);
-    s.setLanguage("en");
     return s;
 }
 
@@ -62,15 +61,12 @@ test("hidePreview is on when any blur option is on", () => {
     assert.strictEqual(isAnyBlurEnabled({ ...defaultOptions(), blurMedia: true }), true);
 });
 
-test("toasts are plain text without emoji, in every language, and stay visible about 10 seconds", () => {
+test("toasts are plain text without emoji and stay visible about 10 seconds", () => {
     const s = loadToast();
     assert.strictEqual(s.TOAST_DURATION_MS, 10000);
     const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
-    for (const language of s.I18N_LANGUAGES.map((l) => l.code)) {
-        s.setLanguage(language);
-        for (const kind of ["delete", "edit", "status-delete"]) {
-            const text = s.formatToast({ kind, chatName: "A", preview: "b" }, {});
-            assert.ok(text.title && !emoji.test(text.title + text.body), language + " " + kind);
-        }
+    for (const kind of ["delete", "edit", "status-delete"]) {
+        const text = s.formatToast({ kind, chatName: "A", preview: "b" }, {});
+        assert.ok(text.title && !emoji.test(text.title + text.body), kind);
     }
 });

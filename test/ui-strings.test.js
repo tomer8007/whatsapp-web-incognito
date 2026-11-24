@@ -50,7 +50,7 @@ test("the checker itself catches a hard-coded label", () => {
     assert.deepStrictEqual(findHardcoded('el.textContent = "";'), []);
 });
 
-test("dates follow the selected language, not a fixed locale", () => {
+test("dates use the browser locale, not a fixed one", () => {
     for (const file of UI_FILES) {
         const code = read(file);
         assert.ok(!/toLocale(?:Date|Time)?String\(\s*"[a-z]{2}-[A-Z]{2}"/.test(code), file + " uses a fixed locale");

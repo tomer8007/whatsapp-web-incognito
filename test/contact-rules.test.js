@@ -212,7 +212,7 @@ test("applyContactRule validates per kind, keeps old rules, drops defaults, and 
 
 test("contactOptionsFor applies the toggles of one contact to the options, nothing else", () => {
     const s = loadRules();
-    const options = { ...s.defaultOptions?.(), saveEdits: false, toastOnEdit: true, keepDisappearing: false, safetyDelay: 5, language: "id" };
+    const options = { ...s.defaultOptions?.(), saveEdits: false, toastOnEdit: true, keepDisappearing: false, safetyDelay: 5 };
     const map = new Map([["628@c.us", "9@lid"], ["9@lid", "628@c.us"]]);
     const rules = { "9@lid": { saveEdits: "on", toastOnEdit: "off" } };
     const result = s.contactOptionsFor("628@s.whatsapp.net", options, rules, map);
@@ -220,7 +220,6 @@ test("contactOptionsFor applies the toggles of one contact to the options, nothi
     assert.strictEqual(result.toastOnEdit, false);
     assert.strictEqual(result.keepDisappearing, false);
     assert.strictEqual(result.safetyDelay, 5);
-    assert.strictEqual(result.language, "id");
     assert.strictEqual(options.saveEdits, false, "the global options object is not changed");
 });
 
