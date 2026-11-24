@@ -80,3 +80,11 @@ test("ui.js no longer adds a reply listener per message, and the router loads be
     assert.ok(scripts.indexOf("core/response_router.js") > -1, "router missing from manifest");
     assert.ok(scripts.indexOf("core/response_router.js") < scripts.indexOf("core/ui.js"), "router must load before ui.js");
 });
+
+test("the Mark as read confirmation is the SweetAlert popup of master, loaded as a content script before ui.js", () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
+    const scripts = manifest.content_scripts.find((c) => c.js.includes("core/ui.js")).js;
+    assert.ok(scripts.indexOf("lib/sweetalert.min.js") > -1 && scripts.indexOf("lib/sweetalert.min.js") < scripts.indexOf("core/ui.js"));
+    const ui = fs.readFileSync(path.join(ROOT, "core/ui.js"), "utf8");
+    assert.ok(/Swal\.fire\(\{\s*title: t\("markRead\.title"\)/.test(ui));
+});

@@ -58,10 +58,11 @@ test("SweetAlert-style widths map to a modal size", () => {
     assert.strictEqual(WAModal.sizeForWidth(760), "lg");
 });
 
-test("no feature code still calls SweetAlert or the Drop menu, and the manifest loads the new files", () => {
+test("only the Mark as read confirmation uses SweetAlert (as on master), nothing uses the Drop menu, and the manifest loads the new files", () => {
     for (const file of ["core/ui.js", "core/toast.js", "core/status_download.js", "core/privacy_screen.js"]) {
         const code = fs.readFileSync(path.join(ROOT, file), "utf8");
-        assert.ok(!/\bSwal\./.test(code), file + " uses Swal");
+        const swalCalls = (code.match(/\bSwal\./g) || []).length;
+        assert.strictEqual(swalCalls, file == "core/ui.js" ? 1 : 0, file + " Swal calls");
         assert.ok(!/new Drop\(/.test(code), file + " uses Drop");
     }
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));

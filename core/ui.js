@@ -262,7 +262,8 @@ document.addEventListener('onMarkAsReadClick', function (e)
         {
             if (contactToggleFor(data.jid, "showReadWarning", options.showReadWarning))
             {
-                WAModal.fire({
+                // SweetAlert, as on master (lib/sweetalert.min.js is a content script)
+                Swal.fire({
                     title: t("markRead.title"),
                     text: data.unreadCount > 1 ? t("markRead.many", { name: data.formattedName, count: data.unreadCount }) : t("markRead.one", { name: data.formattedName }),
                     input: 'checkbox',
@@ -270,6 +271,7 @@ document.addEventListener('onMarkAsReadClick', function (e)
                     inputPlaceholder: t("markRead.dontShow"),
                     icon: "warning",
                     showCancelButton: true,
+                    confirmButtonColor: "#DD6B55",
                     cancelButtonText: t("common.cancel"),
                     confirmButtonText: t("markRead.confirm"),
                 }).then(result =>
