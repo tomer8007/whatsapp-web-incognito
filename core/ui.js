@@ -234,10 +234,10 @@ async function addIconIfNeeded()
             document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
         });
 
-        menuItemElem.addEventListener("click", function() { openSettingsDialog(); });
+        menuItemElem.addEventListener("click", function() { openQuickSettings(menuItemElem); });
         menuItemElem.addEventListener("keydown", function(e)
         {
-            if (e.key == "Enter" || e.key == " ") { e.preventDefault(); openSettingsDialog(); }
+            if (e.key == "Enter" || e.key == " ") { e.preventDefault(); openQuickSettings(menuItemElem); }
         });
     }
     else if (isUIClassesWorking)
@@ -1697,6 +1697,97 @@ function setOptionFromMenu(key, value)
         var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
         for (var i = redChats.length - 1; i >= 0; i--) redChats[i].className = 'icon-meta unread-count';
     }
+}
+
+//
+// The small popup of the incognito icon: the quick switches, ending with a "More…" button that opens the full settings.
+//
+var QUICK_SETTINGS_KEYS = ["readConfirmationsHook", "onlineUpdatesHook", "typingUpdatesHook", "saveDeletedMsgs"];
+var quickSettingsClose = null;
+var quickSettingsClosedAt = 0;
+
+function openQuickSettings(anchor)
+{
+    // a click on the icon while the popup is open closes it (the outside press already did: do not reopen at once)
+    if (quickSettingsClose) { quickSettingsClose(); return; }
+    if (Date.now() - quickSettingsClosedAt < 300) return;
+
+    safeSendMessage({ name: "getOptions" }, function(options)
+    {
+        options = options || {};
+        var pop = document.createElement("div");
+        pop.className = "wam-popover wam-quick";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-label", t("nav.title"));
+        var arrow = document.createElement("span");
+        arrow.className = "wam-popover-arrow";
+        pop.appendChild(arrow);
+        var title = document.createElement("div");
+        title.className = "wam-popover-title";
+        title.textContent = t("nav.title");
+        pop.appendChild(title);
+
+        QUICK_SETTINGS_KEYS.forEach(function(key)
+        {
+            var row = document.createElement("label");
+            row.className = "wam-quick-row";
+            var text = document.createElement("span");
+            text.textContent = t("opt." + key);
+            var track = document.createElement("span");
+            track.className = "wam-switch";
+            var input = document.createElement("input");
+            input.type = "checkbox";
+            input.className = "wam-switch-input";
+            input.setAttribute("role", "switch");
+            input.checked = !!options[key];
+            input.addEventListener("change", function() { options[key] = input.checked; setOptionFromMenu(key, input.checked); });
+            track.appendChild(input);
+            var trackVisual = document.createElement("span");
+            trackVisual.className = "wam-switch-track";
+            track.appendChild(trackVisual);
+            row.appendChild(text);
+            row.appendChild(track);
+            pop.appendChild(row);
+        });
+
+        var more = document.createElement("button");
+        more.type = "button";
+        more.className = "wam-popover-item wam-quick-more";
+        more.textContent = t("quick.more");
+        more.addEventListener("click", function() { close(); openSettingsDialog(); });
+        pop.appendChild(more);
+        document.body.appendChild(pop);
+
+        var closed = false;
+        function close()
+        {
+            if (closed) return;
+            closed = true;
+            quickSettingsClose = null;
+            quickSettingsClosedAt = Date.now();
+            pop.remove();
+            document.removeEventListener("mousedown", outside, true);
+            window.removeEventListener("keydown", onKeyDown, true);
+            window.removeEventListener("keyup", onKeyUp, true);
+        }
+        function outside(e) { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); }
+        function onKeyDown(e) { if (e.key == "Escape") { e.stopPropagation(); e.preventDefault(); } }
+        function onKeyUp(e) { if (e.key == "Escape") { e.stopPropagation(); close(); } }
+        document.addEventListener("mousedown", outside, true);
+        window.addEventListener("keydown", onKeyDown, true);
+        window.addEventListener("keyup", onKeyUp, true);
+        quickSettingsClose = close;
+
+        var rect = anchor.getBoundingClientRect();
+        var placed = placePopover({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height },
+                                  { width: pop.offsetWidth, height: pop.offsetHeight }, { width: window.innerWidth, height: window.innerHeight }, "right", { gap: 12 });
+        pop.style.left = placed.left + "px";
+        pop.style.top = placed.top + "px";
+        pop.setAttribute("data-side", placed.side);
+        pop.style.setProperty("--wam-arrow", placed.arrow + "px");
+        pop.addEventListener("keydown", function(e) { e.stopPropagation(); }); // typing inside never reaches WhatsApp's shortcuts
+        more.focus({ preventScroll: true });
+    });
 }
 
 async function generateSVGElement(svgImagePath, clazz="", title="", size=24, role="")

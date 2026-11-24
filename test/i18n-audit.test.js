@@ -22,7 +22,7 @@ test("every translation key used by the code exists, and no key in the dictionar
     }
     for (const k of shown) { used.add("opt." + k); used.add("opt." + k + ".desc"); }
     for (const m of code.matchAll(/"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+)"/g)) used.add(m[1]);
-    const prefixes = /^(cat|opt|sec|note|act|vault|edit|eph|contact|contacts|hidetag|sched|rcpt|overdue|receipt|status|toast|diag|restore|device|viewonce|intercept|broken|markRead|menu|common|settings|header|nav|err|extension|copt|seg|state|unit|deleted)\./;
+    const prefixes = /^(cat|opt|sec|note|act|vault|edit|eph|contact|contacts|hidetag|sched|rcpt|overdue|receipt|status|toast|diag|restore|device|viewonce|intercept|broken|markRead|quick|menu|common|settings|header|nav|err|extension|copt|seg|state|unit|deleted)\./;
     const missing = [...used].filter((k) => prefixes.test(k) && !(k in s.I18N_DICT.en));
     assert.deepStrictEqual(missing, [], "keys used by the code but not in the dictionary");
     const unused = Object.keys(s.I18N_DICT.en).filter((k) => !used.has(k));

@@ -215,6 +215,7 @@ I18N_DICT["en"] = {
     "rcpt.h1": "In 1 hour",
     "rcpt.h3": "In 3 hours",
     "rcpt.m15": "In 15 minutes",
+    "quick.more": "More…",
     "receipt.blocked": "Read receipts were blocked.",
     "receipt.later": "Send later…",
     "receipt.markRead": "Mark as read",

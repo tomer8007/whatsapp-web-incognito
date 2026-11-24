@@ -429,7 +429,7 @@ body #main[data-incognito-noblur~="avatars"] header img
   Colors come from WhatsApp Web's own variables, so the light and dark theme (body.dark) follow it. Fallbacks apply when a variable is missing.
 */
 
-.wam-backdrop, .wam-snacks
+.wam-backdrop, .wam-snacks, .wam-quick
 {
   --wam-surface: var(--WDS-surface-default, var(--app-background, #ffffff));
   --wam-surface-2: var(--WDS-surface-highlight, rgba(11, 20, 26, 0.06));
@@ -997,3 +997,18 @@ body #main[data-incognito-noblur~="avatars"] header img
 .wam-popover[data-side="right"] .wam-popover-arrow { left: -7px; top: calc(var(--wam-arrow, 24px) - 6px); border-top: none; border-right: none; }
 .wam-popover[data-side="left"] .wam-popover-arrow { right: -7px; top: calc(var(--wam-arrow, 24px) - 6px); border-bottom: none; border-left: none; }
 .incognito-composer-button { margin-inline: 2px; }
+
+/* the small popup of the incognito icon: quick switches and a "More…" button */
+.wam-quick { padding: 8px; min-width: 300px; }
+.wam-quick-row
+{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wam-quick-row:hover { background: var(--WDS-surface-highlight, rgba(128, 128, 128, 0.2)); }
+.wam-quick-more { justify-content: center; margin-top: 4px; border-top: 1px solid rgba(128, 128, 128, 0.25); border-radius: 0 0 10px 10px; color: var(--WDS-accent, #21c063); font-weight: 500; }

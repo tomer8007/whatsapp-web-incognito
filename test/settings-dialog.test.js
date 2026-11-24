@@ -164,3 +164,17 @@ test("the header button text says what it does", () => {
     assert.strictEqual(s.I18N_DICT.en["header.button"], "Privacy settings for this chat");
     assert.ok(s.I18N_DICT.en["contact.allContacts"]);
 });
+
+test("the incognito icon opens the small popup with quick switches, which ends with a More button for the full settings", () => {
+    const ui = fs.readFileSync(path.join(ROOT, "core/ui.js"), "utf8");
+    assert.ok(/menuItemElem\.addEventListener\("click", function\(\) \{ openQuickSettings\(menuItemElem\); \}\)/.test(ui), "the icon opens the small popup");
+    assert.ok(!/menuItemElem\.addEventListener\("click", function\(\) \{ openSettingsDialog\(\)/.test(ui));
+    assert.ok(/QUICK_SETTINGS_KEYS = \["readConfirmationsHook", "onlineUpdatesHook", "typingUpdatesHook", "saveDeletedMsgs"\]/.test(ui));
+    assert.ok(/more\.addEventListener\("click", function\(\) \{ close\(\); openSettingsDialog\(\); \}\)/.test(ui));
+    const s = load();
+    for (const key of ["readConfirmationsHook", "onlineUpdatesHook", "typingUpdatesHook", "saveDeletedMsgs"]) {
+        assert.ok(s.I18N_DICT.en["opt." + key], key);
+        assert.ok([...s.OPTIONS_SCHEMA].some((o) => o.key == key && o.type == "bool"), key);
+    }
+    assert.strictEqual(s.t("quick.more"), "More…");
+});
