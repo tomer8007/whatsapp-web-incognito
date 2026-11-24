@@ -32,6 +32,7 @@ async function injectScripts()
 	await injectScript('core/revoke_window.js');
 	await injectScript('core/ui_class_names.js');
 	await injectScript('core/injected_ui.js');
+	await injectScript('lib/velocity.min.js');
 	
 	await injectScript('core/multi_device.js');
 	await injectScript('core/node_handler.js');
