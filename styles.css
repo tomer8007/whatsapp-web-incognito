@@ -232,12 +232,33 @@
     gap: 5px 10px;
 }
 
-#incognito-extend-delete
+#incognito-extend-delete,
+#incognito-keep-edits
 {
     width: 18px;
     height: 18px;
     margin: 0;
     accent-color: var(--checkbox-background);
+}
+
+.incognito-edit-history
+{
+    display: block;
+    margin: 2px 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--WDS-surface-emphasized, rgba(127, 127, 127, .16));
+    color: var(--primary);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.incognito-edit-history-list
+{
+    padding-inline-start: 1.5em;
+    text-align: start;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .incognito-options-item:hover

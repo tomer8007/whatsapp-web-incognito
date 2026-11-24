@@ -207,6 +207,7 @@ function openMessageArchive(name)
                 const store = event.oldVersion === 0
                     ? request.result.createObjectStore("msgs", { keyPath: "id" })
                     : request.transaction.objectStore("msgs");
+                if (name === "waIncognitoEditedMsgs") return;
                 const index = name === "viewOnce" ? "id" : "originalID";
                 if (!store.indexNames.contains(index + "_index"))
                     store.createIndex(index + "_index", index);

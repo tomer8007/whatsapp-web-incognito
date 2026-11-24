@@ -5,6 +5,120 @@
 const EXTENDED_DELETE_WINDOW = 72 * 60 * 60;
 let extendDeleteForEveryone = false;
 let restoreSenderRevokeCheck;
+let keepEditedMessages = false;
+let editMessageStore;
+
+function updateEditHistoryListener()
+{
+    if (!keepEditedMessages)
+    {
+        editMessageStore?.off("change:body", recordMessageBodyEdit);
+        editMessageStore?.off("change:caption", recordMessageCaptionEdit);
+        editMessageStore = undefined;
+        return;
+    }
+    if (editMessageStore || typeof window.require !== "function") return;
+    try
+    {
+        const store = window.require("WAWebCollections").Msg;
+        if (typeof store?.on !== "function" || typeof store.off !== "function") return;
+        store.on("change:body", recordMessageBodyEdit);
+        store.on("change:caption", recordMessageCaptionEdit);
+        editMessageStore = store;
+    }
+    catch (error)
+    {
+        console.warn("WAIncognito: Edit history listener is unavailable", error);
+    }
+}
+
+function serializedEditMessageId(key)
+{
+    const id = typeof key === "string" ? key : key?._serialized;
+    return typeof id === "string" && id.length > 0 && id.length <= 512 ? id : undefined;
+}
+
+function recordMessageBodyEdit(message, next, previous)
+{
+    if (message.type === "chat") recordMessageEdit(message, "body", next, previous);
+}
+
+function recordMessageCaptionEdit(message, next, previous)
+{
+    recordMessageEdit(message, "caption", next ?? "", previous ?? "");
+}
+
+function recordMessageEdit(message, field, next, previous)
+{
+    if (!keepEditedMessages || message.type === "revoked" || message.type === "ciphertext") return;
+    const id = serializedEditMessageId(message.id);
+    if (!id || typeof previous !== "string" || typeof next !== "string" || previous === next) return;
+    const keyAtChange = message.latestEditMsgKey;
+    const timestampAtChange = message.latestEditSenderTimestampMs;
+
+    // The model can update the edit metadata after emitting the text change.
+    queueMicrotask(async () =>
+    {
+        if (!keepEditedMessages || message.type === "revoked") return;
+        if (!keyAtChange && !timestampAtChange && (message[field] ?? "") !== next) return;
+        const key = keyAtChange ?? message.latestEditMsgKey;
+        const editId = serializedEditMessageId(key) ?? serializedEditMessageId(key?.id);
+        const timestamp = timestampAtChange || message.latestEditSenderTimestampMs;
+        if (typeof editId !== "string" && !(Number.isFinite(timestamp) && timestamp > 0)) return;
+        try
+        {
+            const db = await openMessageArchive("waIncognitoEditedMsgs");
+            if (!keepEditedMessages) return;
+            const transaction = db.transaction("msgs", "readwrite");
+            const store = transaction.objectStore("msgs");
+            const request = store.get(id);
+            transaction.onabort = () => console.error("WAIncognito: Could not save edit history", transaction.error);
+            request.onsuccess = () =>
+            {
+                if (!keepEditedMessages) return;
+                const edits = request.result?.edits ?? [];
+                if (edits.some(edit => editId ? edit.editId === editId
+                    : edit.timestamp === timestamp && edit.previous === previous && edit.next === next))
+                    return;
+
+                edits.push({ editId, timestamp, previous, next });
+                if (edits.every(edit => Number.isFinite(edit.timestamp)))
+                    edits.sort((a, b) => a.timestamp - b.timestamp);
+                store.put({ id, edits });
+                transaction.oncomplete = () => document.dispatchEvent(new CustomEvent("onEditHistorySaved", { detail: id }));
+            };
+        }
+        catch (error)
+        {
+            console.error("WAIncognito: Could not open edit history", error);
+        }
+    });
+}
+
+document.addEventListener("onEditHistoryPreference", function (event)
+{
+    keepEditedMessages = event.detail === true;
+    updateEditHistoryListener();
+});
+document.dispatchEvent(new CustomEvent("onEditHistoryPreferenceRequested"));
+
+document.addEventListener("getEditHistoryMessageId", function (event)
+{
+    const node = event.target;
+    if (!node.matches?.('[data-testid^="conv-msg"]')) return;
+    const fiberKey = Object.keys(node).find(key => key.startsWith("__reactFiber$"));
+    let fiber = node[fiberKey];
+    // shortcut: resolve nearby message props, use a stable bubble ID when WhatsApp exposes one.
+    for (let depth = 0; fiber && depth < 12; depth++, fiber = fiber.return)
+    {
+        const props = fiber.memoizedProps;
+        const message = props?.msg ?? props?.message;
+        const id = serializedEditMessageId(message?.id ?? message?.__x_id) ?? serializedEditMessageId(props?.msgKey);
+        if (!id) continue;
+        document.dispatchEvent(new CustomEvent("onEditHistoryMessageId", { detail: id }));
+        return;
+    }
+});
 
 function updateExtendedDelete()
 {
@@ -68,6 +182,7 @@ document.dispatchEvent(new CustomEvent("onExtendedDeletePreferenceRequested"));
 document.addEventListener('onMainUIReady', function (e)
 {
     updateExtendedDelete();
+    updateEditHistoryListener();
     setTimeout(exposeWhatsAppAPI, 100);
 });
 
@@ -140,6 +255,11 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if (typeof options.keepEditedMessages === "boolean")
+    {
+        keepEditedMessages = options.keepEditedMessages;
+        updateEditHistoryListener();
+    }
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;

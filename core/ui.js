@@ -9,8 +9,11 @@ let messagePanel;
 let messageObserver;
 let menu;
 const messageSelector = '[data-testid^="conv-msg"]';
+const messageObservation = { childList: true, subtree: true, attributeFilter: ["data-id"] };
 const deviceIconTemplates = new Map();
 let extendedDeletePreference;
+let keepEditedMessages = false;
+const pendingEditHistory = new WeakMap();
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var renderedMessages = new WeakMap();
@@ -25,6 +28,26 @@ document.addEventListener("onExtendedDeletePreferenceRequested", function ()
     if (extendedDeletePreference !== undefined)
         document.dispatchEvent(new CustomEvent("onExtendedDeletePreference", { detail: extendedDeletePreference }));
 });
+
+document.addEventListener("onEditHistoryPreferenceRequested", function ()
+{
+    document.dispatchEvent(new CustomEvent("onEditHistoryPreference", { detail: keepEditedMessages }));
+});
+
+document.addEventListener("onOptionsUpdate", function (event)
+{
+    const enabled = JSON.parse(event.detail)?.keepEditedMessages;
+    if (typeof enabled !== "boolean" || enabled === keepEditedMessages) return;
+    keepEditedMessages = enabled;
+    if (messagePanel?.isConnected)
+        messageObserver.observe(messagePanel, { ...messageObservation, characterData: enabled });
+    if (enabled)
+        refreshEditHistoryButtons();
+    else
+        for (const button of messagePanel?.querySelectorAll(".incognito-edit-history") ?? []) button.remove();
+});
+
+document.addEventListener("onEditHistorySaved", event => refreshEditHistoryButtons(event.detail));
 
 initialize();
 
@@ -81,10 +104,18 @@ function onMutationsObserved(mutations)
                 for (const record of records)
                 {
                     if (record.type === "attributes") scanMessageNodes(record.target);
-                    else for (const node of record.addedNodes) scanMessageNodes(node);
+                    else if (record.type === "childList")
+                    {
+                        for (const node of record.addedNodes) scanMessageNodes(node);
+                    }
+
+                    if (!keepEditedMessages) continue;
+                    const target = record.type === "characterData" ? record.target.parentElement : record.target;
+                    const bubble = target?.closest?.(messageSelector);
+                    if (bubble) renderEditHistoryButton(bubble);
                 }
             });
-            messageObserver.observe(messagePanel, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-id"] });
+            messageObserver.observe(messagePanel, { ...messageObservation, characterData: keepEditedMessages });
             scanMessageNodes(messagePanel);
         }
     }
@@ -264,6 +295,12 @@ async function addIconIfNeeded()
             browser.runtime.sendMessage({ name: "setOptions", ...options });
             document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
         });
+        drop.content.querySelector("#incognito-keep-edits").addEventListener("change", event =>
+        {
+            const options = { keepEditedMessages: event.currentTarget.checked };
+            browser.runtime.sendMessage({ name: "setOptions", ...options });
+            document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
+        });
     }
     catch (error)
     {
@@ -414,6 +451,14 @@ function generateDropContent(options)
                             <span>Extend “Delete for everyone” to 3 days</span>
                             <span id='incognito-extend-delete-note' class='incognito-options-description'>
                                 Applies to messages you sent. WhatsApp may reject the request, and recipients may still see the message.
+                            </span>
+                        </label>
+                        <label id='incognito-option-keep-edits' class='incognito-options-item'>
+                            <input id='incognito-keep-edits' type='checkbox' ${options.keepEditedMessages === true ? "checked" : ""}
+                                aria-describedby='incognito-keep-edits-note'>
+                            <span>Keep edited messages</span>
+                            <span id='incognito-keep-edits-note' class='incognito-options-description'>
+                                Save text and caption edits in this browser and show an Edit history button on the message.
                             </span>
                         </label>
                     </div>
@@ -776,6 +821,8 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 
 function onNewMessageNodeAdded(messageNode)
 {
+    if (keepEditedMessages) renderEditHistoryButton(messageNode);
+
     const wrapper = messageNode.closest("[data-id]");
     const dataID = wrapper?.getAttribute("data-id");
     const previousID = renderedMessages.get(messageNode);
@@ -790,6 +837,114 @@ function onNewMessageNodeAdded(messageNode)
     restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID);
     restoreDeletedMessageIfNeeded(messageNode, msgID, dataID);
     markMessageNodeDeviceIfPossible(messageNode, msgID, dataID);
+}
+
+function editHistoryMessageId(node)
+{
+    const ownId = node.getAttribute("data-id");
+    if (ownId) return ownId;
+
+    let id;
+    const receive = event => { if (typeof event.detail === "string") id = event.detail; };
+    document.addEventListener("onEditHistoryMessageId", receive);
+    try
+    {
+        node.dispatchEvent(new CustomEvent("getEditHistoryMessageId", { bubbles: true }));
+    }
+    finally
+    {
+        document.removeEventListener("onEditHistoryMessageId", receive);
+    }
+
+    const wrapper = node.closest("[data-id]");
+    return id ?? (wrapper?.querySelectorAll(messageSelector).length === 1 ? wrapper.getAttribute("data-id") : undefined);
+}
+
+function refreshEditHistoryButtons(id)
+{
+    if (!keepEditedMessages) return;
+    for (const node of messagePanel?.querySelectorAll(messageSelector) ?? [])
+        renderEditHistoryButton(node, id);
+}
+
+async function renderEditHistoryButton(node, requestedId)
+{
+    if (!node.isConnected || node.querySelector(messageSelector)) return;
+    const id = editHistoryMessageId(node);
+    const existing = node.querySelector(":scope > .incognito-edit-history");
+    if (id && existing?.dataset.messageId === id) return;
+    existing?.remove();
+    if (requestedId && id !== requestedId) return;
+    if (!id || pendingEditHistory.get(node)?.id === id) return;
+
+    const pending = { id };
+    pendingEditHistory.set(node, pending);
+    try
+    {
+        const db = await openMessageArchive("waIncognitoEditedMsgs");
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").getKey(id);
+        request.onsuccess = () =>
+        {
+            if (pendingEditHistory.get(node) !== pending) return;
+            pendingEditHistory.delete(node);
+            if (!request.result || !keepEditedMessages || !node.isConnected || editHistoryMessageId(node) !== id) return;
+
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = "Edit history";
+            button.className = "incognito-edit-history";
+            button.dataset.messageId = id;
+            button.addEventListener("click", event =>
+            {
+                event.stopPropagation();
+                if (keepEditedMessages && editHistoryMessageId(node) === id) showEditHistory(id);
+            });
+            node.appendChild(button);
+        };
+        request.onerror = () =>
+        {
+            if (pendingEditHistory.get(node) === pending) pendingEditHistory.delete(node);
+            console.error("WAIncognito: Could not check edit history", request.error);
+        };
+    }
+    catch (error)
+    {
+        if (pendingEditHistory.get(node) === pending) pendingEditHistory.delete(node);
+        console.error("WAIncognito: Could not check edit history", error);
+    }
+}
+
+async function showEditHistory(id)
+{
+    try
+    {
+        const db = await openMessageArchive("waIncognitoEditedMsgs");
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").get(id);
+        request.onsuccess = () =>
+        {
+            if (!keepEditedMessages || !request.result?.edits.length) return;
+            const list = document.createElement("ol");
+            list.className = "incognito-edit-history-list";
+            let last;
+            for (const edit of request.result.edits)
+            {
+                for (const text of [edit.previous, edit.next])
+                {
+                    if (text === last) continue;
+                    const item = document.createElement("li");
+                    item.textContent = text || "(empty)";
+                    list.appendChild(item);
+                    last = text;
+                }
+            }
+            Swal.fire({ title: "Edit history", html: list, confirmButtonText: "Close" });
+        };
+        request.onerror = () => console.error("WAIncognito: Could not load edit history", request.error);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open edit history", error);
+    }
 }
 
 function isCurrentMessageNode(messageNode, dataID)
