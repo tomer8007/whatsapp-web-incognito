@@ -85,6 +85,71 @@ function runDbusSendHasOwner(name) {
 
 let watcherCacheTime = 0;
 const NEGATIVE_CACHE_TTL_MS = 10000;
+const WATCHER_PROBE_COMMAND_TIMEOUT_MS = 500;
+const WATCHER_PROBE_TOTAL_TIMEOUT_MS = 1200;
+
+function runCommandAsync(cmd, args, timeoutMs) {
+  return new Promise((resolve) => {
+    let done = false;
+    let timer;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+    let child;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) {
+      return finish(null);
+    }
+    let out = '';
+    child.stdout.on('data', (d) => { out += String(d); });
+    child.on('error', () => finish(null));          // ENOENT / no tool
+    child.on('close', (code) => {
+      if (typeof code === 'number' && code !== 0) return finish(false);
+      finish(parseNameHasOwner(out));
+    });
+    timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch (e) { /* gone */ }
+      finish(null);
+    }, Math.max(1, timeoutMs | 0));
+    if (timer.unref) timer.unref();
+  });
+}
+
+function readWatcherCacheFile(file) {
+  try {
+    if (!file) return null;
+    const raw = fs.readFileSync(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.present !== 'boolean') return null;
+    return {
+      present: parsed.present,
+      method: typeof parsed.method === 'string' ? parsed.method : null,
+      at: typeof parsed.at === 'number' ? parsed.at : 0,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeWatcherCacheFile(file, result) {
+  try {
+    if (!file) return false;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({
+      present: !!(result && result.present),
+      method: result && typeof result.method === 'string' ? result.method : null,
+      at: Date.now(),
+    }), 'utf8');
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
 /**
  * Is any StatusNotifier watcher on the session bus? Sync, cached, ~ms. Never
@@ -110,6 +175,74 @@ function hasStatusNotifierWatcher() {
   watcherCache = result;
   watcherCacheTime = now;
   return result;
+}
+
+/**
+ * Async watcher probe with a capped total timeout. Never throws.
+ * Updates the same in-memory cache used by hasStatusNotifierWatcher().
+ * Optionally persists the last-known result to `cacheFile` and can read it as a
+ * fast startup hint via readStatusNotifierWatcherCache().
+ */
+async function hasStatusNotifierWatcherAsync(opts) {
+  const options = opts && typeof opts === 'object' ? opts : {};
+  const totalTimeoutMs = Math.max(1, Number(options.totalTimeoutMs) || WATCHER_PROBE_TOTAL_TIMEOUT_MS);
+  const commandTimeoutMs = Math.max(1, Number(options.commandTimeoutMs) || WATCHER_PROBE_COMMAND_TIMEOUT_MS);
+  const cacheFile = typeof options.cacheFile === 'string' && options.cacheFile ? options.cacheFile : null;
+  const now = Date.now();
+  if (watcherCache) {
+    if (watcherCache.present || (now - watcherCacheTime < NEGATIVE_CACHE_TTL_MS)) {
+      return watcherCache;
+    }
+  }
+
+  const deadline = Date.now() + totalTimeoutMs;
+  let result = { present: false, method: null };
+  let timedOut = false;
+  try {
+    for (const name of WATCHER_NAMES) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) { timedOut = true; break; }
+      const perCall = Math.max(1, Math.min(commandTimeoutMs, remaining));
+
+      let hit = await runCommandAsync('gdbus', [
+        'call', '--session',
+        '--dest', 'org.freedesktop.DBus',
+        '--object-path', '/org/freedesktop/DBus',
+        '--method', 'org.freedesktop.DBus.NameHasOwner', name,
+      ], perCall);
+      if (hit === null) {
+        const remainingAfterGdbus = deadline - Date.now();
+        if (remainingAfterGdbus > 0) {
+          hit = await runCommandAsync('dbus-send', [
+            '--session', '--print-reply',
+            '--dest=org.freedesktop.DBus',
+            '/org/freedesktop/DBus',
+            'org.freedesktop.DBus.NameHasOwner',
+            `string:${name}`,
+          ], Math.max(1, Math.min(commandTimeoutMs, remainingAfterGdbus)));
+        } else {
+          timedOut = true;
+        }
+      }
+      if (hit === true) { result = { present: true, method: name }; break; }
+      if (hit === null && result.method === null) result = { present: false, method: null };
+      if (deadline - Date.now() <= 0 && result.present !== true) timedOut = true;
+    }
+  } catch (e) {
+    result = { present: false, method: null };
+  }
+  watcherCache = result;
+  watcherCacheTime = Date.now();
+  // Don't persist an inconclusive timeout as a definitive "missing" result; that
+  // could suppress the tray on the next startup after a transiently slow D-Bus.
+  if (cacheFile && (!timedOut || result.present)) writeWatcherCacheFile(cacheFile, result);
+  return result;
+}
+
+function readStatusNotifierWatcherCache(file) {
+  const cached = readWatcherCacheFile(file);
+  if (!cached) return null;
+  return { present: cached.present, method: cached.method, at: cached.at };
 }
 
 /** For tests / re-probing. */
@@ -218,6 +351,8 @@ module.exports = {
   detectDesktop,
   parseNameHasOwner,
   hasStatusNotifierWatcher,
+  hasStatusNotifierWatcherAsync,
+  readStatusNotifierWatcherCache,
   resetWatcherCache,
   hasAppIndicatorLib,
   requestBackground,
