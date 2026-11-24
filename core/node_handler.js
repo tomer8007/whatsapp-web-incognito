@@ -390,7 +390,6 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         isAllowed = false;
     }
 
-    try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.record(messageNode, e2eMessage, !isAllowed, shouldBlock); } catch (e) { /* diagnostics only */ }
 
     return isAllowed;
 }

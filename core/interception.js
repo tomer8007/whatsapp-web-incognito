@@ -161,7 +161,6 @@ wsHook.after = function (messageEvent, url)
             // sanity check that our node parsing is deterministic (decodes + re-encodes the frame; runs in every mode)
             await checkNodeEncoderSanity(decryptedFrameOriginal, /* isIncoming */ true);
 
-            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.setBatch(i, decryptedFrames.length); } catch (e) { /* diagnostics only */ }
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
             if (!isAllowed)
@@ -266,8 +265,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
             }
 
             // In case the message already appears on screen, mark it in red; rows that appear later are marked when they render
-            var markedNow = markBlockedRevokeRows(deletedMessageId, remoteJid);
-            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.noteRevoke(deletedMessageId, { markedOnScreen: markedNow > 0 }); } catch (e) { /* diagnostics only */ }
+            markBlockedRevokeRows(deletedMessageId, remoteJid);
             BLOCKED_REVOKE_REMARK_DELAYS_MS.forEach(function(delay)
             {
                 setTimeout(function() { markBlockedRevokeRows(deletedMessageId, remoteJid); }, delay);
@@ -431,11 +429,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
                     if (msgs[i].id.id == deletedMessageId)
                     {
                         var saved = await saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
-                        if (saved)
-                        {
-                            try { if (typeof OfflineSyncLog != "undefined") OfflineSyncLog.noteRevoke(deletedMessageId, { savedToDb: true }); } catch (e) { /* diagnostics only */ }
-                            markBlockedRevokeRows(deletedMessageId, remoteJid);
-                        }
+                        if (saved) markBlockedRevokeRows(deletedMessageId, remoteJid);
                         return;
                     }
                 }

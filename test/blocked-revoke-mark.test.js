@@ -82,14 +82,3 @@ test("the page-world answer carries blockedRevoke and the UI marks such a row ev
     assert.ok(/blockedRevokedIds\.has\(String\(msgID\)\)/.test(read("core/injected_ui.js")));
     assert.ok(/data\.blockedRevoke && messageData == undefined\)\s*\{[^}]*markMessageDeleted\(messageNode\)/.test(read("core/ui.js")));
 });
-
-test("the offline-sync log reports markedOnScreen and savedToDb for a blocked revoke (booleans only)", () => {
-    const s = createSandbox({});
-    loadScripts(s, ["core/offline_sync_log.js"]);
-    s.OfflineSyncLog.record({ tag: "message", attrs: { id: "R1", from: "1@c.us" } }, { protocolMessage: { type: 0, key: { id: "A1" } } }, true, true);
-    s.OfflineSyncLog.noteRevoke("A1", { markedOnScreen: false });
-    s.OfflineSyncLog.noteRevoke("A1", { savedToDb: true });
-    const entry = JSON.parse(JSON.stringify(s.OfflineSyncLog.snapshot())).entries[0];
-    assert.deepStrictEqual([entry.markedOnScreen, entry.savedToDb], [false, true]);
-    assert.ok(!JSON.stringify(entry).includes("A1"));
-});
