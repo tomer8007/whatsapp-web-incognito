@@ -122,7 +122,7 @@ function removeMenu()
 {
     if (!menu) return;
 
-    const { target, drop, originalClose, closeTimer } = menu;
+    const { target, tooltip, drop, originalClose, closeTimer } = menu;
     menu = null;
     clearTimeout(closeTimer);
     if (drop)
@@ -131,6 +131,7 @@ function removeMenu()
         drop.close = originalClose;
         drop.destroy();
     }
+    tooltip?.remove();
     target?.remove();
 }
 
@@ -160,7 +161,8 @@ async function addIconIfNeeded()
     const setup = menu = { anchor };
     try
     {
-        const target = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
+        const label = "Incognito options";
+        const target = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, label, 24, "button");
         const options = await new Promise(resolve => browser.runtime.sendMessage({ name: "getOptions" }, resolve));
         if (menu !== setup) return;
         if (!anchor.isConnected)
@@ -173,7 +175,45 @@ async function addIconIfNeeded()
         document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
         setup.target = target;
         target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito";
-        anchor.before(target);
+        const nativeButton = anchor.closest('button, [role="button"], [role="tab"]') ?? anchor;
+        const wrapper = nativeButton.parentElement;
+        const tooltipWrapper = wrapper?.matches('[title], [aria-describedby], [data-tooltip], [data-testid*="tooltip"]');
+        let insertionPoint = tooltipWrapper ? wrapper : nativeButton;
+        const nextItem = Array.from(document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS))
+            .find(item => !insertionPoint.contains(item));
+        if (nextItem)
+        {
+            // Insert beside the native item even when its tooltip wrapper has no identifying attributes.
+            for (let branch = insertionPoint, depth = 0; branch.parentElement && depth < 3; branch = branch.parentElement, depth++)
+            {
+                if (!branch.parentElement.contains(nextItem)) continue;
+                insertionPoint = branch;
+                break;
+            }
+        }
+        insertionPoint.before(target);
+
+        const tooltip = setup.tooltip = document.createElement("div");
+        tooltip.className = "incognito-menu-tooltip";
+        tooltip.textContent = label;
+        tooltip.setAttribute("aria-hidden", "true");
+        const button = target.firstElementChild;
+        function showTooltip()
+        {
+            if (tooltip.isConnected || setup.drop?.isOpened()) return;
+            const rect = button.getBoundingClientRect();
+            tooltip.style.left = rect.right + 10 + "px";
+            tooltip.style.top = rect.top + rect.height / 2 + "px";
+            document.body.appendChild(tooltip);
+        }
+        for (const event of ["mouseover", "pointerover", "focusin"])
+            target.addEventListener(event, event => event.stopPropagation());
+        target.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") showTooltip(); });
+        target.addEventListener("pointerleave", () => tooltip.remove());
+        button.addEventListener("focus", () => { if (button.matches(":focus-visible")) showTooltip(); });
+        button.addEventListener("blur", () => tooltip.remove());
+        button.addEventListener("keydown", event => { if (event.key === "Escape") tooltip.remove(); });
+
         const drop = setup.drop = new Drop({
             target,
             content: generateDropContent(options),
@@ -196,6 +236,7 @@ async function addIconIfNeeded()
 
         drop.on("open", function ()
         {
+            tooltip.remove();
             if (!checkInterception()) return;
             target.className = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
             document.dispatchEvent(new CustomEvent("onIncognitoOptionsOpened"));
@@ -717,14 +758,13 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
     var response = await fetch(svgImagePath);
     var text = await response.text();
     var viewBoxText = text.split('viewBox="')[1].split('"')[0];
-    var viewboxSize = parseInt(text.split('viewBox="')[1].split(' ')[2]);
 
     var menuItemElem = document.createElement("div");
-
-    menuItemElem.innerHTML = `<div aria-disabled="false" role="${role}" tabindex="0" class="${clazz}" title="${title}" \
-                            aria-label="${title}"><span data-testid="menu" data-icon="menu" class=""><svg viewBox="${viewBoxText}" \
-                            width="${size}" height="${size}" class=""><path fill="currentColor" d=""></path></svg></span></div><span></span>`;
-    var path = menuItemElem.getElementsByTagName("path")[0];
+    const tag = role === "button" ? "button" : "div";
+    const attributes = tag === "button" ? 'type="button"' : `tabindex="0" title="${title}"`;
+    menuItemElem.innerHTML = `<${tag} ${attributes} class="${clazz}" aria-label="${title}">\
+                            <span><svg viewBox="${viewBoxText}" width="${size}" height="${size}"><path fill="currentColor" d="">\
+                            </path></svg></span></${tag}><span></span>`;
     var svg = menuItemElem.getElementsByTagName("svg")[0];
 
     var dom = new DOMParser().parseFromString(text, 'text/html');

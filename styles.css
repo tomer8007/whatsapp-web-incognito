@@ -15,6 +15,21 @@
   margin: auto;
 }
 
+.incognito-menu-tooltip
+{
+    position: fixed;
+    transform: translateY(-50%);
+    z-index: 1200;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: #242728;
+    color: #fff;
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .icon-incognito
 {
     background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
