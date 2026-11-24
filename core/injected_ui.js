@@ -215,7 +215,8 @@ document.addEventListener('sendReadConfirmation', async function (e)
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
     if (warningMessage != null && String(warningMessage.messageID || "").startsWith(data.jid))
     {
-        animateBarOutAndRemove(warningMessage, 300);
+        Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+        setTimeout(function() {warningMessage.remove();}, 300);
     }
 
     //var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
@@ -663,7 +664,7 @@ function markChatAsBlocked(chat)
 
     // if it didn't exist previously, animate it in
     if (blockedChats[chat.id] == undefined || warningWasEmpty)
-        animateBarIn(warningMessage);
+        Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
     if (warningMessage)
         warningMessage.firstChild.textContent = t("receipt.blocked");
