@@ -338,6 +338,94 @@ document.addEventListener("getDeviceTypeForMessage", function(e)
     document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
 });
 
+const blockedStatusDeletions = new Set();
+
+function recordBlockedStatusDeletion(id)
+{
+    if (blockedStatusDeletions.has(id)) return;
+    blockedStatusDeletions.add(id);
+    // shortcut: keep 1,000 revokes in the current tab, use an archive if reload persistence is needed.
+    if (blockedStatusDeletions.size > 1000)
+        blockedStatusDeletions.delete(blockedStatusDeletions.values().next().value);
+    document.dispatchEvent(new CustomEvent("onStatusDeletionBlocked"));
+}
+
+function statusMessageId(key)
+{
+    if (typeof key === "string")
+        return /^(?:true|false)_status@broadcast_(.+?)(?:_[^_]+@[^_]+)?$/.exec(key)?.[1];
+    if (key?.remote?.toString() === "status@broadcast" && typeof key.id === "string")
+        return key.id;
+}
+
+function statusMessageFromProps(props)
+{
+    return props?.msg ?? props?.message ?? props?.statusMessage ?? props?.currentMsg;
+}
+
+document.addEventListener("getStatusViewerInfo", function (event)
+{
+    const node = event.target;
+    const viewer = node.closest?.('[data-animate-status-viewer], [data-testid="status-video"]');
+    if (!viewer) return;
+
+    let id = statusMessageId(node.closest("[data-id]")?.getAttribute("data-id"));
+    let name;
+    let timestamp;
+    let mimeType;
+    for (const element of node === viewer ? [node] : [node, viewer])
+    {
+        const fiberKey = Object.keys(element).find(key => key.startsWith("__reactFiber$"));
+        let fiber = element[fiberKey];
+        // shortcut: check nearby React props, use a stable viewer API if WhatsApp exposes one.
+        for (let depth = 0; fiber && depth < 16 && (!id || !name || !timestamp || !mimeType); depth++, fiber = fiber.return)
+        {
+            const props = fiber.memoizedProps;
+            const message = statusMessageFromProps(props);
+            const messageId = statusMessageId(message?.id ?? message?.__x_id);
+            id ??= messageId ?? statusMessageId(props?.msgKey) ?? statusMessageId(props?.msgId);
+            if (messageId && messageId === id)
+            {
+                const sentAt = message.t ?? message.__x_t;
+                if (Number.isFinite(sentAt) && sentAt > 0) timestamp ??= sentAt;
+                const format = message.mimetype ?? message.__x_mimetype ?? message.mediaData?.mimetype;
+                if (typeof format === "string" && format) mimeType ??= format;
+            }
+            const contact = props?.contact ?? props?.status?.contact ?? props?.initialStatus?.contact;
+            const displayName = contact?.formattedName ?? contact?.name ?? contact?.pushname;
+            if (!name && typeof displayName === "string") name = displayName;
+        }
+    }
+
+    if (!id && node === viewer && blockedStatusDeletions.size)
+    {
+        // shortcut: text statuses have no media element, inspect the viewer's first 200 fibers until it exposes the active ID.
+        const fiberKey = Object.keys(viewer).find(key => key.startsWith("__reactFiber$"));
+        const child = viewer[fiberKey]?.child;
+        const pending = child ? [child] : [];
+        for (let count = 0; pending.length && count < 200; count++)
+        {
+            const fiber = pending.pop();
+            const props = fiber.memoizedProps;
+            const message = statusMessageFromProps(props);
+            const candidate = statusMessageId(message?.id ?? message?.__x_id) ?? statusMessageId(props?.msgKey) ?? statusMessageId(props?.msgId);
+            if (candidate && id && candidate !== id)
+            {
+                id = undefined;
+                break;
+            }
+            id ??= candidate;
+            if (fiber.sibling) pending.push(fiber.sibling);
+            if (fiber.child) pending.push(fiber.child);
+        }
+        if (pending.length) id = undefined;
+    }
+
+    document.dispatchEvent(new CustomEvent("onStatusViewerInfo", {
+        detail: JSON.stringify({ name, timestamp, mimeType, deleted: Boolean(id && blockedStatusDeletions.has(id)) })
+    }));
+});
+
 function stopReceiptCountdown(jid)
 {
     const countdown = blinkingChats.get(jid);

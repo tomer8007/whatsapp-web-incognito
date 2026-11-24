@@ -296,42 +296,19 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
 
 NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 {
-    var isAllowed = true;
-    var remoteJid = null;
-    var participant = null;
-    
-    if (messageNode.attrs != null)
-    {
-        messageId = messageNode.attrs["id"];
-
-        remoteJid = messageNode.attrs["from"].toString();
-        participant = messageNode.attrs["participant"];
-        participant = participant ? participant : remoteJid;
-
-        if (messageNode.attrs["sender_pn"] != null)
-        {
-            // we prefer the full phone number JID over the possible LID
-            remoteJid = messageNode.attrs["sender_pn"].toString();
-        }
-    }
-
-    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
+    const messageId = messageNode.attrs?.id;
     await interceptViewOnceMessages(e2eMessage, messageId);
-
-    if (!saveDeletedMsgsHookEnabled)
-    {
-        isAllowed = true;
-    }
-    else if (isRevokeMessage)
+    const sourceJid = messageNode.attrs?.from?.toString();
+    const remoteJid = messageNode.attrs?.sender_pn?.toString() ?? sourceJid;
+    if (saveDeletedMsgsHookEnabled && NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid, sourceJid))
     {
         console.log("WhatsIncognito: --- Detected message REVOKE action! ---");
-        isAllowed = false;
+        return false;
     }
-
-    return isAllowed;
+    return true;
 }
 
-NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid)
+NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid, sourceJid)
 {
     //
     // Check if this is a message deletion node
@@ -339,10 +316,13 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     var messageRevokeValue = Message.ProtocolMessage.Type.REVOKE.value;
     if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
     {
-        var deletedMessageId = message.protocolMessage.key.id;
-        if (saveDeletedMsgsHookEnabled)
+        const key = message.protocolMessage.key;
+        if (key?.id)
         {
-            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId);
+            if (sourceJid === "status@broadcast" || key.remoteJid === "status@broadcast")
+                recordBlockedStatusDeletion(key.id);
+            else
+                onDeletionMessageBlocked(message, remoteJid, messageId, key.id);
         }
 
         return true;

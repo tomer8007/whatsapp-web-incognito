@@ -473,6 +473,20 @@ input[type=number]::-webkit-inner-spin-button {
   width: 100px;
 }
 
+.status-deletion-incognito
+{
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: white;
+  background: #8a2d2d;
+  z-index: 1000;
+  pointer-events: none;
+}
+
 .incognito-view-once-learn-more{
   display: block;
 }
