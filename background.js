@@ -46,6 +46,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({"allowStatusDownload": messageEvent.allowStatusDownload});
         }
+        if (typeof messageEvent.extendDeleteForEveryone === "boolean")
+        {
+            chrome.storage.local.set({ extendDeleteForEveryone: messageEvent.extendDeleteForEveryone });
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -68,7 +72,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'saveDeletedMsgs', 
                                 'showDeviceTypes',
                                 'autoReceiptOnReplay',
-                                'allowStatusDownload']).then(function(storage)
+                                'allowStatusDownload',
+                                'extendDeleteForEveryone']).then(function(storage)
         {
             if (storage["onlineUpdatesHook"] != undefined)
             {
@@ -116,7 +121,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 saveDeletedMsgs: saveDeletedMsgs,
                 showDeviceTypes: showDeviceTypes,
                 autoReceiptOnReplay: autoReceiptOnReplay,
-                allowStatusDownload: allowStatusDownload
+                allowStatusDownload: allowStatusDownload,
+                extendDeleteForEveryone: storage.extendDeleteForEveryone === true
             });
         });   
     }

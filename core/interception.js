@@ -12,11 +12,10 @@ var autoReceiptOnReplay = true;
 var safetyDelay = 0;
 
 var isInitializing = true;
-var exceptionsList = [];
-var blinkingChats = {};
-var chats = {};
-var blockedChats = {};
-var deviceTypesPerMessage = {};
+var readReceiptExceptions = new Map();
+var blinkingChats = new Map();
+var blockedChats = new Map();
+var deviceTypesPerMessage = new Map();
 
 // debugging flags
 var WAdebugMode = false;

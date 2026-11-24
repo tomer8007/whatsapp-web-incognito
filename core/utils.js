@@ -137,16 +137,7 @@ function getCurrentChatPanel()
 
 function isChatBlocked(jid)
 {
-    var user = jid.split("@")[0].split(":")[0];
-
-    for (jid in blockedChats)
-    {
-        var possibleLid = blockedChats[jid].accountLid ? blockedChats[jid].accountLid.toString() : "";
-        if (jid.split("@")[0].split(":")[0] == user || possibleLid.split("@")[0].split(":")[0] == user)
-            return true;
-    }
-
-    return false;
+    return Boolean(jid && blockedChats.has(normalizeJID(jid)));
 }
 
 async function getChatByJID(jid)
@@ -170,18 +161,9 @@ async function getChatByJID(jid)
 
     // try to get it thorugh GUI
     var chatElem = findChatEntryElementForJID(jid);
-    if (chatElem != null)
-    {
-        var data = FindReact(chatElem).props.data;
-        if (data.data) chat = data.data;
-        else chat = data.chat;
-    }
-    else
-    {
-        chat = chats[jid];
-    }
-
-    return chat;
+    if (chatElem == null) return;
+    const data = FindReact(chatElem)?.props?.data;
+    return data?.data ?? data?.chat;
 }
 
 function getJidOfChat(chat)

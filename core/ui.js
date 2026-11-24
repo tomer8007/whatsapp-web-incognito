@@ -4,7 +4,13 @@ This is a content script responsible for some UI.
 
 
 // Global variables
-var mutationObserver = null;
+let mainUI;
+let messagePanel;
+let messageObserver;
+let menu;
+const messageSelector = '[data-testid^="conv-msg"]';
+const deviceIconTemplates = new Map();
+let extendedDeletePreference;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var renderedMessages = new WeakMap();
@@ -14,6 +20,12 @@ if (chrome != undefined)
 	var browser = chrome;
 }
 
+document.addEventListener("onExtendedDeletePreferenceRequested", function ()
+{
+    if (extendedDeletePreference !== undefined)
+        document.dispatchEvent(new CustomEvent("onExtendedDeletePreference", { detail: extendedDeletePreference }));
+});
+
 initialize();
 
 function initialize()
@@ -21,6 +33,7 @@ function initialize()
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
     {
+        extendedDeletePreference = options?.extendDeleteForEveryone === true;
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
         {
             detail: JSON.stringify(options)
@@ -32,77 +45,67 @@ function initialize()
         browser.runtime.sendMessage(optionsMessage);
     });
 
-    // initialize mutation observer
-    var appElem = document.getElementsByTagName("body")[0];
-    if (!appElem) return;
-    mutationObserver = new MutationObserver(onMutationsObserved);
-
-    mutationObserver.observe(appElem, { childList: true, subtree: true });
+    if (!document.body) return;
+    new MutationObserver(onMutationsObserved).observe(document.body, { childList: true, subtree: true });
+    onMutationsObserved([]);
 }
 
 function onMutationsObserved(mutations)
 {
-    var found = false;
-    for (var i = 0; i < mutations.length; i++)
+    if (!mainUI?.isConnected)
     {
-        var mutation = mutations[i];
-        var mutationType = mutations[i].type;
-        var addedNodes = mutations[i].addedNodes;
-        var removedNodes = mutations[i].removedNodes;
-
-        // Scan for added nodes
-        for (var j = 0; j < addedNodes.length; j++)
+        mainUI = document.querySelector(".two");
+        if (mainUI)
         {
-            var addedNode = addedNodes[j];
-            if (addedNode.classList == undefined) continue;
-
-            if (addedNode.getElementsByClassName("two").length > 0)
-            {
-                // main app was added, UI is ready
-                addIconIfNeeded();
-                setTimeout(function () { onMainUIReady(); }, 100);
-
-                found = true;
-                break;
-            }
-            else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
-            {
-                // dropdown was opened
-                setTimeout(function ()
-                {
-                    document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
-
-                }, 200);
-            }
-
-            if (addedNode.matches('[data-testid^="conv-msg"]'))
-                onNewMessageNodeAdded(addedNode);
-            for (const messageNode of addedNode.querySelectorAll('[data-testid^="conv-msg"]'))
-                onNewMessageNodeAdded(messageNode);
+            addIconIfNeeded();
+            setTimeout(onMainUIReady, 100);
         }
-
-        
-        // Remove the menu item when the app is removed
-        for (var j = 0; j < removedNodes.length; j++)
-        {
-            var removedNode = removedNodes[j];
-            if (removedNode.classList == undefined) continue;
-            if (removedNode.classList.contains("two"))
-            {
-                // main app was removed, remove our artifacts
-                var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
-                var dropItem = document.getElementsByClassName("drop")[0];
-                if (menuItem != undefined) menuItem.remove();
-                if (dropItem != undefined) dropItem.remove();
-
-                found = true;
-                break;
-            }
-
-        }
-        if (found) break;
     }
 
+    if (menu && (!menu.anchor.isConnected || (menu.target && !menu.target.isConnected)))
+    {
+        removeMenu();
+        if (mainUI) addIconIfNeeded();
+    }
+
+    if (!messagePanel?.isConnected)
+    {
+        messageObserver?.disconnect();
+        messagePanel = document.querySelector('[data-testid="conversation-panel-messages"]')
+            || document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0]
+            || document.getElementById("main");
+        if (messagePanel)
+        {
+            messageObserver ??= new MutationObserver(records =>
+            {
+                for (const record of records)
+                {
+                    if (record.type === "attributes") scanMessageNodes(record.target);
+                    else for (const node of record.addedNodes) scanMessageNodes(node);
+                }
+            });
+            messageObserver.observe(messagePanel, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-id"] });
+            scanMessageNodes(messagePanel);
+        }
+    }
+
+    const dropdownClasses = UIClassNames.OUTER_DROPDOWN_CLASS.split(/\s+/);
+    for (const mutation of mutations)
+    {
+        if (messagePanel?.contains(mutation.target)) continue;
+        for (const node of mutation.addedNodes)
+        {
+            if (node.nodeName === "DIV" && dropdownClasses.every(className => node.classList.contains(className)))
+                setTimeout(() => document.dispatchEvent(new CustomEvent("onDropdownOpened")), 200);
+        }
+    }
+}
+
+function scanMessageNodes(node)
+{
+    if (node.nodeType !== 1) return;
+    if (node.matches(messageSelector)) onNewMessageNodeAdded(node);
+    for (const messageNode of node.querySelectorAll(messageSelector)) onNewMessageNodeAdded(messageNode);
 }
 
 function onMainUIReady()
@@ -112,109 +115,119 @@ function onMainUIReady()
     setTimeout(checkInterception, 1000);
 
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
-    // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
+}
+
+function removeMenu()
+{
+    if (!menu) return;
+
+    const { target, drop, originalClose, closeTimer } = menu;
+    menu = null;
+    clearTimeout(closeTimer);
+    if (drop)
+    {
+        drop.off("close");
+        drop.close = originalClose;
+        drop.destroy();
+    }
+    target?.remove();
 }
 
 async function addIconIfNeeded()
 {
-    if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
+    if (menu) return;
     updateUIClassNamesIfNeeded();
 
-    var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
-    if (firstMenuItem != undefined)
+    const anchor = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
+    if (!anchor)
     {
-        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
-        menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-        firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
-
-        browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+        if (isUIClassesWorking)
         {
-            document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
-
-            var dropContent = generateDropContent(options);
-            var drop = new Drop(
-            {
-                target: menuItemElem,
-                content: dropContent,
-                position: "bottom left",
-                classes: "drop-theme-incognito",
-                openOn: "click",
-                tetherOptions:
-                {
-                    offset: "-4px -4px 0 0"
-                },
+            isUIClassesWorking = false;
+            Swal.fire({
+                title: "WAIncognito is temporarily broken",
+                html: "It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. Please be patient for a few days until a newer compatible version will be released.",
+                icon: "warning",
+                width: 600,
+                confirmButtonColor: "#DD6B55",
+                confirmButtonText: "Got it",
             });
-            var originalCloseFunction = drop.close;
-            drop.close = function ()
+        }
+        return;
+    }
+
+    const setup = menu = { anchor };
+    try
+    {
+        const target = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, "Incognito Options", 24, "button");
+        const options = await new Promise(resolve => browser.runtime.sendMessage({ name: "getOptions" }, resolve));
+        if (menu !== setup) return;
+        if (!anchor.isConnected)
+        {
+            removeMenu();
+            return;
+        }
+        if (!options) throw new Error("Options are unavailable");
+
+        document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
+        setup.target = target;
+        target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito";
+        anchor.before(target);
+        const drop = setup.drop = new Drop({
+            target,
+            content: generateDropContent(options),
+            position: "bottom left",
+            classes: "drop-theme-incognito",
+            openOn: "click",
+            tetherOptions: { offset: "-4px -4px 0 0" },
+        });
+        setup.originalClose = drop.close;
+        drop.close = function ()
+        {
+            if (!drop.isOpened() || setup.closeTimer) return;
+            document.dispatchEvent(new CustomEvent("onIncognitoOptionsClosed"));
+            setup.closeTimer = setTimeout(() =>
             {
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
-                setTimeout(function () { originalCloseFunction.apply(drop, arguments); }, 100);
-            }
-            drop.on("open", function ()
-            {
-                if (!checkInterception()) return;
-                var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
+                setup.closeTimer = null;
+                setup.originalClose.call(drop);
+            }, 100);
+        };
 
-                document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").addEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").addEventListener("click", onTypingUpdatesTick);
-                document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
-                document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
-                document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
-                document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.addEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.addEventListener("click", onBackButtonClicked);
-                };
-                
-                //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
-                //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
-                //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
+        drop.on("open", function ()
+        {
+            if (!checkInterception()) return;
+            target.className = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
+            document.dispatchEvent(new CustomEvent("onIncognitoOptionsOpened"));
+        });
+        drop.on("close", () => target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
-            });
-            drop.on("close", function ()
-            {
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-                document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
-
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.removeEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.removeEventListener("click", onBackButtonClicked);
-                };
-
-                //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
-            });
+        const actions = {
+            "#incognito-option-read-confirmations": onReadConfirmaionsTick,
+            "#incognito-option-online-status": onOnlineUpdatesTick,
+            "#incognito-option-typing-status": onTypingUpdatesTick,
+            "#incognito-option-save-deleted-msgs": onSaveDeletedMsgsTick,
+            "#incognito-option-show-device-type": onShowDeviceTypesTick,
+            "#incognito-option-auto-receipt": onAutoReceiptsTick,
+            "#incognito-option-status-downloading": onStatusDownloadingTick,
+            ".incognito-next-button": onNextButtonClicked,
+            ".incognito-back-button": onBackButtonClicked,
+        };
+        for (const [selector, action] of Object.entries(actions))
+            for (const control of drop.content.querySelectorAll(selector))
+                control.addEventListener("click", event => { if (isInterceptionWorking) action(event); });
+        drop.content.querySelector("#incognito-extend-delete").addEventListener("change", event =>
+        {
+            extendedDeletePreference = event.currentTarget.checked;
+            const options = { extendDeleteForEveryone: extendedDeletePreference };
+            browser.runtime.sendMessage({ name: "setOptions", ...options });
+            document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
         });
     }
-    else if (isUIClassesWorking)
+    catch (error)
     {
-        isUIClassesWorking = false;
-        Swal.fire({
-            title: "WAIncognito is temporarily broken",
-            html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. \
-                    <br><Br> Please be patient for a few days until a newer compatible version will be released.',
-            icon: "warning",
-            width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "Got it",
-        });
+        if (menu === setup) removeMenu();
+        console.error("WAIncognito: Could not create options menu", error);
     }
 }
 
@@ -243,26 +256,26 @@ function generateDropContent(options)
     var allowStatusDownloadCaption = "Adds a button to download statuses";
 
     var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var onlineUpdatesCheckbox = (options.onlineUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var showDeviceTypeCheckbox = (options.showDeviceTypes ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
     var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+        <div class='incognito-mark incognito-marked'> </div>" :
+        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
 
 
     var dropContent = ` \
@@ -272,38 +285,38 @@ function generateDropContent(options)
             <div class='incognito-options-navigator'>
                 <div class='incognito-options-view-container' style='transform: translate(0%, 0%);' id='incognito-options-view1'>
 
-                    <!---- First Page ---!>
-                                                                            
-                    <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'> 
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
+                    <div class='incognito-options-view'>
+                        <!---- First Page ---!>
+
+                        <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'>
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${readConfirmationCheckbox}
+                                </div>
                             </div>
+                            <span>${readConfirmationsTitle}</span>
+                            <div class='incognito-options-description'>${readConfirmationsCaption}<br>${readConfirmationsNote}</div>
                         </div>
-                        ${readConfirmationsTitle}
-                        <div class='incognito-options-description'>${readConfirmationsCaption}</div>
-                        <br>
-                        <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
-                            ${readConfirmationsNote}
-                        </div> 
-                    </div> 
-                            
-                    <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${onlineUpdatesCheckbox}
+
+                        <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${onlineUpdatesCheckbox}
+                                </div>
                             </div>
+                            <span>${onlineStatusTitle}</span>
+                            <div class='incognito-options-description'>${onlineStatusCaption}</div>
                         </div>
-                        ${onlineStatusTitle}
-                        <div class='incognito-options-description'>${onlineStatusCaption}</div>
+                        <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${typingUpdatesCheckbox}
+                                </div>
+                            </div>
+                            <span>${typingStatusTitle}</span>
+                            <div class='incognito-options-description'>${typingStatusCaption}</div>
+                        </div>
                     </div>
-                    <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${typingUpdatesCheckbox}
-                            </div>
-                        </div>
-                        ${typingStatusTitle}
-                        <div class='incognito-options-description'>${typingStatusCaption}</div>
+                    <div class='incognito-options-footer'>
+                        <button class='incognito-next-button'>Next &gt;</button>
                     </div>
-                    <button class='incognito-next-button'>Next &gt</button>
                 </div>
 
                 <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
@@ -312,32 +325,33 @@ function generateDropContent(options)
                     
                     <div class='incognito-options-view' id='incognito-options-view-internal2'>
                         <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${saveDeletedMessagesCheckbox}
                                 </div>
                             </div>
-                            ${deletedMessagesTitle}
+                            <span>${deletedMessagesTitle}</span>
                             <div class='incognito-options-description'>${deletedMessagesCaption}</div>
                         </div>
                         <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${showDeviceTypeCheckbox}
                                 </div>
                             </div>
-                            ${showDeviceTypeTitle}
+                            <span>${showDeviceTypeTitle}</span>
                             <div class='incognito-options-description'>${showDeviceTypeCaption}</div>
                         </div>
                         <div id='incognito-option-auto-receipt' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${autoReceiptCheckbox}
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${autoReceiptCheckbox}
                                 </div>
                             </div>
-                            ${autoReceiptTitle}
+                            <span>${autoReceiptTitle}</span>
                             <div class='incognito-options-description'>${autoReceiptCaption}</div>
                         </div>
-                        <br>
-                        <button class='incognito-next-button'>Next &gt</button>
-                        <button class='incognito-back-button'>&lt Back</button>
+                    </div>
+                    <div class='incognito-options-footer'>
+                        <button class='incognito-back-button'>&lt; Back</button>
+                        <button class='incognito-next-button'>Next &gt;</button>
                     </div>
                 </div>
 
@@ -346,17 +360,24 @@ function generateDropContent(options)
                     <!---- Third Page ---!>
                     <div class='incognito-options-view' id='incognito-options-view-internal3'>
                         <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
+                            <div class='checkbox-container-incognito'>
+                                <div class='checkbox-incognito ${allowStatusDownloadCheckbox}
                                 </div>
                             </div>
-                            ${allowStatusDownloadTitle}
+                            <span>${allowStatusDownloadTitle}</span>
                             <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
                         </div>
-                        <div class='incognito-options-item' style='cursor: pointer;'>
-                            More options coming soon!
-                        </div>
-                        <button class='incognito-back-button'>&lt Back</button>
+                        <label id='incognito-option-extend-delete' class='incognito-options-item'>
+                            <input id='incognito-extend-delete' type='checkbox' ${options.extendDeleteForEveryone === true ? "checked" : ""}
+                                aria-describedby='incognito-extend-delete-note'>
+                            <span>Extend “Delete for everyone” to 3 days</span>
+                            <span id='incognito-extend-delete-note' class='incognito-options-description'>
+                                Applies to messages you sent. WhatsApp may reject the request, and recipients may still see the message.
+                            </span>
+                        </label>
+                    </div>
+                    <div class='incognito-options-footer'>
+                        <button class='incognito-back-button'>&lt; Back</button>
                     </div>
                 </div>
 
@@ -715,11 +736,15 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 
 function onNewMessageNodeAdded(messageNode)
 {
-    const dataID = messageNode.closest("[data-id]")?.getAttribute("data-id");
-    if (!dataID || renderedMessages.get(messageNode) === dataID) return;
+    const wrapper = messageNode.closest("[data-id]");
+    const dataID = wrapper?.getAttribute("data-id");
+    const previousID = renderedMessages.get(messageNode);
+    if (!dataID || previousID === dataID) return;
 
     const msgID = dataID.includes("_") ? dataID.split("_")[2] : dataID;
     if (!msgID) return;
+    if (previousID)
+        (wrapper.firstElementChild || messageNode).querySelector(":scope > .device-type-image")?.remove();
 
     renderedMessages.set(messageNode, dataID);
     restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID);
@@ -1054,11 +1079,22 @@ async function markMessageNodeDeviceIfPossible(messageNode, msgID, dataID)
     if (deviceType !== "computer" && deviceType !== "phone") return;
     try
     {
-        const imageElement = await generateSVGElement(chrome.runtime.getURL("images/" + deviceType + ".svg"), "", "This message was sent from a " + deviceType, 19);
+        if (!deviceIconTemplates.has(deviceType))
+        {
+            const template = generateSVGElement(chrome.runtime.getURL("images/" + deviceType + ".svg"), "", "This message was sent from a " + deviceType, 19)
+                .catch(error =>
+                {
+                    deviceIconTemplates.delete(deviceType);
+                    throw error;
+                });
+            deviceIconTemplates.set(deviceType, template);
+        }
+        const template = await deviceIconTemplates.get(deviceType);
         if (!isCurrentMessageNode(messageNode, dataID)) return;
 
         const target = messageNode.closest("[data-id]").firstElementChild || messageNode;
         if (target.querySelector(".device-type-image")) return;
+        const imageElement = template.cloneNode(true);
         imageElement.className = "device-type-image";
 
         const topMessageNode = target.parentElement?.parentElement?.parentElement;

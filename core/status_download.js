@@ -1,180 +1,91 @@
-//
-// When a photo/video status is being viewed, create a button to download it that appears, and then handle downloading it
-//
+// A body observer discovers the viewer. Only the viewer needs media and src observation.
+const statusViewerSelector = '[data-animate-status-viewer], [data-testid="status-video"]';
+let statusViewer;
+let statusControl;
+let statusSource;
+let allowStatusDownload = true;
 
-var allowStatusDownload = true;
+const statusMediaObserver = new MutationObserver(updateStatusDownload);
+const statusViewerObserver = new MutationObserver(findStatusViewer);
 
-function determineIfNodeIsStatus(node) 
+function findStatusViewer()
 {
-    var isNodeStatus = false;
-    // is node a picture
-    if (node.nodeName == "IMG")
+    if (statusViewer?.isConnected) return;
+
+    statusMediaObserver.disconnect();
+    statusViewer = document.querySelector(statusViewerSelector);
+    if (statusViewer)
+        statusMediaObserver.observe(statusViewer, { childList: true, subtree: true, attributes: true, attributeFilter: ["src"] });
+    updateStatusDownload();
+}
+
+function updateStatusDownload()
+{
+    let source;
+    if (statusViewer?.isConnected)
     {
-        // get the element 12 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        if (parent?.getAttribute("data-animate-status-viewer") != null)
+        for (const media of statusViewer.querySelectorAll("img[src], video[src]"))
         {
-            isNodeStatus = true;
+            // shortcut: WhatsApp's nesting distinguishes media from avatars, use media-specific selectors when available.
+            let parent = media.parentElement;
+            const isImage = media.tagName === "IMG";
+            for (let depth = 1; parent && depth < (isImage ? 12 : 8); depth++)
+                parent = parent.parentElement;
+
+            if (parent?.matches(isImage ? "[data-animate-status-viewer]" : '[data-testid="status-video"]')
+                && (media.src.startsWith("blob:") || media.src.startsWith("https://web.whatsapp.com/stream/video")))
+                source = media.src;
         }
     }
-    else if (node.nodeName == "VIDEO")
+
+    if (source === statusSource && statusControl?.isConnected) return;
+    statusControl?.remove();
+    statusControl = null;
+    statusSource = source;
+    if (!source) return;
+
+    if (source.startsWith("blob:"))
     {
-        // get the element 8 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
-        if (parent?.getAttribute("data-testid") == "status-video")
-        {
-            isNodeStatus = true;
-        }
+        statusControl = document.createElement("a");
+        statusControl.href = source;
+        statusControl.title = "Download this status!";
+        statusControl.download = "status";
+        statusControl.setAttribute("aria-label", statusControl.title);
+        const icon = document.createElement("img");
+        icon.src = chrome.runtime.getURL("images/download.svg");
+        icon.alt = "";
+        statusControl.appendChild(icon);
     }
-
-    return isNodeStatus;
-}
-
-function destroyOldButton(src) 
-{
-    var buttons = document.getElementsByClassName("download-button-incognito");
-    // loop through buttons
-    for (var i = 0; i < buttons.length; i++) 
+    else
     {
-        // if the button's src matches the src of the img
-        if (buttons[i].id == src) 
-        {
-            // remove the button
-            buttons[i].remove();
-        }
-        // special case: stream url's are handled wierdly, if the input contains "stream" destroy all buttons with 
-        // "" as their src
-        if (src.includes("stream"))
-        {
-            if(buttons[i].id == "status-download-fail-button")
-            {
-                buttons[i].remove();
-            }
-        }
+        statusControl = document.createElement("div");
+        statusControl.id = "status-download-fail-button";
+        statusControl.textContent = "Please re-open the status to download.";
     }
+    statusControl.className = "download-button-incognito";
+    document.body.appendChild(statusControl);
 }
 
-function createFailNotice(src)
+function startStatusDownload()
 {
-    var a = document.createElement("div");
-    a.innerHTML = "Please re-open the status to download.";
-    a.className = "download-button-incognito";
-    a.id = "status-download-fail-button";
-    a.download = "failstatus";
-    document.body.appendChild(a);    
-}
-    
-function createDownloadButton(src) 
-{
-    var a = document.createElement("a");
-    a.innerHTML =
-        "<img src='" + chrome.runtime.getURL("images/download.svg") + "' >";
-    a.className = "download-button-incognito";
-    a.href = src;
-    a.id = src;
-    a.title = "Download this status!";
-    a.download = "status";
-    document.body.appendChild(a);
+    statusViewerObserver.observe(document.body, { childList: true, subtree: true });
+    findStatusViewer();
 }
 
-function handleSRCAdd(src, node)
+startStatusDownload();
+document.addEventListener("onOptionsUpdate", function (event)
 {
-    if (!allowStatusDownload) return;
+    const enabled = JSON.parse(event.detail)?.allowStatusDownload;
+    if (typeof enabled !== "boolean" || enabled === allowStatusDownload) return;
 
-    if (determineIfNodeIsStatus(node))
+    allowStatusDownload = enabled;
+    if (enabled)
+        startStatusDownload();
+    else
     {
-        if (src.startsWith("blob:")) 
-        {
-            createDownloadButton(src)
-        }
-        else if(src.startsWith("https://web.whatsapp.com/stream/video"))
-        {
-            // it's a video in the format we can't download
-            // ask the user to reopen
-            createFailNotice(src)
-        }
+        statusViewerObserver.disconnect();
+        statusMediaObserver.disconnect();
+        statusViewer = null;
+        updateStatusDownload();
     }
-}
-
-function handleSRCRemove(src, node) 
-{
-    if (src != null)
-        destroyOldButton(src)
-}
-
-function checkNodeAndChildrenForSRC(node, functionToCall)
-{
-    // if the node is an img or video
-    if (node.nodeName == "IMG" ||
-        node.nodeName == "VIDEO") 
-    {
-        // pass the element's src to the handler
-        functionToCall(node.src, node)
-    }
-    // then check if the node has any children and check them, recursively
-    if (node.children !== undefined)
-    {
-        if (node.children.length > 0) 
-        {
-            for (var j = 0; j < node.children.length; j++) 
-            {
-                checkNodeAndChildrenForSRC(node.children[j], functionToCall)
-            }
-        }
-    } 
-}
-
-// create a mutation observer that looks for any img or video tags being added to the page, any of their src attributes changing, or any of them being removed
-var observer = new MutationObserver(function (mutations) 
-{
-    mutations.forEach(function (mutation) 
-    {
-        if (mutation.type == "childList") 
-        {
-            // if a child is added, loop through the added nodes
-            for (var i = 0; i < mutation.addedNodes.length; i++) 
-            {
-                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
-            }
-            // if a child is removed, loop through the removed nodes
-            for(var i = 0; i < mutation.removedNodes.length; i++)
-            {
-                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
-            }
-        } 
-        else if (mutation.type == "attributes") 
-        {
-            // if an attribute is changed, and it's the src attribute
-            if (mutation.attributeName == "src") 
-            {
-                // check that the oldValue is different from the new value
-                if (mutation.oldValue == mutation.target.src) 
-                {
-                    // if it's not, then the mutation is not a change in src
-                    return;
-                }
-                // pass the element's old src to the handler
-                handleSRCRemove(mutation.oldValue)
-                // pass the element's new src to the handler
-                handleSRCAdd(mutation.target.src, mutation.target)
-            }
-        }
-    }
-);
-});
-
-// start observing the body for changes
-observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeOldValue: true,
-});
-
-document.addEventListener('onOptionsUpdate', function (e)
-{
-    // update enforcing globals
-    // TODO: move outside injected_ui.js
-    var options = JSON.parse(e.detail);
-    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
 });

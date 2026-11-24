@@ -3,6 +3,7 @@
 //
 
 var NodeHandler = {};
+const MAX_DEVICE_LABELS = 10000;
 
 NodeHandler.interceptOutgoingNode = async function (node)
 {
@@ -51,16 +52,11 @@ NodeHandler.isSentNodeAllowed = function (node)
             case "read":
             case "receipt":
 
-                var isReadReceiptAllowed = exceptionsList.includes(jid);
+                var isReadReceiptAllowed = readReceiptExceptions.get(jid)?.expiresAt > Date.now();
                 if (isReadReceiptAllowed)
                 {
                     // this is the user trying to send out a read receipt.
                     console.log("WhatsIncongito: Allowing read receipt to " + jid);
-
-                    // exceptions are one-time operation, so remove it from the list after some time
-                    setTimeout(function() {
-                        exceptionsList = exceptionsList.filter(i => i !== jid);
-                    }, 2000);
 
                     return true;
                 }
@@ -171,7 +167,7 @@ NodeHandler.onOutgoingMessageNode = async function (messageNode)
 // </message>
 NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
-    if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
+    if (autoReceiptOnReplay && isChatBlocked(remoteJid))
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
@@ -180,6 +176,7 @@ NodeHandler.onSentEncNode = async function (encNode, remoteJid)
         if (!remoteJid.includes(":"))
         {
             var chat = await getChatByJID(remoteJid);
+            if (!chat?.lastReceivedKey) return encNode;
             var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
             setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
         }
@@ -214,10 +211,14 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
     participant = participant ? participant : remoteJid;
     participant = participant.toString();
 
-    // check for device type
-    var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
-    var deviceType = looksLikePhone ? "phone" : "computer";
-    deviceTypesPerMessage[messageId] = deviceType;
+    if (showDeviceTypesEnabled && messageId)
+    {
+        const looksLikePhone = participant.includes(":0@") || !participant.includes(":");
+        deviceTypesPerMessage.set(messageId, looksLikePhone ? "phone" : "computer");
+        // shortcut: keep recent labels in memory, use a durable cache if older history needs labels.
+        if (deviceTypesPerMessage.size > MAX_DEVICE_LABELS)
+            deviceTypesPerMessage.delete(deviceTypesPerMessage.keys().next().value);
+    }
 
     var e2eMessagesAllowedStatus = [];
 

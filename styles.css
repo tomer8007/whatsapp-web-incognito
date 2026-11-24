@@ -70,19 +70,10 @@
 
 .checkbox-container-incognito
 {
-    display: inline-block !important;
-    margin-right: 5px;
-    border-bottom-left-radius: 2px;
-    border-bottom-right-radius: 2px;
-    border-top-right-radius: 2px;
-    border-top-left-radius: 2px;
-    vertical-align: middle;
+    display: block;
     height: 18px;
     width: 18px;
-    position: relative;
     cursor: pointer;
-    display: inline-block;
-    transform: translateZ(0);
 }
 
 .checkbox-incognito
@@ -96,8 +87,10 @@
   pointer-events: none;
   background-color: transparent;
   box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 100%;
   height: 100%;
-  position: relative;
   border-left: 2px solid rgba(var(--primary-rgb),.75);
   border-right: 2px solid rgba(var(--primary-rgb),.75);
   border-bottom: 2px solid rgba(var(--primary-rgb),.75);
@@ -116,20 +109,18 @@
 
 .incognito-mark
 {
+  width: 12px;
   height: 10px;
-  width: 5px;
-  left: 4px;
-  top: -1px;
-  position: absolute;
   opacity: 0;
-  border-left: none;
-  border-bottom: 2px solid var(--checkbox-mark);
-  border-right: 2px solid var(--checkbox-mark);
-  border-top: none;
-  transform: rotate(45deg);
+  background-color: var(--checkbox-mark);
+  clip-path: polygon(0 45%, 13% 30%, 38% 60%, 87% 0, 100% 15%, 38% 100%);
 }
 
-@keyframes ckbox_animation{0%{top:9px;left:6px;width:0;height:0;}100%{top:-1px;left:4px;width:5px;height:10px;}}
+@keyframes ckbox_animation
+{
+  from { transform: scale(0.6); }
+  to { transform: scale(1); }
+}
 
 .incognito-marked
 {
@@ -146,7 +137,8 @@
 
 .incognito-options-container
 {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column;
     background-color: var(--dropdown-background) !important;
     padding: 9px 0 !important;
     font-family: Roboto, sans-serif !important;
@@ -164,44 +156,49 @@
 .incognito-options-navigator
 {
   position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  height: -webkit-fill-available;
+}
+
+.incognito-options-footer
+{
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding: 8px 20px;
+}
+
+.incognito-next-button,
+.incognito-back-button
+{
+  color: inherit;
 }
 
 .incognito-next-button
 {
-  float: right;
-  margin-right: 20px;
-  color: inherit;
-}
-
-.incognito-back-button
-{
-  position: absolute;
-  float: left;
-  left: 20px;
-  top: 215px;
-  color: inherit;
+  margin-inline-start: auto;
 }
 
 .incognito-options-view
 {
-  position: absolute;
-  left: 0px;
-  right: 0px;
-  transition: all .1s ease;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .incognito-options-view-container
 {
   position: absolute;
-  left: 0px;
-  right: 0px;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
   transition: all .1s ease;
 }
 
 .incognito-options-title
 {
+    flex: none;
     height: 50px !important;
     padding: 12.5px 18px 0 24px !important;
     font-size: 20px !important;
@@ -212,6 +209,22 @@
     padding: 10px 25px !important;
 }
 
+.incognito-options-item[id^="incognito-option-"]
+{
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 5px 10px;
+}
+
+#incognito-extend-delete
+{
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--checkbox-background);
+}
+
 .incognito-options-item:hover
 { 
     background-color: var(--WDS-surface-emphasized) !important;
@@ -219,8 +232,7 @@
 
 .incognito-options-description
 {
-    padding-top: 10px !important;
-    padding-left: 28px !important;
+    grid-column: 2;
     font-size: 12px !important;
     opacity: 0.8 !important;
 }
