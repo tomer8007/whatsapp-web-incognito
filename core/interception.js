@@ -151,7 +151,12 @@ wsHook.after = function (messageEvent, url)
         }
 
         var packet = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, true);
-        if (didBlockNode) messageEvent.data = packet;
+        if (didBlockNode)
+        {
+            messageEvent.data = packet;
+            if (Date.now() < statusDeletionTraceUntil)
+                console.info("WAIncognito status trace: replacement frame ready");
+        }
 
         // TODO: compare the original `data` with `packet`
 
@@ -432,7 +437,7 @@ async function decryptE2EMessagesFromNode(node)
     // decrypt the signal message
     try
     {
-        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
+        return (await MultiDevice.decryptE2EMessagesFromMessageNode(node)).map(entry => entry.message);
     }
     catch (exception)
     {
