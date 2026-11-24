@@ -26,7 +26,6 @@ async function injectScripts()
 	await injectScript('core/edit_tracker.js');
 	await injectScript('core/ephemeral_keeper.js');
 	await injectScript('core/chat_menu_context.js');
-	await injectScript('core/voice_speed.js');
 	await injectScript('core/status_bulk.js');
 	await injectScript('core/hidetag.js');
 	await injectScript('core/revoke_window.js');

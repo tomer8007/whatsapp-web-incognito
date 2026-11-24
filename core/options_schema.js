@@ -39,7 +39,6 @@ var OPTIONS_SCHEMA = [
 
     { key: "hidetagEnabled", type: "bool", default: false },
 
-    { key: "voiceNoteRate", type: "enum", default: 1, choices: [0.75, 1, 1.25, 1.5, 2, 2.5, 3] },
 ];
 
 function defaultOptions()

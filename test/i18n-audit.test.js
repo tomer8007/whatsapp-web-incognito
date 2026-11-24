@@ -26,7 +26,6 @@ const SAME_AS_ENGLISH = {
     "restore.contactName": ["de"],
     "sched.chat": ["id","es","de"],
     "sched.placeholder": ["fr"],
-    "sec.audio": ["id","es","fr","de"],
     "sec.blur": ["id"],
     "sec.contacts": ["es","de"],
     "sec.hidetag": ["id","es","pt-BR","fr","de","ru","tr","ar","hi","ja","zh-CN"],

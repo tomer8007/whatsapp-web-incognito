@@ -28,7 +28,6 @@ var SETTINGS_ICONS = {
     database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
-    mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
@@ -38,7 +37,7 @@ var SETTINGS_ICONS = {
     chevron: '<polyline points="9 18 15 12 9 6"/>',
 };
 
-// item types: toggle {key}, number {key, unit}, select {key}, action {action, labelKey, descKey}, note {textKey},
+// item types: toggle {key}, number {key, unit}, action {action, labelKey, descKey}, note {textKey},
 // contacts, vault-status, scheduled-receipts, scheduled-messages, diagnostics.
 // Texts are translation keys: category cat.<id> / cat.<id>.intro, sections sec.*, options opt.<key> and opt.<key>.desc.
 var SETTINGS_CATEGORIES = [
@@ -112,7 +111,6 @@ var SETTINGS_CATEGORIES = [
       ] },
     { id: "utilities", icon: "tool",
       sections: [
-        { titleKey: "sec.audio", items: [ { type: "select", key: "voiceNoteRate", icon: "mic" } ] },
         { titleKey: "sec.hidetag", items: [
             { type: "toggle", key: "hidetagEnabled", icon: "send" },
             { type: "action", action: "hidetag-open", icon: "users", labelKey: "act.hidetag", descKey: "act.hidetag.desc" },
@@ -147,13 +145,6 @@ function settingsIconSVG(name)
 function formatMegabytes(bytes)
 {
     return formatNumber(bytes / (1024 * 1024), 2) + " " + t("unit.mb");
-}
-
-// "1.5x" in the active language's number format ("1,5x" in German)
-function rateLabel(rate)
-{
-    var digits = (String(rate).split(".")[1] || "").length;
-    return formatNumber(Number(rate), digits) + "x";
 }
 
 // does the contact have a rule other than "default"?
@@ -203,9 +194,6 @@ var CONTACT_SECTIONS = [
         { key: "blurMessages", icon: "message", labelKey: "opt.blurMessages", descKey: "opt.blurMessages.desc", option: "blurMessages" },
         { key: "blurMedia", icon: "image", labelKey: "opt.blurMedia", descKey: "opt.blurMedia.desc", option: "blurMedia" },
         { key: "blurAvatars", icon: "user", labelKey: "opt.blurAvatars", descKey: "opt.blurAvatars.desc", option: "blurAvatars" },
-    ] },
-    { titleKey: "sec.audio", items: [
-        { key: "voiceNoteRate", icon: "mic", labelKey: "opt.voiceNoteRate", descKey: "opt.voiceNoteRate.desc", option: "voiceNoteRate" },
     ] },
 ];
 
@@ -562,31 +550,6 @@ function openSettingsDialog(initial)
         return row;
     }
 
-    function renderSelect(item)
-    {
-        var entry = settingsSchemaEntry(item.key);
-        var row = rowShell(item);
-        var control = make("select", "wam-select");
-        control.setAttribute("aria-label", t("opt." + item.key));
-        entry.choices.forEach(function(choice)
-        {
-            var option = make("option", "", rateLabel(choice));
-            option.value = String(choice);
-            control.appendChild(option);
-        });
-        control.value = String(optionValue(item.key));
-        var field = make("span", "wam-row-control");
-        field.appendChild(control);
-        row.appendChild(field);
-        control.addEventListener("change", function()
-        {
-            var value = parseOptionValue(item.key, control.value);
-            options[item.key] = value;
-            setOptionFromMenu(item.key, value);
-        });
-        return row;
-    }
-
     function renderAction(item)
     {
         var row = rowShell(item, "button");
@@ -762,12 +725,12 @@ function openSettingsDialog(initial)
         var control = make("select", "wam-select");
         control.setAttribute("aria-label", t(item.labelKey));
         var globalValue = item.option ? optionValue(item.option) : null;
-        var def = make("option", "", t("seg.global") + (globalValue != null ? " (" + rateLabel(globalValue) + ")" : ""));
+        var def = make("option", "", t("seg.global") + (globalValue != null ? " (" + globalValue + ")" : ""));
         def.value = "default";
         control.appendChild(def);
         entry.choices.forEach(function(choice)
         {
-            var label = item.choiceLabels && item.choiceLabels[choice] ? t(item.choiceLabels[choice]) : rateLabel(choice);
+            var label = item.choiceLabels && item.choiceLabels[choice] ? t(item.choiceLabels[choice]) : String(choice);
             var option = make("option", "", label);
             option.value = String(choice);
             control.appendChild(option);
@@ -868,8 +831,8 @@ function openSettingsDialog(initial)
                         var stored = contactRuleValue(contactRulesCache, context.jids, item.key);
                         if (entry.kind == "choice")
                         {
-                            var globalRate = item.option ? rateLabel(optionValue(item.option)) : t("state.off");
-                            effect.textContent = stored == "default" ? t("contact.globalNow", { state: globalRate }) : t("contact.forThis", { state: item.choiceLabels && item.choiceLabels[stored] ? t(item.choiceLabels[stored]) : rateLabel(stored) });
+                            var globalRate = item.option ? String(optionValue(item.option)) : t("state.off");
+                            effect.textContent = stored == "default" ? t("contact.globalNow", { state: globalRate }) : t("contact.forThis", { state: item.choiceLabels && item.choiceLabels[stored] ? t(item.choiceLabels[stored]) : String(stored) });
                             return;
                         }
                         var state = contactStateOf(entry, stored);
@@ -1001,7 +964,7 @@ function openSettingsDialog(initial)
     }
 
     var renderers = {
-        toggle: renderToggle, number: renderNumber, select: renderSelect, action: renderAction, note: renderNote,
+        toggle: renderToggle, number: renderNumber, action: renderAction, note: renderNote,
         contacts: renderContacts,
         "vault-status": renderVaultStatus, "scheduled-receipts": renderScheduledReceipts,
         "scheduled-messages": renderScheduledMessages, diagnostics: renderDiagnostics,

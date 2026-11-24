@@ -161,11 +161,11 @@ test("background: getContactRules returns {} by default and setContactRule persi
 
 // ---- per-contact settings beyond blue ticks and typing ----
 
-test("the schema covers the 16 per-contact keys with a kind each", () => {
+test("the schema covers the 15 per-contact keys with a kind each", () => {
     const { CONTACT_RULE_SCHEMA } = loadRules();
     assert.deepStrictEqual([...CONTACT_RULE_SCHEMA.map((e) => e.key)], [
         "readReceipts", "typing", "showDeviceTypes", "autoReceiptOnReplay", "showReadWarning", "saveDeletedMsgs", "markDeleted",
-        "saveEdits", "toastOnDelete", "toastOnEdit", "keepDisappearing", "blurMessages", "blurMedia", "blurAvatars", "autoSchedule", "voiceNoteRate"]);
+        "saveEdits", "toastOnDelete", "toastOnEdit", "keepDisappearing", "blurMessages", "blurMedia", "blurAvatars", "autoSchedule"]);
 });
 
 test("onOff keys: on/off override the global value, default follows it", () => {
@@ -187,8 +187,8 @@ test("a stored value of the wrong kind is ignored (block on an onOff key, on on 
 
 test("choice keys: a stored number wins, anything else follows global", () => {
     const { resolveChoice } = loadRules();
-    assert.strictEqual(resolveChoice({ "1@c.us": { voiceNoteRate: 2 } }, ["1@c.us"], "voiceNoteRate", 1.5), 2);
-    assert.strictEqual(resolveChoice({ "1@c.us": { voiceNoteRate: 9 } }, ["1@c.us"], "voiceNoteRate", 1.5), 1.5, "not an allowed rate");
+    assert.strictEqual(resolveChoice({ "1@c.us": { autoSchedule: 15 } }, ["1@c.us"], "autoSchedule", 0), 15);
+    assert.strictEqual(resolveChoice({ "1@c.us": { autoSchedule: 9 } }, ["1@c.us"], "autoSchedule", 60), 60, "not an allowed delay");
     assert.strictEqual(resolveChoice({}, ["1@c.us"], "autoSchedule", 0), 0);
     assert.strictEqual(resolveChoice({ "9@lid": { autoSchedule: 60 } }, ["1@c.us", "9@lid"], "autoSchedule", 0), 60);
 });
@@ -197,10 +197,10 @@ test("applyContactRule validates per kind, keeps old rules, drops defaults, and 
     const { applyContactRule, clearContactRules, countContactRules } = loadRules();
     let rules = { "1@c.us": { readReceipts: "block" } }; // an old-style rule keeps working
     rules = applyContactRule(rules, "1@c.us", "saveEdits", "on");
-    rules = applyContactRule(rules, "1@c.us", "voiceNoteRate", 1.5);
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { readReceipts: "block", saveEdits: "on", voiceNoteRate: 1.5 } });
+    rules = applyContactRule(rules, "1@c.us", "autoSchedule", 15);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(rules)), { "1@c.us": { readReceipts: "block", saveEdits: "on", autoSchedule: 15 } });
     assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "saveEdits", "block"))), JSON.parse(JSON.stringify(rules)), "wrong kind ignored");
-    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "voiceNoteRate", 7))), JSON.parse(JSON.stringify(rules)), "rate not allowed");
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "autoSchedule", 7))), JSON.parse(JSON.stringify(rules)), "delay not allowed");
     assert.deepStrictEqual(JSON.parse(JSON.stringify(applyContactRule(rules, "1@c.us", "nope", "on"))), JSON.parse(JSON.stringify(rules)));
     assert.strictEqual(countContactRules(rules, ["1@c.us", "9@lid"]), 3);
     rules["9@lid"] = { saveEdits: "off" };
@@ -212,14 +212,14 @@ test("applyContactRule validates per kind, keeps old rules, drops defaults, and 
 
 test("contactOptionsFor applies the toggles of one contact to the options, nothing else", () => {
     const s = loadRules();
-    const options = { ...s.defaultOptions?.(), saveEdits: false, toastOnEdit: true, keepDisappearing: false, voiceNoteRate: 1.5, language: "id" };
+    const options = { ...s.defaultOptions?.(), saveEdits: false, toastOnEdit: true, keepDisappearing: false, safetyDelay: 5, language: "id" };
     const map = new Map([["628@c.us", "9@lid"], ["9@lid", "628@c.us"]]);
     const rules = { "9@lid": { saveEdits: "on", toastOnEdit: "off" } };
     const result = s.contactOptionsFor("628@s.whatsapp.net", options, rules, map);
     assert.strictEqual(result.saveEdits, true);
     assert.strictEqual(result.toastOnEdit, false);
     assert.strictEqual(result.keepDisappearing, false);
-    assert.strictEqual(result.voiceNoteRate, 1.5);
+    assert.strictEqual(result.safetyDelay, 5);
     assert.strictEqual(result.language, "id");
     assert.strictEqual(options.saveEdits, false, "the global options object is not changed");
 });

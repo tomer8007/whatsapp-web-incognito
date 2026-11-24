@@ -27,7 +27,6 @@ const DEFAULTS = {
     blurAvatars: false,
     language: "en",
     hidetagEnabled: false,
-    voiceNoteRate: 1,
 };
 
 function loadBackground(stored = {}) {

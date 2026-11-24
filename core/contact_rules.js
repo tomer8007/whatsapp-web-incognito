@@ -6,7 +6,7 @@
 // Value kinds (CONTACT_RULE_SCHEMA):
 //   "blockAllow": "block" | "allow"  (the original two keys, kept as they were: readReceipts, typing)
 //   "onOff":      "on" | "off"       (a feature switched on or off for this contact)
-//   "choice":     one of `choices`   (a number such as a playback rate or a delay in minutes)
+//   "choice":     one of `choices`   (a number such as a delay in minutes)
 // "online" presence stays global: WhatsApp has no per-contact presence.
 //
 
@@ -26,7 +26,6 @@ var CONTACT_RULE_SCHEMA = [
     { key: "blurMedia", kind: "onOff", option: "blurMedia" },
     { key: "blurAvatars", kind: "onOff", option: "blurAvatars" },
     { key: "autoSchedule", kind: "choice", choices: [15, 60, 180], option: null },
-    { key: "voiceNoteRate", kind: "choice", choices: [0.75, 1, 1.25, 1.5, 2, 2.5, 3], option: "voiceNoteRate" },
 ];
 
 var CONTACT_RULE_FIELDS = CONTACT_RULE_SCHEMA.map(function(entry) { return entry.key; });

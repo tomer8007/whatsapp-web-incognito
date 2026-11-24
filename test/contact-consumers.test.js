@@ -55,23 +55,3 @@ test("keepDisappearing and autoReceiptOnReplay follow the contact", () => {
     assert.strictEqual(s.NodeHandler.contactToggle("2@c.us", "autoReceiptOnReplay", true), true);
 });
 
-test("voice speed: the open chat's own rate wins over the global rate", () => {
-    const sandbox = createSandbox({ HTMLMediaElement: function() {} });
-    sandbox.HTMLMediaElement.prototype.play = function() {};
-    loadScripts(sandbox, ["core/options_schema.js", "core/utils.js", "core/contact_rules.js", "core/voice_speed.js"]);
-    sandbox.WAIncognitoOptions = { voiceNoteRate: 1.5 };
-    sandbox.contactRules = { "1@c.us": { voiceNoteRate: 2 } };
-    const wid = (s) => ({ toString: () => s });
-    let chat = { id: wid("1@c.us") };
-    sandbox.getCurrentChat = () => chat;
-    const audio = Object.create(sandbox.HTMLMediaElement.prototype);
-    audio.tagName = "AUDIO";
-    audio.addEventListener = () => {};
-    audio.play();
-    assert.strictEqual(audio.playbackRate, 2);
-    chat = { id: wid("2@c.us") };
-    const other = Object.create(sandbox.HTMLMediaElement.prototype);
-    other.tagName = "AUDIO"; other.addEventListener = () => {};
-    other.play();
-    assert.strictEqual(other.playbackRate, 1.5);
-});

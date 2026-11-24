@@ -32,7 +32,6 @@ const EXPECTED_DEFAULTS = {
     blurAvatars: false,
     language: "en",
     hidetagEnabled: false,
-    voiceNoteRate: 1,
 };
 
 test("every schema key is unique", () => {
@@ -57,16 +56,8 @@ test("every entry has a valid type and default, and carries no display text", ()
     }
 });
 
-test("voiceNoteRate offers exactly the spec choices", () => {
-    const sandbox = loadSchema();
-    const entry = sandbox.OPTIONS_SCHEMA.find((o) => o.key === "voiceNoteRate");
-    assert.deepStrictEqual([...entry.choices], [0.75, 1, 1.25, 1.5, 2, 2.5, 3]);
-});
-
 test("parseOptionValue converts menu input values to the schema type", () => {
     const sandbox = loadSchema();
-    assert.strictEqual(sandbox.parseOptionValue("voiceNoteRate", "1.5"), 1.5);
     assert.strictEqual(sandbox.parseOptionValue("vaultMaxMB", "250"), 250);
     assert.strictEqual(sandbox.parseOptionValue("vaultMaxMB", "abc"), 500, "invalid number falls back to default");
-    assert.strictEqual(sandbox.parseOptionValue("voiceNoteRate", "7"), 1, "unknown choice falls back to default");
 });
