@@ -31,6 +31,7 @@ const EXPECTED_DEFAULTS = {
     blurMedia: false,
     blurAvatars: false,
     hidetagEnabled: false,
+    sendLaterEnabled: false,
 };
 
 test("every schema key is unique", () => {

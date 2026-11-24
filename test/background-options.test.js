@@ -26,6 +26,7 @@ const DEFAULTS = {
     blurMedia: false,
     blurAvatars: false,
     hidetagEnabled: false,
+    sendLaterEnabled: false,
 };
 
 function loadBackground(stored = {}) {

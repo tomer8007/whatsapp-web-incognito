@@ -34,6 +34,9 @@ var OPTIONS_SCHEMA = [
 
     { key: "hidetagEnabled", type: "bool", default: false },
 
+    // "Send later…": the button next to "Mark as read" and the two chat menu entries. Scheduling itself (lists, timers) always works.
+    { key: "sendLaterEnabled", type: "bool", default: false },
+
 ];
 
 function defaultOptions()

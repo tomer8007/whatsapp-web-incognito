@@ -43,9 +43,17 @@ var sendScheduler = createSendScheduler({
     onSent: function(item) { setTimeout(function() { sendReceiptNow(item.jid); }, 1500); },
 });
 
-chatMenuEntries.push({ id: "schedule-message", labelKey: "menu.scheduleMessage", run: function(context) { openScheduleMessageModal(context, "message"); } });
+// the "sendLaterEnabled" option (kept up to date by the onOptionsUpdate listener below): the "Send later…" entries show only when on
+var sendLaterEnabled = false;
+document.addEventListener("onOptionsUpdate", function(e)
+{
+    try { var update = JSON.parse(e.detail); if (update && "sendLaterEnabled" in update) sendLaterEnabled = !!update.sendLaterEnabled; }
+    catch (exception) {}
+});
 
-chatMenuEntries.push({ id: "schedule-receipt", labelKey: "menu.scheduleReceipt", run: function(context) { openScheduleMessageModal(context, "ticks"); } });
+chatMenuEntries.push({ id: "schedule-message", needsSendLater: true, labelKey: "menu.scheduleMessage", run: function(context) { openScheduleMessageModal(context, "message"); } });
+
+chatMenuEntries.push({ id: "schedule-receipt", needsSendLater: true, labelKey: "menu.scheduleReceipt", run: function(context) { openScheduleMessageModal(context, "ticks"); } });
 
 chatMenuEntries.push({ id: "contact-privacy", labelKey: "menu.contactPrivacy", run: function(context) { openContactPrivacyModal(context); } });
 chatMenuEntries.push({ id: "ephemeral", labelKey: "menu.ephemeral", run: function(context) { openEphemeralModal(context); } });
@@ -621,6 +629,7 @@ function appendChatMenuEntries(context)
 
     chatMenuEntries.forEach(function(entry)
     {
+        if (entry.needsSendLater && !sendLaterEnabled) return;
         var item = buildChatMenuItem(template, t(entry.labelKey));
         item.addEventListener("click", function(e)
         {
@@ -1509,7 +1518,7 @@ document.addEventListener("onReadConfirmationBlocked", function(e)
 document.addEventListener("onScheduleReceiptClick", function(e)
 {
     var data = JSON.parse(e.detail);
-    if (data.context) openScheduleMessageModal(data.context, "ticks");
+    if (data.context && sendLaterEnabled) openScheduleMessageModal(data.context, "ticks");
 });
 
 

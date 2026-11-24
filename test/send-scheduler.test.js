@@ -246,3 +246,18 @@ test("ui.js: one Send later dialog serves the receipt warning and both menu entr
     assert.ok(/resolveSendLaterPreset\(choice, Date\.now\(\)\)/.test(code));
     assert.ok(/onSent: function\(item\)/.test(code));
 });
+
+test("Send later is opt-in: option default off, the bar button and both menu entries depend on it", () => {
+    const fs = require("node:fs"), path = require("node:path");
+    const read = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+    const schema = loadScripts(createSandbox(), ["core/options_schema.js"]);
+    const entry = [...schema.OPTIONS_SCHEMA].find((o) => o.key == "sendLaterEnabled");
+    assert.ok(entry && entry.type == "bool" && entry.default === false);
+    const page = read("core/injected_ui.js");
+    assert.ok(/if \(\(window\.WAIncognitoOptions \|\| \{\}\)\.sendLaterEnabled\)\s*\{\s*var scheduleButton/.test(page), "the bar button is created only when enabled");
+    const ui = read("core/ui.js");
+    assert.ok(/id: "schedule-message", needsSendLater: true/.test(ui) && /id: "schedule-receipt", needsSendLater: true/.test(ui));
+    assert.ok(/if \(entry\.needsSendLater && !sendLaterEnabled\) return;/.test(ui));
+    assert.ok(/if \(data\.context && sendLaterEnabled\) openScheduleMessageModal/.test(ui));
+    assert.ok(/key: "sendLaterEnabled"/.test(read("core/settings_dialog.js")));
+});

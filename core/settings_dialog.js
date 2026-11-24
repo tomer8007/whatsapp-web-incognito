@@ -104,6 +104,7 @@ var SETTINGS_CATEGORIES = [
       ] },
     { id: "schedule", icon: "clock",
       sections: [
+        { titleKey: "sec.schedOptions", items: [ { type: "toggle", key: "sendLaterEnabled", icon: "clock" } ] },
         { titleKey: "sec.schedReceipts", items: [ { type: "scheduled-receipts" } ] },
         { titleKey: "sec.schedMessages", items: [ { type: "scheduled-messages" } ] },
         { titleKey: "sec.schedHow", items: [ { type: "note", textKey: "note.schedule" } ] },

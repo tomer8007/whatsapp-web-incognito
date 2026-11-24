@@ -42,6 +42,13 @@ document.addEventListener('onOptionsUpdate', function (e)
     // the full options object (some updates only carry the changed keys, so merge)
     window.WAIncognitoOptions = Object.assign(window.WAIncognitoOptions || defaultOptions(), options);
 
+    if ('sendLaterEnabled' in options && !options.sendLaterEnabled)
+    {
+        // turned off while a "receipts blocked" bar is on screen
+        var staleButtons = document.getElementsByClassName("incognito-schedule-button");
+        while (staleButtons.length > 0) staleButtons[0].remove();
+    }
+
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
@@ -584,11 +591,15 @@ function markChatAsBlocked(chat)
             sendButton.textContent = t("receipt.markRead");
             warningMessage.appendChild(sendButton);
 
-            // "Send later…" (receipt.later): inserted BEFORE the send button, because the send button must stay the last child
-            var scheduleButton = document.createElement('div');
-            scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
-            scheduleButton.textContent = t("receipt.later");
-            warningMessage.insertBefore(scheduleButton, sendButton);
+            // "Send later…" (receipt.later), only with the option "sendLaterEnabled". Inserted BEFORE the send button, because the
+            // send button must stay the last child
+            if ((window.WAIncognitoOptions || {}).sendLaterEnabled)
+            {
+                var scheduleButton = document.createElement('div');
+                scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
+                scheduleButton.textContent = t("receipt.later");
+                warningMessage.insertBefore(scheduleButton, sendButton);
+            }
         }
         else
         {
