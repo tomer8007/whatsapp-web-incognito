@@ -7,8 +7,7 @@ This is a content script responsible for some UI.
 var mutationObserver = null;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
-var deletedMessagesDB = null;
-var pseudoMsgsIDs = new Set();
+var renderedMessages = new WeakMap();
 
 if (chrome != undefined) 
 {
@@ -76,28 +75,10 @@ function onMutationsObserved(mutations)
                 }, 200);
             }
 
-            // Scan for added message nodes and modify if needed
-            function isMessageNode(node)
-            {
-                if (node.childNodes[0] && node.childNodes[0].getAttribute)
-                {
-                    if (node.childNodes[0].getAttribute("data-testid"))
-                        return node.childNodes[0].getAttribute("data-testid").startsWith("conv-msg")
-                }
-
-                return false;
-            }
-            var msgNodes = [];
-            if (isMessageNode(addedNode)) {
-                msgNodes.push(addedNode);
-            }
-            msgNodes.push(...addedNode.querySelectorAll('[data-testid^="conv-msg"]'));
-
-            for (let i = 0; i < msgNodes.length; i++)
-            {
-                const currentNode = msgNodes[i];
-                onNewMessageNodeAdded(currentNode);
-            }
+            if (addedNode.matches('[data-testid^="conv-msg"]'))
+                onNewMessageNodeAdded(addedNode);
+            for (const messageNode of addedNode.querySelectorAll('[data-testid^="conv-msg"]'))
+                onNewMessageNodeAdded(messageNode);
         }
 
         
@@ -433,25 +414,6 @@ document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
-
-    // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
-    {
-        var deletedMsgsDB = deletedDBOpenRequest.result;
-        var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                pseudoMsgsIDs.add(value.originalID);
-            });
-            document.addEventListener("pseudoMsgs", (e) => 
-            {
-                pseudoMsgsIDs.add(e.detail);
-            });
-        };
-        deletedMsgsDB.close();
-    };
 });
 
 function getTheme() 
@@ -753,190 +715,205 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 
 function onNewMessageNodeAdded(messageNode)
 {
-    var data_id = messageNode.getAttribute("data-id");
-    if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
-    if (data_id == null)
-        debugger;
+    const dataID = messageNode.closest("[data-id]")?.getAttribute("data-id");
+    if (!dataID || renderedMessages.get(messageNode) === dataID) return;
 
-    var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
+    const msgID = dataID.includes("_") ? dataID.split("_")[2] : dataID;
+    if (!msgID) return;
 
-    // check if there are any view-once messages for this message ID
-    // open viewOnce indexedDB
-    restoreViewOnceMessageIfNeeded(messageNode, msgID);
-
-    restoreDeletedMessageIfNeeded(messageNode, msgID);
-
-    markMessageNodeDeviceIfPossible(messageNode, msgID);
+    renderedMessages.set(messageNode, dataID);
+    restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID);
+    restoreDeletedMessageIfNeeded(messageNode, msgID, dataID);
+    markMessageNodeDeviceIfPossible(messageNode, msgID, dataID);
 }
 
-function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+function isCurrentMessageNode(messageNode, dataID)
 {
-    var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
-    viewOnceDBOpenRequest.onupgradeneeded = function (event) 
+    return messageNode.isConnected && messageNode.closest("[data-id]")?.getAttribute("data-id") === dataID;
+}
+
+async function restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID)
+{
+    try
     {
-        const db = event.target.result;
-        var store = db.createObjectStore('msgs', { keyPath: 'id' });
-        console.log('WhatsIncognito: Created viewOnce database.');
-        store.createIndex("id_index", "id");
-    };
-
-    viewOnceDBOpenRequest.onsuccess = function () 
-    {
-        var viewOnceDB = viewOnceDBOpenRequest.result;
-        var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                if (value.id == msgID) 
-                {
-                    // we found a view-once message for this message ID
-                    // mark the message node as view-once
-                    // get the place that we want to place the link
-                    // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
-                    var viewOnceExplanation = null;
-                    // find all div elements in the message node
-                    var aElements = messageNode.getElementsByTagName("a");
-                    // loop through
-                    for (var i = 0; i < aElements.length; i++) 
-                    {
-                        // if the innerHtml indicates it's the "Learn more" link
-                        if (aElements[i].innerHTML.includes("Learn more")) 
-                        {
-                            // set the viewOnceExplanation to the parent div
-                            viewOnceExplanation = aElements[i].parentElement;
-                        }
-                    }
-                    // set innerHTML to empty
-                    viewOnceExplanation.innerHTML = "";
-                    // if value.dataURI starts with "data:image"
-                    if (value.dataURI.startsWith("data:image")) 
-                    {
-                        // create an image elemnt
-                        var img = document.createElement("img");
-                        // set the source to the value.dataURI
-                        img.src = value.dataURI;
-                        // set the width to 100%
-                        img.style.cssText = "width: 100%;";
-                        // append the image to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(img);
-                    } 
-                    else if (value.dataURI.startsWith("data:video")) 
-                    {
-                        // create a video element
-                        var video = document.createElement("video");
-                        // set the controls to true
-                        video.controls = true;
-                        video.src = value.dataURI;
-                        // append the video to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(video);
-                    } else if (value.dataURI.startsWith("data:audio")) {
-                        // create an audio element
-                        var audio = document.createElement("audio");
-                        // set the controls to true
-                        audio.controls = true;
-                        audio.src = value.dataURI;
-                        // append the audio to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(audio);
-                    }
-
-                    // check if there is a caption stored and render it
-                    if(value.caption != null){
-                        var textSpan = document.createElement("span");
-                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
-                        textSpan.style.cssText = textSpanStyle;
-                        textSpan.className = "copyable-text selectable-text";
-                        textSpan.textContent = value.caption;
-                        viewOnceExplanation.appendChild(textSpan);
-                    }
-
-                    // add a learn more link below that opens a sweetalert
-                    var learnMore = document.createElement("a");
-                    // give it the class of incognito-view-once-learn-more so styles can be applied
-                    learnMore.className = "incognito-view-once-learn-more";
-                    learnMore.href = "#";
-                    learnMore.innerHTML = "Sent as view once: Learn more";
-                    learnMore.addEventListener("click", function () {
-                        Swal.fire({
-                            title: "View-once message",
-                            html: 'This message was sent as a view-once. \
-                            <br><br> Note that the recipient\'s device will show this as unopened \
-                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
-                            icon: "info",
-                            width: 600,
-                            confirmButtonColor: "#000",
-                            confirmButtonText: "Got it",
-                        });
-                    });
-                    viewOnceExplanation.appendChild(learnMore);
-                }
-            });
+        const db = await openMessageArchive("viewOnce");
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").get(msgID);
+        request.onsuccess = () =>
+        {
+            if (request.result && isCurrentMessageNode(messageNode, dataID))
+                renderViewOnceMessage(messageNode, request.result);
         };
-    };
+        request.onerror = () => console.error("WAIncognito: Could not read view-once archive", request.error);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open view-once archive", error);
+    }
 }
 
-// This function gets called on every new message node that gets added to the screen,
-// and takes care of "deleted" messages - 
-// attempts to syntethise a message that was deleted from our DB / just mark it in red
-function restoreDeletedMessageIfNeeded(messageNode, msgID) 
+function renderViewOnceMessage(messageNode, value)
 {
-    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeletedMessageReceived", function(e)
+    var viewOnceExplanation = null;
+    // find all div elements in the message node
+    var aElements = messageNode.getElementsByTagName("a");
+    // loop through
+    for (var i = 0; i < aElements.length; i++)
     {
-        var data = JSON.parse(e.detail);
-        var messageID = data.messageID;
-        var messageData = data.messageData;
+        // if the innerHtml indicates it's the "Learn more" link
+        if (aElements[i].innerHTML.includes("Learn more"))
+        {
+            // set the viewOnceExplanation to the parent div
+            viewOnceExplanation = aElements[i].parentElement;
+        }
+    }
+    if (!viewOnceExplanation) return;
+    viewOnceExplanation.innerHTML = "";
+    // if value.dataURI starts with "data:image"
+    if (value.dataURI.startsWith("data:image"))
+    {
+        // create an image elemnt
+        var img = document.createElement("img");
+        // set the source to the value.dataURI
+        img.src = value.dataURI;
+        // set the width to 100%
+        img.style.cssText = "width: 100%;";
+        // append the image to the viewOnceExplanation
+        viewOnceExplanation.appendChild(img);
+    }
+    else if (value.dataURI.startsWith("data:video"))
+    {
+        // create a video element
+        var video = document.createElement("video");
+        // set the controls to true
+        video.controls = true;
+        video.src = value.dataURI;
+        // append the video to the viewOnceExplanation
+        viewOnceExplanation.appendChild(video);
+    } else if (value.dataURI.startsWith("data:audio")) {
+        // create an audio element
+        var audio = document.createElement("audio");
+        // set the controls to true
+        audio.controls = true;
+        audio.src = value.dataURI;
+        // append the audio to the viewOnceExplanation
+        viewOnceExplanation.appendChild(audio);
+    }
 
-        if (messageID != msgID) return;
+    // check if there is a caption stored and render it
+    if(value.caption != null){
+        var textSpan = document.createElement("span");
+        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+        textSpan.style.cssText = textSpanStyle;
+        textSpan.className = "copyable-text selectable-text";
+        textSpan.textContent = value.caption;
+        viewOnceExplanation.appendChild(textSpan);
+    }
 
+    // add a learn more link below that opens a sweetalert
+    var learnMore = document.createElement("a");
+    // give it the class of incognito-view-once-learn-more so styles can be applied
+    learnMore.className = "incognito-view-once-learn-more";
+    learnMore.href = "#";
+    learnMore.innerHTML = "Sent as view once: Learn more";
+    learnMore.addEventListener("click", function () {
+        Swal.fire({
+            title: "View-once message",
+            html: 'This message was sent as a view-once. \
+            <br><br> Note that the recipient\'s device will show this as unopened \
+            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+            icon: "info",
+            width: 600,
+            confirmButtonColor: "#000",
+            confirmButtonText: "Got it",
+        });
+    });
+    viewOnceExplanation.appendChild(learnMore);
+}
+
+async function restoreDeletedMessageIfNeeded(messageNode, msgID, dataID)
+{
+    try
+    {
+        const db = await openMessageArchive("deletedMsgs");
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
+
+        const transaction = db.transaction("msgs", "readonly");
+        transaction.onabort = () => console.error("WAIncognito: Could not read deleted-message archive", transaction.error);
+        const store = transaction.objectStore("msgs");
+        const request = store.get(msgID);
+        request.onsuccess = () =>
+        {
+            if (!isCurrentMessageNode(messageNode, dataID)) return;
+            if (request.result)
+            {
+                renderDeletedMessage(messageNode, request.result);
+                return;
+            }
+
+            const original = store.index("originalID_index").get(msgID);
+            original.onsuccess = () =>
+            {
+                if (isCurrentMessageNode(messageNode, dataID))
+                    renderDeletedMessage(messageNode, original.result);
+            };
+        };
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open deleted-message archive", error);
+    }
+}
+
+function renderDeletedMessage(messageNode, messageData)
+{
+    var didFindInDeletedMessagesDB = messageData != undefined;
+    var shouldTryToSyntehesizeMessage  = messageNode.textContent.includes("message was deleted"); // TODO: other locales?
+
+    if (!didFindInDeletedMessagesDB && !shouldTryToSyntehesizeMessage)
+    {
+        // This is just a regular messsage. move on.
+        return;
+    }
+
+    if (didFindInDeletedMessagesDB)
+    {
+        // This message was deleted and we have the original data.
+        var bubbleElement = messageNode.querySelector(':scope > div, :scope [data-testid] > div');
+        if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
+
+        if (!shouldTryToSyntehesizeMessage)
+        {
+            // doesn't loook like a we need to restore anything becuase deletion was blocked already
+            return;
+        }
+    }
+
+    var messageSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0]; // oh well
+    if (!messageSubElement) return;
+
+    if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
+    {
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
+        messageSubElement.textContent = "";
+        textSpan.textContent = "Failed to restore message";
+        messageSubElement.appendChild(textSpan);
+        messageSubElement.appendChild(span);
+        if (messageNode.parentNode)
+            messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
+        return;
+    }
 
-        var didFindInDeletedMessagesDB = messageData != undefined;
-        var shouldTryToSyntehesizeMessage  = messageNode.textContent.includes("message was deleted"); // TODO: other locales?
+    //
+    // If we reached this point, it means that for some reason we couldn't just block the REVOKE message eariler
+    // This might happen if other stuff were sent in the relevant packet (see onMessageNodeReceived)
+    // So ideally, the following code should be redundant.
+    //
 
-        if (!didFindInDeletedMessagesDB && !shouldTryToSyntehesizeMessage)
-        {
-            // This is just a regular messsage. move on.
-            return;
-        }
-
-        if (didFindInDeletedMessagesDB)
-        {
-            // This message was deleted and we have the original data.
-            var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
-            if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
-            
-            if (!shouldTryToSyntehesizeMessage)
-            {
-                // doesn't loook like a we need to restore anything becuase deletion was blocked already
-                return;
-            }
-        }
-
-        var messageSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0]; // oh well
-        if (!messageSubElement) return;
-
-        if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
-        {
-            messageSubElement.textContent = "";
-            textSpan.textContent = "Failed to restore message";
-            messageSubElement.appendChild(textSpan);
-            messageSubElement.appendChild(span);
-            if (messageNode.parentNode)
-                messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
-            return;
-        }
-
-        //
-        // If we reached this point, it means that for some reason we couldn't just block the REVOKE message eariler
-        // This might happen if other stuff were sent in the relevant packet (see onMessageNodeReceived)
-        // So ideally, the following code should be redundant.
-        //
-
-        // Now try to synthesize the message from the DB (best effort)
-        tryToSynthesizeMessage(messageSubElement, messageData);
-    });
+    // Now try to synthesize the message from the DB (best effort)
+    tryToSynthesizeMessage(messageSubElement, messageData);
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1052,54 +1029,49 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
     messageSubElement.appendChild(textSpan);
 }
 
-function markMessageNodeDeviceIfPossible(messageNode, msgID)
+async function markMessageNodeDeviceIfPossible(messageNode, msgID, dataID)
 {
-    var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
-    isOutgoingMessage = messageNode.innerHTML.includes("aria-label=\"You:\"");
-    if (isOutgoingMessage)
+    if (messageNode.querySelector('[aria-label="You:"]')) return;
+
+    let deviceType;
+    function receiveDeviceType(event)
     {
-        // we don't want to mark our own messages
-        return;
+        const data = JSON.parse(event.detail);
+        if (data.messageID === msgID) deviceType = data.deviceType;
     }
 
-    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeviceTypeReceived", async function(e)
+    // The page replies before dispatchEvent returns.
+    document.addEventListener("onDeviceTypeReceived", receiveDeviceType);
+    try
     {
-        var data = JSON.parse(e.detail);
-        var messageID = data.messageID;
+        document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
+    }
+    finally
+    {
+        document.removeEventListener("onDeviceTypeReceived", receiveDeviceType);
+    }
 
-        var deviceType = data.deviceType;
+    if (deviceType !== "computer" && deviceType !== "phone") return;
+    try
+    {
+        const imageElement = await generateSVGElement(chrome.runtime.getURL("images/" + deviceType + ".svg"), "", "This message was sent from a " + deviceType, 19);
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
 
-        if (messageID != msgID) return;
-
-        var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
-        if (possibleNodes.length > 0 )
-            messageNode = possibleNodes[0].childNodes[0];
-
-        if (messageNode.getElementsByClassName("device-type-image").length > 0) return;
-        
-        var imageURL = "";
-        if (deviceType == "computer")
-            imageURL = chrome.runtime.getURL("images/computer.svg");
-        else if (deviceType == "phone")
-            imageURL = chrome.runtime.getURL("images/phone.svg");
-        else
-            return;
-
-        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
+        const target = messageNode.closest("[data-id]").firstElementChild || messageNode;
+        if (target.querySelector(".device-type-image")) return;
         imageElement.className = "device-type-image";
 
-        var topMessageNode = messageNode.parentNode.parentNode.parentNode;
-        var previousNode = topMessageNode.previousElementSibling;
-        var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
-
-        if (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details"))
-        {
+        const topMessageNode = target.parentElement?.parentElement?.parentElement;
+        const avatar = topMessageNode?.previousElementSibling || topMessageNode;
+        if (avatar?.querySelector('.chat-profile-picture, [data-testid="chat-profile-picture"], [aria-label="Open chat details"], [title="Open chat details"]'))
             imageElement.className += " below-profile-picture";
-        }
 
-        messageNode.insertBefore(imageElement, messageNode.firstChild);
-    });
+        target.insertBefore(imageElement, target.firstChild);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not display message device", error);
+    }
 }
 
 function tickCheckbox(checkbox, checkmark)

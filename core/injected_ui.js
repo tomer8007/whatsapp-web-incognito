@@ -249,42 +249,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     //WACrypto.sendNode(node);
 });
 
-document.addEventListener("getDeletedMessageByID", async function(e) 
-{
-    var data = JSON.parse(e.detail);
-    var msgID = data.messageID;
-
-    if (window.deletedMessagesDB == null) return;
-
-    var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
-    var msgsStore = transcation.objectStore("msgs");
-
-    // search the message ID in both the original message ID and the revoked message ID
-    let requestByID = msgsStore.get(msgID);
-    
-    requestByID.onsuccess = (e) =>
-    {
-        var messageData = requestByID.result;
-        if (messageData)
-        {
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
-            return;
-        }
-
-        // Did not find the message data by revoked message ID. try by original message ID
-        var originalIDIndex = msgsStore.index('originalID_index');
-        var requestByOriginalID = originalIDIndex.get(msgID);
-        requestByOriginalID.onsuccess = (e) =>
-        {
-            var messageData = requestByOriginalID.result;
-
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
-        }
-    }
-    
-});
-
-document.addEventListener("getDeviceTypeForMessage", async function(e) 
+document.addEventListener("getDeviceTypeForMessage", function(e)
 {
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
@@ -293,10 +258,7 @@ document.addEventListener("getDeviceTypeForMessage", async function(e)
     if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
         deviceType = deviceTypesPerMessage[msgID];
 
-    setTimeout(function()
-    {
-        document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
-    }, 20);
+    document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
 });
 
 function markChatAsPendingReciptsSending(chat)

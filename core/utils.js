@@ -211,6 +211,47 @@ const arrayBufferToBase64 = (buffer) =>
     return btoa(binary);
 }
 
+const messageArchives = new Map();
+
+function openMessageArchive(name)
+{
+    if (!messageArchives.has(name))
+    {
+        const request = indexedDB.open(name, 2);
+        const connection = new Promise((resolve, reject) =>
+        {
+            request.onupgradeneeded = (event) =>
+            {
+                const store = event.oldVersion === 0
+                    ? request.result.createObjectStore("msgs", { keyPath: "id" })
+                    : request.transaction.objectStore("msgs");
+                const index = name === "viewOnce" ? "id" : "originalID";
+                if (!store.indexNames.contains(index + "_index"))
+                    store.createIndex(index + "_index", index);
+            };
+            request.onerror = () =>
+            {
+                messageArchives.delete(name);
+                reject(request.error);
+            };
+            request.onblocked = () => console.warn("WAIncognito: Archive upgrade is waiting for another tab", name);
+            request.onsuccess = () =>
+            {
+                const db = request.result;
+                db.onclose = () => messageArchives.delete(name);
+                db.onversionchange = () =>
+                {
+                    db.close();
+                    messageArchives.delete(name);
+                };
+                resolve(db);
+            };
+        });
+        messageArchives.set(name, connection);
+    }
+    return messageArchives.get(name);
+}
+
 function showToast(message)
 {
     var appElement = document.getElementsByClassName("app-wrapper-web")[0];
