@@ -1,26 +1,5 @@
 {
-  "$comment": "The patch-set record. This is the budget for local divergence from upstream: docs/ELECTRON_APP_PLAN.md §1. A7 in scripts/verify-bundles.mjs diffs core/ and lib/ against upstreamRef and fails the build if the changed file set differs from patchedFiles. Deliberate new patches must be added here; accidental edits must not be.",
-  "upstreamRef": "upstream/master",
-  "patchedFiles": [
-    "core/injected_ui.js",
-    "core/interception.js",
-    "core/multi_device.js",
-    "core/node_handler.js",
-    "core/parsing/binary_reader.js",
-    "core/parsing/node_reader_writer.js",
-    "core/parsing/protobuf/WAProto.js",
-    "core/parsing/protobuf/WhisperTextProtocol.js",
-    "core/status_download.js",
-    "core/ui.js",
-    "core/ui_class_names.js",
-    "core/utils.js",
-    "core/ws_hook.js",
-    "lib/css/drop-theme-basic.css",
-    "lib/drop.js",
-    "lib/moduleraid.js",
-    "lib/pako.js",
-    "lib/pbf.3.0.5.min.js"
-  ],
+  "$comment": "Fork divergence record (documentation only). Each entry explains why this fork differs from upstream tomer8007/whatsapp-web-incognito, and is the merge note for a future upstream sync. Nothing asserts against this file: the old A7 check in scripts/verify-bundles.mjs diffed core/ and lib/ against upstream/master and failed when the changed file set did not match a recorded list. It was removed because the fork has rewritten most of those trees (and added shared/), so file-set divergence stopped being an actionable signal, and the check fired on upstream additions rather than on our edits.",
   "patches": [
     {
       "id": "P0a",
@@ -29,7 +8,7 @@
       "summary": "Drop the up-front JID normalisation, add receipt/received/played blocking, move JID derivation into the switch.",
       "kind": "bugfix",
       "upstreamCandidate": false,
-      "note": "RESOLVED UPSTREAM. Merge 4af6cec (upstream/master @ 34f52fc) made core/node_handler.js byte-identical to upstream, so it left patchedFiles — A7 fails on a recorded file that no longer differs. Upstream landed the same fix independently. Their version is stricter in one place: `played` receipts are blocked only `&& isChatBlocked(jid)` rather than unconditionally. Nothing to re-apply and nothing to carry; the entry stays only as the record of why the file is no longer patched.",
+      "note": "RESOLVED UPSTREAM. Merge 4af6cec (upstream/master @ 34f52fc) made core/node_handler.js byte-identical to upstream, so it left the patched-file list. Upstream landed the same fix independently. Their version is stricter in one place: `played` receipts are blocked only `&& isChatBlocked(jid)` rather than unconditionally. Nothing to re-apply and nothing to carry; the entry stays only as the record of why the file is no longer patched.",
       "resolvedBy": "4af6cec"
     },
     {
@@ -99,7 +78,7 @@
       "why": "The UTF-16 -> UTF-8 re-encode is pre-existing (commit 10809c8) and roughly halved the two protobuf files, which is why the byte figures in the plan are ~1.3 MB rather than ~2.6 MB for the main bundle. The BOM strip is new: a BOM is legal JS mid-script but is not something to rely on at a concatenation seam, and it breaks JSON.parse ahead of a JSON literal. The build also strips BOMs on read (scripts/build.mjs readSource) and assertion A10 guards both source and output.",
       "risk": "very low",
       "assertion": "A10",
-      "note": "background.js still differs from upstream for this reason but is not inside core/ or lib/, so it is not part of the A7 diff."
+      "note": "background.js still differs from upstream for this reason, but it is not inside core/ or lib/."
     },
     {
       "id": "P7",
@@ -133,7 +112,7 @@
       "kind": "performance",
       "why": "arrayBufferToBase64 used O(N) single-character string concatenation freezing V8 on video/photo media; ui.js registered permanent event listeners on document per message leaking detached DOM nodes; restoreViewOnceMessageIfNeeded ran full .getAll() scans on IndexedDB without connection reuse; generateSVGElement repeatedly fetched and parsed SVGs via DOMParser; status_download.js observed all body attributes without attributeFilter.",
       "risk": "low",
-      "assertion": "A7"
+      "assertion": null
     },
     {
       "id": "P8",
@@ -180,7 +159,7 @@
       "kind": "privacy",
       "why": "CRIT-01: When an unhandled error occurs during decompression or stanza decoding, wsHook.before previously caught it and invoked _send.apply with the raw unblocked frame, causing silent read receipt and presence leaks. Now fails closed by dropping the frame and emitting wai:interception_failure.",
       "risk": "low",
-      "assertion": "A7"
+      "assertion": null
     },
     {
       "id": "P13",
@@ -188,9 +167,9 @@
       "status": "applied",
       "summary": "Fork features: ephemeral local chat notes (export), contact privacy whitelist manager, stealth voice notes and media auto-download guard, chat archiver with PIN screen lock.",
       "kind": "feature",
-      "why": "The fork (moodynooby/whatsapp-web-incognito) adds these features on top of upstream; injected_ui.js gains ephemeral-notes state, whitelist listeners and chip UI, node_handler.js gains per-contact whitelist gating and stealth-voice-note receipt blocking. These are deliberate fork divergence, recorded here so A7's diff budget matches reality.",
+      "why": "The fork (moodynooby/whatsapp-web-incognito) adds these features on top of upstream; injected_ui.js gains ephemeral-notes state, whitelist listeners and chip UI, node_handler.js gains per-contact whitelist gating and stealth-voice-note receipt blocking. These are deliberate fork divergence, recorded here for the next upstream sync.",
       "risk": "low",
-      "assertion": "A7"
+      "assertion": null
     },
     {
       "id": "P14",
@@ -200,7 +179,7 @@
       "kind": "single-world-fix",
       "why": "Upstream ships pako as bare source (no UMD wrapper, exports commented out) and pbf with dead `!1` branch conditions. Without the UMD wrapper, scripts/build.mjs isUmdBundle() does not match either file, so wrapUmd() is skipped and the emitted electron bundle has no global-branch guard — A-umd/A-umd2 fail and (pre-fix) the page's AMD define would make pako/Pbf publish nothing. Restoring the pre-merge UMD forms makes isUmdBundle() match again and keeps the guard in the emitted bundle.",
       "risk": "low",
-      "assertion": "A-umd, A-umd2, A7"
+      "assertion": "A-umd, A-umd2"
     },
     {
       "id": "P15",
@@ -210,7 +189,7 @@
       "kind": "architecture",
       "why": "Initialize enforcing globals from WAISettingsSchema, replace legacy Drop/Tether 3-page carousel with WAISettingsRenderer modal + toolbar popup (retiring lib/drop.js and lib/css/drop-theme-basic.css), eliminate redundant startup messages and listener leaks in core/ui.js, remove chat header override/Private Note/Export controls so only the compact settings trigger/modal plus blocked-receipt indicators remain on WhatsApp Web, move option ownership into enforcing modules, and merge body MutationObservers via shared/wai_page_bus.js.",
       "risk": "low",
-      "assertion": "A-umd, A-prefs, A-panelkeys, A7"
+      "assertion": "A-umd, A-prefs, A-panelkeys"
     },
     {
       "id": "P16",
@@ -220,7 +199,7 @@
       "kind": "cleanup",
       "why": "The extension never used the module raid (window.mR); it is pure dead code and would be re-injected past WhatsApp's webpack registry every load for no effect.",
       "risk": "low",
-      "assertion": "A7"
+      "assertion": null
     }
   ],
   "encoding": {

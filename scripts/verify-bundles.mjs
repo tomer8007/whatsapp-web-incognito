@@ -184,34 +184,13 @@ check('A3', 'every file in the injection chain exists', () => {
   return missing.length ? `missing: ${missing.join(', ')}` : true;
 });
 
-// A7 — the recorded patch set is the budget for local divergence from upstream. This is
-// NOT "identical to upstream/master": §2.7 documents 3 pre-existing functional patches,
-// and naive `git diff --quiet upstream/master -- core lib` fails on day one.
-check('A7', 'core/ + lib/ divergence is within the recorded patch set', () => {
-  const recPath = join(ROOT, 'patches', 'manifest.json');
-  if (!existsSync(recPath)) return 'patches/manifest.json is missing';
-  const rec = readJSON(recPath);
-  let diffOut = '';
-  try {
-    try {
-      execFileSync('git', ['rev-parse', '--verify', '--quiet', rec.upstreamRef], { cwd: ROOT, stdio: 'ignore' });
-    } catch {
-      execFileSync('git', ['fetch', 'https://github.com/tomer8007/whatsapp-web-incognito.git', 'master:refs/remotes/upstream/master'], { cwd: ROOT, stdio: 'ignore' });
-    }
-    diffOut = execFileSync('git', ['diff', '--name-only', rec.upstreamRef, '--', 'core', 'lib'],
-      { cwd: ROOT, encoding: 'utf8' });
-  } catch (e) {
-    return `could not diff against ${rec.upstreamRef} (${e.message.split('\n')[0]})`;
-  }
-  const actual = diffOut.split('\n').filter(Boolean).sort();
-  const expected = [...rec.patchedFiles].sort();
-  const extra = actual.filter((f) => !expected.includes(f));
-  const gone = expected.filter((f) => !actual.includes(f));
-  const msgs = [];
-  if (extra.length) msgs.push(`unrecorded edits: ${extra.join(', ')}`);
-  if (gone.length) msgs.push(`recorded but no longer differ: ${gone.join(', ')}`);
-  return msgs.length ? msgs.join('; ') : true;
-});
+// A7 (upstream divergence budget) was deliberately removed. This fork rewrote most of
+// core/ and lib/ and added its own shared/ layer, so "the set of files that differ from
+// upstream/master" no longer identifies anything actionable. The check also failed
+// whenever upstream merely ADDED or renamed a file, which says nothing about our code,
+// and it required a network fetch in CI. The reasoning behind the remaining divergences
+// is still recorded in patches/manifest.json, which is documentation only — nothing
+// asserts against it any more.
 
 // ---------------------------------------------------------------- build-output
 

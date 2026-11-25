@@ -29,6 +29,7 @@
     'core/utils.js',
     'core/ui_class_names.js',
     'core/injected_ui.js',
+    'lib/velocity.min.js',
     'core/multi_device.js',
     'core/node_handler.js',
     'core/interception.js',
