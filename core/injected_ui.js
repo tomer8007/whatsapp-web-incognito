@@ -203,17 +203,6 @@ document.addEventListener('onIncognitoOptionsOpened', function (e)
     if (!drop) return;
     fixCSSPositionIfNeeded(drop);
     Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    /*
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    if (!readConfirmationsHookEnabled)
-    {
-        safetyDelayPanel.style.opacity = 0;
-        safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px";
-    }
-    */
 });
 
 document.addEventListener('onIncognitoOptionsClosed', function (e)
@@ -222,28 +211,7 @@ document.addEventListener('onIncognitoOptionsClosed', function (e)
     if (!drop) return;
     fixCSSPositionIfNeeded(drop);
     Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
-    // validateSafetyDelay();
 });
-
-function validateSafetyDelay()
-{
-    var string = document.getElementById("incognito-option-safety-delay").value;
-    var isValid = false;
-    var number = Math.floor(Number(string));
-    if ((String(number) === string && number >= 1 && number <= 30) || string == "") isValid = true;
-    if (!isValid)
-    {
-        document.getElementById("incognito-option-safety-delay").disabled = true;
-        document.getElementById("incognito-option-safety-delay").value = "";
-        document.getElementById("incognito-radio-disable-safety-delay").checked = true;
-        document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-
-        showToast("The safety delay must be an integer number in range 1-30 !");
-    }
-}
 
 document.addEventListener('onOptionsUpdate', function (e)
 {
@@ -253,7 +221,6 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
-    if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
     if (typeof options.keepEditedMessages === "boolean")
     {
@@ -270,28 +237,15 @@ document.addEventListener('onOptionsUpdate', function (e)
     }
 
     // update graphics
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    var safetyDelayPanelExpectedHeight = 42; // be careful with this
     if (readConfirmationsHookEnabled)
     {
         // set unread counters to transperent
         setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
-        if (safetyDelayPanel != null)
-        {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-        }
     }
     else
     {
-        if (typeof blinkingChats !== "undefined")
-            for (const jid of blinkingChats.keys()) stopReceiptCountdown(jid);
-
         // set unread counters to solid
         setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
-        if (safetyDelayPanel != null)
-        {
-            Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-        }
         var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
             document.getElementsByClassName("incognito-message")[0] : null;
         if (warningMessage != null)
@@ -322,11 +276,7 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     }
     if (!readConfirmationsHookEnabled) return;
 
-    if (safetyDelay > 0 && chat.id.user == blockedUser)
-    {
-        markChatAsPendingReciptsSending(chat);
-    }
-    else if (chat.id.user == blockedUser || getJidOfChat(chat) === blockedJid)
+    if (chat.id.user == blockedUser || getJidOfChat(chat) === blockedJid)
     {
         markChatAsBlocked(chat);
     }
@@ -402,11 +352,9 @@ document.addEventListener('sendReadConfirmation', async function (e)
     const data = JSON.parse(e.detail);
     if (typeof data?.jid !== "string" || !data.jid.includes("@")) return;
     const jid = normalizeJID(data.jid);
-    stopReceiptCountdown(jid);
     const chat = await getChatByJID(jid);
     if (!chat) return;
     const chatJid = getJidOfChat(chat);
-    stopReceiptCountdown(chatJid);
 
     const receiptJids = new Set([jid, chatJid, normalizeJID(chat.id.toString())]);
     const exception = { expiresAt: Date.now() + 2000 };
@@ -428,9 +376,6 @@ document.addEventListener('sendReadConfirmation', async function (e)
         clearTimeout(expiryTimer);
         expireException();
         console.warn("WAIncognito: Could not send read receipt", error);
-        const warning = document.getElementsByClassName("incognito-message")[0];
-        if (warning?.messageID?.startsWith(chatJid) && warning.querySelector(".incognito-cancel-button"))
-            markChatAsBlocked(chat);
         return;
     }
 
@@ -545,109 +490,6 @@ document.addEventListener("getStatusViewerInfo", function (event)
         detail: JSON.stringify({ name, timestamp, mimeType, deleted: Boolean(id && blockedStatusDeletions.has(id)) })
     }));
 });
-
-function stopReceiptCountdown(jid)
-{
-    const countdown = blinkingChats.get(jid);
-    if (!countdown) return;
-    clearInterval(countdown.timerID);
-    blinkingChats.delete(jid);
-    countdown.unreadCounter?.classList.remove("blinking");
-    return countdown.time;
-}
-
-function markChatAsPendingReciptsSending(chat)
-{
-    if (chat.pendingSeenCount != 0) chat.pendingSeenCount = 0;
-
-    if (chat.unreadCount == 0)
-    {
-        return;
-    }
-
-    var currentChat = getCurrentChat();
-    if (currentChat?.id.user != chat.id.user)
-    {
-        return;
-    }
-
-    const jid = getJidOfChat(chat);
-    var messageID = jid + chat.lastReceivedKey.id;
-    var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
-                            document.getElementsByClassName("incognito-message")[0] : null;
-    var seconds = safetyDelay;
-
-    var chatWindow = getCurrentChatPanel();
-
-    if (chatWindow != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
-    {
-        seconds = stopReceiptCountdown(jid) ?? seconds;
-
-        // make a warning message at the chat panel
-        var warningMessage = document.createElement('div');
-        warningMessage.setAttribute('class', 'incognito-message middle');
-        warningMessage.innerHTML = "Sending read receipts in " + seconds + " seconds...";
-        warningMessage.messageID = messageID;
-
-        var cancelButton = document.createElement('div');
-        cancelButton.setAttribute('class', 'incognito-cancel-button');
-        cancelButton.innerHTML = "Cancel";
-        warningMessage.appendChild(cancelButton);
-
-        // insert it under the unread counter, or at the end of the chat panel
-        var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        previousMessage?.remove();
-        var unreadMarker = getUnreadMarkerElement(parent);
-        if (unreadMarker != null)
-            unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
-        else
-        {
-            warningMessage.setAttribute('class', 'incognito-message');
-            parent.appendChild(warningMessage);
-        }
-        Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
-            { defaultDuration: 400, easing: [.1, .82, .25, 1] });
-
-        const unreadCounter = findChatEntryElementForJID(chat.id)?.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-
-        function makeUnreadCounterBlink()
-        {
-            chat.pendingSeenCount = 0;
-    
-            if (blinkingChats.has(jid)) unreadCounter?.classList.add("blinking");
-        }
-    
-        var id = setInterval(function ()
-        {
-            chat.pendingSeenCount = 0;
-
-            seconds--;
-            if (seconds > 0)
-            {
-                warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
-                blinkingChats.get(jid).time = seconds;
-            }
-            else
-            {
-                // time's up, sending receipt
-                stopReceiptCountdown(jid);
-                var data = { jid, index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
-                document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
-
-            }
-        }, 1000);
-
-        blinkingChats.set(jid, { timerID: id, time: seconds, unreadCounter });
-        makeUnreadCounterBlink();
-        setTimeout(makeUnreadCounterBlink, 200); // for multi-device pendingSeenCount
-
-        cancelButton.onclick = function ()
-        {
-            stopReceiptCountdown(jid);
-            markChatAsBlocked(chat);
-        };
-    }
-}
 
 function markChatAsBlocked(chat)
 {

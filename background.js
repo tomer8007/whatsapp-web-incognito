@@ -22,10 +22,6 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 		{
             chrome.storage.local.set({"readConfirmationsHook": messageEvent.readConfirmationsHook});
 		}
-		if ("safetyDelay" in messageEvent)
-		{
-            chrome.storage.local.set({"safetyDelay": messageEvent.safetyDelay});
-        }
         if ("showReadWarning" in messageEvent)
         {
             chrome.storage.local.set({"showReadWarning": messageEvent.showReadWarning});
@@ -62,7 +58,6 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         var typingUpdatesHook = false;
         var readConfirmationsHook = true;
         var showReadWarning = true;
-		var safetyDelay = 0;
         var saveDeletedMsgs = false;
         var showDeviceTypes = true;
         var autoReceiptOnReplay = true;
@@ -72,7 +67,6 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'typingUpdatesHook',
                                 'readConfirmationsHook', 
                                 'showReadWarning', 
-                                'safetyDelay', 
                                 'saveDeletedMsgs', 
                                 'showDeviceTypes',
                                 'autoReceiptOnReplay',
@@ -96,10 +90,6 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 showReadWarning = storage["showReadWarning"];
             }
-            if (storage["safetyDelay"] != undefined)
-            {
-                safetyDelay = storage["safetyDelay"];
-            }
             if (storage["saveDeletedMsgs"] != undefined)
             {
                 saveDeletedMsgs = storage["saveDeletedMsgs"];
@@ -122,7 +112,6 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 typingUpdatesHook: typingUpdatesHook,
                 readConfirmationsHook: readConfirmationsHook,
                 showReadWarning: showReadWarning,
-                safetyDelay: safetyDelay,
                 saveDeletedMsgs: saveDeletedMsgs,
                 showDeviceTypes: showDeviceTypes,
                 autoReceiptOnReplay: autoReceiptOnReplay,
