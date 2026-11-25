@@ -25,7 +25,6 @@ NodeHandler.interceptOutgoingNode = async function (node)
 
     return [true, node];
 }
-
 NodeHandler.isSentNodeAllowed = function (node)
 {
     var action = node.tag;
@@ -34,15 +33,31 @@ NodeHandler.isSentNodeAllowed = function (node)
     var jid = data.jid ? data.jid : data.to;
     if (jid) jid = normalizeJID(jid.toString());
 
+    var contactRule = (typeof contactWhitelistRules !== "undefined" && contactWhitelistRules && jid) ? contactWhitelistRules[jid] : "default";
+    var shouldBlockRead;
+    if (contactRule === "always")
+    {
+        shouldBlockRead = false;
+    }
+    else if (contactRule === "never")
+    {
+        shouldBlockRead = true;
+    }
+    else
+    {
+        shouldBlockRead = readConfirmationsHookEnabled;
+    }
+
     var shouldBlock = 
-        (readConfirmationsHookEnabled && action === "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (shouldBlockRead && action === "read") ||
+        (shouldBlockRead && action == "receipt" && data["type"] == "read") ||
+        (shouldBlockRead && action == "receipt" && data["type"] == "read-self") ||
+        (shouldBlockRead && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (stealthVoiceNotesEnabled && action == "receipt" && data["type"] === "played") ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
         (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-        (typingUpdatesHookEnabled && action == "chatstate" && node.content[0].tag == "composing");
+        (typingUpdatesHookEnabled && action == "chatstate" && node.content && node.content[0] && node.content[0].tag == "composing");
 
     if (shouldBlock)
     {
@@ -51,16 +66,11 @@ NodeHandler.isSentNodeAllowed = function (node)
             case "read":
             case "receipt":
 
-                var isReadReceiptAllowed = exceptionsList.includes(jid);
+                var isReadReceiptAllowed = exceptionsList.includes(jid) || contactRule === "always";
                 if (isReadReceiptAllowed)
                 {
                     // this is the user trying to send out a read receipt.
-                    console.log("WhatsIncongito: Allowing read receipt to " + jid);
-
-                    // exceptions are one-time operation, so remove it from the list after some time
-                    setTimeout(function() {
-                        exceptionsList = exceptionsList.filter(i => i !== jid);
-                    }, 2000);
+                    console.log("WhatsIncognito: Allowing read receipt to " + jid);
 
                     return true;
                 }
@@ -68,7 +78,7 @@ NodeHandler.isSentNodeAllowed = function (node)
                 {
                     // We do not allow sending this read receipt.
                     // invoke the callback and fake a failure response from server
-                    document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
+                    WAIPageBus.emit('onReadConfirmationBlocked', jid);
 
                     // TODO: Is the unsent message problem due to blocking read-self?
                     // why there are read receipts we need to block after sending a message to a lot of people?
@@ -85,11 +95,6 @@ NodeHandler.isSentNodeAllowed = function (node)
                     }, 200);
 
                 }
-                break;
-
-            case "presence":
-                //var messageEvent = new MutableMessageEvent({ data: tag + ",{\"status\": 200}" });
-                //wsHook.onMessage(messageEvent);
                 break;
         }
 
@@ -180,15 +185,18 @@ NodeHandler.onSentEncNode = async function (encNode, remoteJid)
         if (!remoteJid.includes(":"))
         {
             var chat = await getChatByJID(remoteJid);
-            var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
-            setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
+            if (chat)
+            {
+                var lastKey = chat.lastReceivedKey || {};
+                var data = { jid: getJidOfChat(chat), index: lastKey.id, fromMe: lastKey.fromMe, unreadCount: chat.unreadCount };
+                setTimeout(function () {
+                    WAIPageBus.sendToPage('receipt:send', data);
+                }, 600);
+            }
         }
     }
 
     // do message manipulation if needed
-    //         ...
-    var putBreakpointHere = 1;
-
     return encNode;
 }
 
@@ -198,7 +206,9 @@ NodeHandler.interceptReceivedNode = async function (node)
 
     if (node.tag == "message")
     {
-        var [isAllowed, node] = await NodeHandler.onReceivedMessageNode(node);
+        var result = await NodeHandler.onReceivedMessageNode(node);
+        isAllowed = result[0];
+        node = result[1];
     }
 
     return [isAllowed, node];
@@ -254,7 +264,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         modifiedMessageNode = deepClone(messageNode);
         modifiedMessageNode.content = [];
 
-        indexOfEncNode = 0;
+        var indexOfEncNode = 0;
         for (var i = 0; i < messageNode.content.length; i++)
         {
             var node = messageNode.content[i];
@@ -298,6 +308,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
+    var messageId = null;
     
     if (messageNode.attrs != null)
     {
@@ -317,11 +328,7 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
     await interceptViewOnceMessages(e2eMessage, messageId);
 
-    if (!saveDeletedMsgsHookEnabled)
-    {
-        isAllowed = true;
-    }
-    else if (isRevokeMessage)
+    if (isRevokeMessage && saveDeletedMsgsHookEnabled)
     {
         console.log("WhatsIncognito: --- Detected message REVOKE action! ---");
         isAllowed = false;

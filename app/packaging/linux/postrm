@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+# Clean up WAIncognito APT repository on purge or remove
+if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
+    rm -f /etc/apt/sources.list.d/waincognito.list /etc/apt/sources.list.d/waincognito.sources
+    if [ "$1" = "purge" ]; then
+        rm -f /etc/apt/keyrings/waincognito.gpg
+    fi
+fi

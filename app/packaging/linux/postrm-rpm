@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+# Clean up WAIncognito RPM repository on package erase ($1 == 0 in RPM scriptlets)
+if [ "$1" = "0" ] || [ "$1" = "remove" ]; then
+    rm -f /etc/yum.repos.d/waincognito.repo
+    rm -f /etc/pki/rpm-gpg/RPM-GPG-KEY-waincognito
+fi

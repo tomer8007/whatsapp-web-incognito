@@ -1,174 +1,51 @@
 // ---------------------
-// UI Event handlers
+// UI Event handlers (page world)
 // ---------------------
 
-document.addEventListener('onMainUIReady', function (e)
+WAIPageBus.onPageMessage('ui:mainReady', function ()
 {
     setTimeout(exposeWhatsAppAPI, 100);
-});
-
-document.addEventListener('onPresenceOptionTicked', function (e)
-{
-    WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"unavailable"})
-});
-
-document.addEventListener('onPresenceOptionUnticked', function (e)
-{
-    WhatsAppAPI.sendPresenceStatusProtocol({name:"",status:"available"})
-});
-
-
-document.addEventListener('onIncognitoOptionsOpened', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    /*
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    if (!readConfirmationsHookEnabled)
+    setTimeout(function ()
     {
-        safetyDelayPanel.style.opacity = 0;
-        safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px";
-    }
-    */
-});
-
-document.addEventListener('onIncognitoOptionsClosed', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
-    // validateSafetyDelay();
-});
-
-function validateSafetyDelay()
-{
-    var string = document.getElementById("incognito-option-safety-delay").value;
-    var isValid = false;
-    var number = Math.floor(Number(string));
-    if ((String(number) === string && number >= 1 && number <= 30) || string == "") isValid = true;
-    if (!isValid)
-    {
-        document.getElementById("incognito-option-safety-delay").disabled = true;
-        document.getElementById("incognito-option-safety-delay").value = "";
-        document.getElementById("incognito-radio-disable-safety-delay").checked = true;
-        document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-
-        showToast("The safety delay must be an integer number in range 1-30 !");
-    }
-}
-
-document.addEventListener('onOptionsUpdate', function (e)
-{
-    // update enforcing globals
-    // TODO: move outside injected_ui.js
-    var options = JSON.parse(e.detail);
-    if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
-    if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
-    if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
-    if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
-    if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
-    if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
-    if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
-    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
-
-    // update graphics
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    var safetyDelayPanelExpectedHeight = 42; // be careful with this
-    if (readConfirmationsHookEnabled)
-    {
-        // set unread counters to transperent
-        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
-        if (safetyDelayPanel != null)
+        if (typeof readConfirmationsHookEnabled !== "undefined")
         {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
+            setGlobalColorVariableString(
+                "--WDS-persistent-always-branded",
+                readConfirmationsHookEnabled ? 'rgba(9, 210, 97, 0.3)' : 'rgba(9, 210, 97, 1)'
+            );
         }
-    }
-    else
-    {
-        // set unread counters to solid
-        setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
-        if (safetyDelayPanel != null)
-        {
-            Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-        }
-        var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
-            document.getElementsByClassName("incognito-message")[0] : null;
-        if (warningMessage != null)
-        {
-            Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-            setTimeout(function () { warningMessage.parentNode.removeChild(warningMessage); }, 300);
-        }
-    }
-
-    var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
-    for (var i = 0; i < unreadCounters.length; i++)
-    {
-        unreadCounters[i].classList.remove("blocked-color");
-    }
+    }, 150);
 });
 
-document.addEventListener('onReadConfirmationBlocked', async function (e)
+WAIPageBus.onPageMessage('presence:set', function (data)
 {
-    var blockedJid = e.detail;
-    var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
-
-    var chat = await getChatByJID(blockedJid);
-    if (!chat) 
-    {
-        console.warn("WAIncognito: Did not find chat for JID " + blockedJid);
-        return;
-    }
-
-    if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
-    {
-        markChatAsPendingReciptsSending(chat);
-    }
-    else if (readConfirmationsHookEnabled && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
-    {
-        markChatAsBlocked(chat);
-    }
-    else
-    {
-        console.warn("WAIncognito: Could not find chat for JID " + blockedJid);
-    }
-
-    if (!(chat.id in blockedChats))
-    {
-        // window.WhatsAppAPI.UI.scrollChatToBottom(chat);
-    }
-
-    blockedChats[chat.id] = chat;
-
+    if (!window.WhatsAppAPI || typeof WhatsAppAPI.sendPresenceStatusProtocol !== 'function') return;
+    var status = (data && data.status) ? String(data.status) : 'available';
+    WhatsAppAPI.sendPresenceStatusProtocol({ name: "", status: status });
 });
 
-document.addEventListener('onPaneChatOpened', function (e)
+WAIPageBus.onPageMessage('ui:paneChatOpened', function ()
 {
-    var chat = getCurrentChat();
-    chats[chat.id] = chat;
+    var chat = typeof getCurrentChat === "function" ? getCurrentChat() : null;
+    if (chat && chat.id) chats[chat.id] = chat;
 });
 
-document.addEventListener('onDropdownOpened', function (e)
+WAIPageBus.onPageMessage('ui:dropdownOpened', function ()
 {
     // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
-
     var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
     if (dropdown == undefined) return;
 
     var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
-    var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
-    if (reactResult == null) return;
-    if (reactResult.props.children.length == 0) return;
+    var outerDropdown = document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0];
+    if (!outerDropdown) return;
+    var reactResult = FindReact(outerDropdown);
+    if (reactResult == null || !reactResult.props || !Array.isArray(reactResult.props.children) || reactResult.props.children.length == 0) return;
 
-    var reactMenuItems = reactResult.props.children[0].props.children;
-    if (reactMenuItems.props == undefined) return;
-    
+    var firstChild = reactResult.props.children[0];
+    var reactMenuItems = firstChild && firstChild.props ? firstChild.props.children : null;
+    if (!reactMenuItems || reactMenuItems.props == undefined || !Array.isArray(reactMenuItems.props.children)) return;
+
     reactMenuItems = reactMenuItems.props.children;
 
     var markAsReadButton = null;
@@ -185,43 +62,49 @@ document.addEventListener('onDropdownOpened', function (e)
         }
     }
 
-    if (props != null)
+    if (props != null && props.chat && markAsReadButton)
     {
-        var name = props.chat.name;
-        var formattedName = props.chat.contact.name;
-        var jid = getJidOfChat(chat);
-        var lastMessageIndex = props.chat.lastReceivedKey.id;
-        var unreadCount = props.chat.unreadCount;
-        var isGroup = props.chat.isGroup;
-        var fromMe = props.chat.lastReceivedKey.fromMe;
+        var chatObj = props.chat;
+        var name = chatObj.name;
+        var formattedName = (chatObj.contact && chatObj.contact.name) || name;
+        var jid = getJidOfChat(chatObj);
+        var lastKey = chatObj.lastReceivedKey || {};
+        var lastMessageIndex = lastKey.id;
+        var unreadCount = chatObj.unreadCount || 0;
+        var isGroup = chatObj.isGroup;
+        var fromMe = lastKey.fromMe;
         if (unreadCount > 0)
         {
             // this is mark-as-read button, not mark-as-unread
-            markAsReadButton.addEventListener("mousedown", function (e)
+            markAsReadButton.addEventListener("mousedown", function ()
             {
-                var data = { name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, 
-                            fromMe: fromMe, unreadCount: unreadCount, isGroup: isGroup };
+                var data = {
+                    name: name,
+                    formattedName: formattedName,
+                    jid: jid,
+                    lastMessageIndex: lastMessageIndex,
+                    fromMe: fromMe,
+                    unreadCount: unreadCount,
+                    isGroup: isGroup
+                };
 
-                document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
+                WAIPageBus.sendToHost('receipt:markAsReadClick', data);
             });
         }
     }
 });
 
-document.addEventListener('sendReadConfirmation', async function (e)
+WAIPageBus.onPageMessage('receipt:send', async function (data)
 {
-    var data = JSON.parse(e.detail);
-    var messageIndex = data.index != undefined ? data.index : data.lastMessageIndex;
-    var messageID = data.jid + messageIndex;
-
+    if (!data || !data.jid) return;
     var chat = await getChatByJID(data.jid);
-    var chatContainer = {chat: chat};
+    if (!chat) return;
+    var chatContainer = { chat: chat };
 
-    // add an exception and remove it after a short time at any case
-    exceptionsList.push(normalizeJID(data.jid));
-    setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
-    
-    WhatsAppAPI.Seen.sendSeen(chatContainer).then(result =>
+    // The user asked for receipts; allow one to go out (see allowReceiptsFor in interception.js)
+    allowReceiptsFor(data.jid);
+
+    WhatsAppAPI.Seen.sendSeen(chatContainer).then(function ()
     {
         // TODO: remove the old blinking chats code
         if (data.jid in blinkingChats)
@@ -235,72 +118,186 @@ document.addEventListener('sendReadConfirmation', async function (e)
         }
     });
 
-    chat.unreadCount -= data.unreadCount;
+    if (typeof chat.unreadCount === "number" && typeof data.unreadCount === "number")
+    {
+        chat.unreadCount = Math.max(0, chat.unreadCount - data.unreadCount);
+    }
 
     // animate out the incognito message
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-    if (warningMessage != null && warningMessage.messageID.startsWith(data.jid))
+    if (warningMessage != null && warningMessage.messageID && warningMessage.messageID.startsWith(data.jid))
     {
-        Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-        setTimeout(function() {warningMessage.remove();}, 300);
-    }
-
-    //var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
-    //WACrypto.sendNode(node);
-});
-
-document.addEventListener("getDeletedMessageByID", async function(e) 
-{
-    var data = JSON.parse(e.detail);
-    var msgID = data.messageID;
-
-    if (window.deletedMessagesDB == null) return;
-
-    var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
-    var msgsStore = transcation.objectStore("msgs");
-
-    // search the message ID in both the original message ID and the revoked message ID
-    let requestByID = msgsStore.get(msgID);
-    
-    requestByID.onsuccess = (e) =>
-    {
-        var messageData = requestByID.result;
-        if (messageData)
+        if (typeof Velocity === "function")
         {
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
-            return;
+            Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+            setTimeout(function () { if (warningMessage.parentNode) warningMessage.remove(); }, 300);
         }
-
-        // Did not find the message data by revoked message ID. try by original message ID
-        var originalIDIndex = msgsStore.index('originalID_index');
-        var requestByOriginalID = originalIDIndex.get(msgID);
-        requestByOriginalID.onsuccess = (e) =>
+        else if (warningMessage.parentNode)
         {
-            var messageData = requestByOriginalID.result;
-
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+            warningMessage.remove();
         }
     }
-    
 });
 
-document.addEventListener("getDeviceTypeForMessage", async function(e) 
+WAIPageBus.onPageMessage('deletedMsg:lookup', function (data)
 {
-    var data = JSON.parse(e.detail);
-    var msgID = data.messageID;
+    var msgID = data && data.messageID;
+    if (!msgID) return;
+
+    if (window.deletedMessagesDB == null)
+    {
+        WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+        return;
+    }
+
+    try
+    {
+        var transaction = window.deletedMessagesDB.transaction('msgs', "readonly");
+        var msgsStore = transaction.objectStore("msgs");
+
+        // search the message ID in both the original message ID and the revoked message ID
+        var requestByID = msgsStore.get(msgID);
+
+        requestByID.onsuccess = function ()
+        {
+            var messageData = requestByID.result;
+            if (messageData)
+            {
+                WAIPageBus.sendToHost('deletedMsg:result', { messageData: messageData, messageID: msgID });
+                return;
+            }
+
+            // Did not find the message data by revoked message ID. try by original message ID
+            var originalIDIndex = msgsStore.index('originalID_index');
+            var requestByOriginalID = originalIDIndex.get(msgID);
+            requestByOriginalID.onsuccess = function ()
+            {
+                WAIPageBus.sendToHost('deletedMsg:result', { messageData: requestByOriginalID.result, messageID: msgID });
+            };
+            requestByOriginalID.onerror = function ()
+            {
+                WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+            };
+        };
+        requestByID.onerror = function ()
+        {
+            WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+        };
+    }
+    catch (err)
+    {
+        WAIPageBus.sendToHost('deletedMsg:result', { messageData: undefined, messageID: msgID });
+    }
+});
+
+WAIPageBus.onPageMessage('deviceType:lookup', function (data)
+{
+    var msgID = data && data.messageID;
+    if (!msgID) return;
     var deviceType = null;
 
     if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
         deviceType = deviceTypesPerMessage[msgID];
 
-    setTimeout(function()
+    setTimeout(function ()
     {
-        document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
+        WAIPageBus.sendToHost('deviceType:result', { deviceType: deviceType, messageID: msgID });
     }, 20);
+});
+
+document.addEventListener('onOptionsUpdate', function (e)
+{
+    var options = {};
+    try
+    {
+        options = typeof e.detail === "string" ? JSON.parse(e.detail) : (e.detail || {});
+    }
+    catch (err) { return; }
+    if (!options || typeof options !== "object") return;
+
+    var isReadHookActive = ('readConfirmationsHook' in options)
+        ? Boolean(options.readConfirmationsHook)
+        : (typeof readConfirmationsHookEnabled !== "undefined" ? Boolean(readConfirmationsHookEnabled) : true);
+
+    // update graphics
+    if (isReadHookActive)
+    {
+        // set unread counters to transparent
+        setGlobalColorVariableString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
+    }
+    else
+    {
+        for (var chatId in blinkingChats)
+        {
+            if (blinkingChats[chatId] && blinkingChats[chatId].timerID)
+            {
+                clearInterval(blinkingChats[chatId].timerID);
+            }
+            delete blinkingChats[chatId];
+        }
+
+        // set unread counters to solid
+        setGlobalColorVariableString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
+        var warningMessage = document.getElementsByClassName("incognito-message").length > 0
+            ? document.getElementsByClassName("incognito-message")[0]
+            : null;
+        if (warningMessage != null)
+        {
+            if (typeof Velocity === "function")
+            {
+                Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
+                setTimeout(function () { if (warningMessage.parentNode) warningMessage.parentNode.removeChild(warningMessage); }, 300);
+            }
+            else if (warningMessage.parentNode)
+            {
+                warningMessage.parentNode.removeChild(warningMessage);
+            }
+        }
+
+        var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
+        for (var i = 0; i < unreadCounters.length; i++)
+        {
+            unreadCounters[i].classList.remove("blocked-color");
+        }
+    }
+});
+
+document.addEventListener('onReadConfirmationBlocked', async function (e)
+{
+    var blockedJid = e && e.detail ? String(e.detail) : "";
+    if (!blockedJid) return;
+    var atIdx = blockedJid.indexOf("@");
+    var blockedUser = atIdx !== -1 ? blockedJid.substring(0, atIdx) : blockedJid;
+
+    var chat = await getChatByJID(blockedJid);
+    if (!chat)
+    {
+        console.warn("WAIncognito: Did not find chat for JID " + blockedJid);
+        return;
+    }
+
+    var chatUser = chat.id ? chat.id.user : null;
+    var chatLid = chat.accountLid ? chat.accountLid.toString() : "";
+
+    if (readConfirmationsHookEnabled && safetyDelay > 0 && chatUser == blockedUser)
+    {
+        markChatAsPendingReciptsSending(chat);
+    }
+    else if (readConfirmationsHookEnabled && (chatUser == blockedUser || chatLid == blockedJid))
+    {
+        markChatAsBlocked(chat);
+    }
+    else
+    {
+        console.warn("WAIncognito: Could not find chat for JID " + blockedJid);
+    }
+
+    if (chat.id != null) blockedChats[chat.id] = chat;
 });
 
 function markChatAsPendingReciptsSending(chat)
 {
+    if (!chat || !chat.id) return;
     if (chat.pendingSeenCount != 0) chat.pendingSeenCount = 0;
 
     if (chat.unreadCount == 0)
@@ -309,19 +306,22 @@ function markChatAsPendingReciptsSending(chat)
     }
 
     var currentChat = getCurrentChat();
-    if (currentChat.id.user != chat.id.user) 
+    if (!currentChat || !currentChat.id || currentChat.id.user != chat.id.user)
     {
         return;
     }
 
-    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
-    var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
-                            document.getElementsByClassName("incognito-message")[0] : null;
+    var lastKey = chat.lastReceivedKey || {};
+    var messageID = getJidOfChat(chat) + (lastKey.id || "");
+    var previousMessage = document.getElementsByClassName("incognito-message").length > 0
+        ? document.getElementsByClassName("incognito-message")[0]
+        : null;
     var seconds = safetyDelay;
 
     var chatWindow = getCurrentChatPanel();
+    var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
 
-    if (chatWindow != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
+    if (chatWindow != null && parent != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
     {
         if (chat.id in blinkingChats)
         {
@@ -341,26 +341,32 @@ function markChatAsPendingReciptsSending(chat)
         warningMessage.appendChild(cancelButton);
 
         // insert it under the unread counter, or at the end of the chat panel
-        var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        if (previousMessage != null)
+        if (previousMessage != null && previousMessage.parentNode === parent)
             parent.removeChild(previousMessage);
+        else if (previousMessage != null && previousMessage.parentNode)
+            previousMessage.parentNode.removeChild(previousMessage);
+
         var unreadMarker = getUnreadMarkerElement(parent);
-        if (unreadMarker != null)
+        if (unreadMarker != null && unreadMarker.parentNode)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
         else
         {
             warningMessage.setAttribute('class', 'incognito-message');
             parent.appendChild(warningMessage);
         }
-        Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
-            { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+
+        if (typeof Velocity === "function")
+        {
+            Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
+                { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+        }
 
         var blockedChatElem = findChatEntryElementForJID(chat.id);
 
         function makeUnreadCounterBlink()
         {
             chat.pendingSeenCount = 0;
-    
+
             if (blockedChatElem != null)
             {
                 var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
@@ -370,7 +376,7 @@ function markChatAsPendingReciptsSending(chat)
                 }
             }
         }
-    
+
         makeUnreadCounterBlink();
         setTimeout(makeUnreadCounterBlink, 200); // for multi-device pendingSeenCount
 
@@ -381,18 +387,30 @@ function markChatAsPendingReciptsSending(chat)
             seconds--;
             if (seconds > 0)
             {
-                warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
+                if (warningMessage.firstChild)
+                {
+                    warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
+                }
                 blinkingChats[chat.id] = { timerID: id, time: seconds, chat: chat };
             }
             else
             {
                 // time's up, sending receipt
                 clearInterval(id);
-                var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
-                document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
+                var currentLastKey = chat.lastReceivedKey || {};
+                var data = {
+                    jid: getJidOfChat(chat),
+                    index: currentLastKey.id,
+                    fromMe: currentLastKey.fromMe,
+                    unreadCount: chat.unreadCount
+                };
+                WAIPageBus.sendToPage('receipt:send', data);
 
-                var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-                unreadCounter.className = unreadCounter.className.replace("blocked-color", "").replace("blinking", "");
+                var unreadCounter = blockedChatElem ? blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS) : null;
+                if (unreadCounter)
+                {
+                    unreadCounter.className = unreadCounter.className.replace("blocked-color", "").replace("blinking", "");
+                }
             }
         }, 1000);
 
@@ -410,23 +428,28 @@ function markChatAsPendingReciptsSending(chat)
 
 function markChatAsBlocked(chat)
 {
+    if (!chat || !chat.id) return;
     if (chat.unreadCount == 0 && chat.pendingSeenCount == 0)
     {
         return;
     }
 
     var currentChat = getCurrentChat();
-    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
+    var lastKey = chat.lastReceivedKey || {};
+    var messageID = getJidOfChat(chat) + (lastKey.id || "");
+    var warningMessage = null;
+    var warningWasEmpty = false;
 
-    if (currentChat.id.user == chat.id.user)
+    if (currentChat && currentChat.id && currentChat.id.user == chat.id.user)
     {
         //
         // Create a "receipts blocked" warning if needed
         //
 
-        var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
-        document.getElementsByClassName("incognito-message")[0] : null;
-        var warningWasEmpty = warningMessage == null;
+        warningMessage = document.getElementsByClassName("incognito-message").length > 0
+            ? document.getElementsByClassName("incognito-message")[0]
+            : null;
+        warningWasEmpty = warningMessage == null;
         if (warningMessage == null)
         {
             warningMessage = document.createElement('div');
@@ -444,18 +467,26 @@ function markChatAsBlocked(chat)
             warningMessage.remove();
         }
 
-        var sendButton = warningMessage.lastChild;
-        sendButton.setAttribute('class', 'incognito-send-button');
-        sendButton.innerHTML = "Mark as read";
-        sendButton.onclick = function ()
+        var sendBtn = warningMessage.lastChild;
+        if (sendBtn)
         {
-            var data = {
-                name: chat.name, jid: getJidOfChat(chat), lastMessageIndex: chat.lastReceivedKey.id,
-                fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
-                formattedName: chat.contact.name
+            sendBtn.setAttribute('class', 'incognito-send-button');
+            sendBtn.innerHTML = "Mark as read";
+            sendBtn.onclick = function ()
+            {
+                var currentLastKey = chat.lastReceivedKey || {};
+                var data = {
+                    name: chat.name,
+                    jid: getJidOfChat(chat),
+                    lastMessageIndex: currentLastKey.id,
+                    fromMe: currentLastKey.fromMe,
+                    unreadCount: chat.unreadCount,
+                    isGroup: chat.isGroup,
+                    formattedName: (chat.contact && chat.contact.name) || chat.name || ""
+                };
+                WAIPageBus.sendToHost('receipt:markAsReadClick', data);
             };
-            document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
-        };
+        }
 
         warningMessage.messageID = messageID;
 
@@ -464,13 +495,16 @@ function markChatAsBlocked(chat)
         //
 
         var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        var unreadMarker = getUnreadMarkerElement(innerChatPanel);
-        if (unreadMarker != null)
-            unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
-        else
+        if (innerChatPanel)
         {
-            warningMessage.setAttribute('class', 'incognito-message');
-            innerChatPanel.appendChild(warningMessage);
+            var unreadMarker = getUnreadMarkerElement(innerChatPanel);
+            if (unreadMarker != null && unreadMarker.parentNode)
+                unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
+            else
+            {
+                warningMessage.setAttribute('class', 'incognito-message');
+                innerChatPanel.appendChild(warningMessage);
+            }
         }
     }
     else
@@ -482,8 +516,6 @@ function markChatAsBlocked(chat)
     // turn the unread counter of the chat to red
     //
 
-    var chatUnreadRead = chat.unreadCount;
-    
     function markUnreadCounter()
     {
         var blockedChatElem = findChatEntryElementForJID(chat.id);
@@ -492,30 +524,27 @@ function markChatAsBlocked(chat)
         if (blockedChatElem != null)
         {
             var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
+            if (unreadCounter && typeof unreadCounter.className === "string" && !unreadCounter.className.includes("blocked-color"))
                 unreadCounter.classList.add("blocked-color");
         }
     }
 
     markUnreadCounter();
     setTimeout(markUnreadCounter, 200); // for multi-device pendingSeenCount
-    
 
     // if it didn't exist previously, animate it in
-    if (blockedChats[chat.id] == undefined || warningWasEmpty)
-        Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
-
     if (warningMessage)
-        warningMessage.firstChild.textContent = "Read receipts were blocked.";
+    {
+        if ((blockedChats[chat.id] == undefined || warningWasEmpty) && typeof Velocity === "function")
+            Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
+
+        if (warningMessage.firstChild)
+            warningMessage.firstChild.textContent = "Read receipts were blocked.";
+    }
 }
 
-function setGlobalColorVaraibleString(variable, colorString)
+function setGlobalColorVariableString(variable, colorString)
 {
-    // TODO: I must think of a way to auto detect the selector, or set the global color in a better way
-    //       it it currently very hacky
-    // To get the new selector, look in e.g https://static.whatsapp.net/rsrc.php/v5/yK/l/0,cross/W3PYxWkG2-yfN1x-cay_sOU0sr-k7QgkZlwij8nbyzl0.css
-    // search for --WDS-persistent-always-branded
-
     var selector2 = ".xj6uduu.xj6uduu, .xj6uduu.xj6uduu:root";
     var selector3 = ".x8mwjyx.x8mwjyx, .x8mwjyx.x8mwjyx:root";
     var selector4 = ".x1h89ln0.x1h89ln0, .x1h89ln0.x1h89ln0:root";
@@ -531,7 +560,7 @@ function setGlobalColorVaraibleString(variable, colorString)
         document.querySelector(selector6).style.setProperty(variable, colorString);
     if (document.querySelector(selector7))
         document.querySelector(selector7).style.setProperty(variable, colorString);
-    
+
     if (document.querySelector(selector2))
         document.querySelector(selector2).style.setProperty(variable, colorString);
 
@@ -547,12 +576,12 @@ function setGlobalColorVaraibleString(variable, colorString)
     {
         document.querySelector(selector3).style.setProperty(variable, colorString);
     }
-    
+
     if (document.querySelector(":root"))
     {
         document.querySelector(':root').style.setProperty(variable, colorString);
     }
-    
+
     if (document.querySelector(".color-refresh"))
     {
         document.querySelector('.color-refresh').style.setProperty(variable, colorString);
@@ -563,7 +592,7 @@ function getUnreadMarkerElement(parentElement = null)
 {
     if (parentElement == null) parentElement = document;
 
-    var elements1 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS)
+    var elements1 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS);
     var elements2 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS_2);
     var elements3 = parentElement.getElementsByClassName(UIClassNames.UNREAD_MARKER_CLASS_3);
 
@@ -574,16 +603,4 @@ function getUnreadMarkerElement(parentElement = null)
     return null;
 }
 
-setTimeout(function() {
-    if (!window.onerror) return;
-
-    // WhatsApp hooks window.onerror.
-    // This makes extension-related errors not printed out,
-    // so make a hook-on-hook to print those first
-    var originalOnError = window.onerror;
-    window.onerror = function(message, source, lineno, colno, error)
-    {
-        console.error(error);
-        originalOnError.call(window, message, source, lineno, colno, error);
-    }
-}, 1000);
+WAIErrorHook.installErrorHook();

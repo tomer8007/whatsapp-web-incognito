@@ -25,15 +25,27 @@ jobs:
       - name: Check out the repository code
         uses: actions/checkout@v4
 
-      # Step 2: Run the core conversion command.
-      - name: Convert Chrome Extension to Safari/iOS
-        run: |
-          # Move WAIncognito sources to separate folder
-          mkdir extension-source
-          shopt -s extglob
-          mv !(extension-source|.github) extension-source/
-          echo "Source files moved into ./extension-source"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      # Step 2: Build clean Firefox-layout extension assets (shared/, popup, manifest, core, lib, images)
+      - name: Build clean extension bundle
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build:firefox
+          rm -rf extension-source
+          mv dist/extension/firefox extension-source
+          echo "Built clean extension assets into ./extension-source"
+
+      # Step 3: Run the core conversion command.
+      - name: Convert Extension to Safari/iOS
+        run: |
           # Display Xcode version
           xcodebuild -version
 
@@ -43,9 +55,9 @@ jobs:
             --no-open \
             --no-prompt \
             ./extension-source
-            echo "Safari Extension created in ./safari-extension-build"
+          echo "Safari Extension created in ./safari-extension-build"
 
-      # Step 3: Upload the output as a build artifact.
+      # Step 4: Upload the output as a build artifact.
       - name: Upload the generated Xcode project
         uses: actions/upload-artifact@v4
         with:

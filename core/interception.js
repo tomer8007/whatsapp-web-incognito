@@ -2,17 +2,34 @@
 // Interception of WhatsApp packets and handling nodes
 //
 
-// Global enforcing variables
-var readConfirmationsHookEnabled = true;
-var onlineUpdatesHookEnabled = false;
-var typingUpdatesHookEnabled = false;
-var saveDeletedMsgsHookEnabled = false;
-var showDeviceTypesEnabled = true;
-var autoReceiptOnReplay = true;
-var safetyDelay = 0;
+// Global enforcing variables (initialized from shared schema defaults when available)
+var _waiDefaults = typeof WAISettingsSchema !== 'undefined' ? WAISettingsSchema.defaults('shared') : {};
+var readConfirmationsHookEnabled = _waiDefaults.readConfirmationsHook !== undefined ? _waiDefaults.readConfirmationsHook : true;
+var onlineUpdatesHookEnabled = _waiDefaults.onlineUpdatesHook !== undefined ? _waiDefaults.onlineUpdatesHook : false;
+var typingUpdatesHookEnabled = _waiDefaults.typingUpdatesHook !== undefined ? _waiDefaults.typingUpdatesHook : false;
+var saveDeletedMsgsHookEnabled = _waiDefaults.saveDeletedMsgs !== undefined ? _waiDefaults.saveDeletedMsgs : true;
+var showDeviceTypesEnabled = _waiDefaults.showDeviceTypes !== undefined ? _waiDefaults.showDeviceTypes : true;
+var stealthVoiceNotesEnabled = _waiDefaults.stealthVoiceNotes !== undefined ? _waiDefaults.stealthVoiceNotes : false;
+var mediaAutoDownloadGuardEnabled = _waiDefaults.mediaAutoDownloadGuard !== undefined ? _waiDefaults.mediaAutoDownloadGuard : false;
+var autoReceiptOnReplay = _waiDefaults.autoReceiptOnReplay !== undefined ? _waiDefaults.autoReceiptOnReplay : true;
+var safetyDelay = _waiDefaults.safetyDelay !== undefined ? _waiDefaults.safetyDelay : 0;
+var contactWhitelistRules = {};
 
 var isInitializing = true;
 var exceptionsList = [];
+
+// One-time exception for a receipt: allow a user-requested "mark as read" to go out,
+// then let the automatic blocks apply again.
+function allowReceiptsFor(jid)
+{
+    var normalized = normalizeJID(jid);
+    if (!normalized) return;
+    exceptionsList.push(normalized);
+    setTimeout(function ()
+    {
+        exceptionsList = exceptionsList.filter(function (i) { return i !== normalized; });
+    }, 2000);
+}
 var blinkingChats = {};
 var chats = {};
 var blockedChats = {};
@@ -32,6 +49,11 @@ initialize();
 //
 wsHook.before = function (originalData, url)
 {
+    // P5: upstream passed `isIncoming=false` inline at every call site. `isIncoming`
+    // is never declared in this file, so each of those was an implicit global write on
+    // the per-frame path. Hoisted to a real local; the value is unchanged.
+    var isIncoming = false;
+
     var promise = async function(originalData) {
 
     if (WAPassthrough) return originalData;
@@ -41,7 +63,7 @@ wsHook.before = function (originalData, url)
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return originalData;
 
         // encrytped binary payload
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=false);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming);
         if (decryptedFrames == null) return originalData;
 
         for (var i = 0; i < decryptedFrames.length; i++)
@@ -58,44 +80,53 @@ wsHook.before = function (originalData, url)
 
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(manipulatedNode, isIncoming=false, decryptedFrame.byteLength);
+                printNode(manipulatedNode, isIncoming, decryptedFrame.byteLength);
                 if (WAPassthroughWithDebug) return originalData;
             }
-
-            // sanity check that our node parsing is complete
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = false);
         }
 
-        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming=false);
+        var packedNode = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, isIncoming);
 
-        var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
-        if (!looksEqual && isAllowed)
+        // Debug-only: warn when the re-encoded frame looks different.
+        if (WAdebugMode)
         {
-            debugger;
+            var looksEqual = isEqualArray(new Uint8Array(originalData), new Uint8Array(packedNode));
+            if (!looksEqual && isAllowed)
+            {
+                console.warn("WhatsIncognito: re-encoded frame differs from the original");
+            }
         }
 
         if (isInitializing)
         {
             isInitializing = false;
             console.log("WhatsIncognito: Interception is working.");
-            document.dispatchEvent(new CustomEvent('onInterceptionWorking', { detail: JSON.stringify({isInterceptionWorking: true}) }));
+            WAIPageBus.emit('onInterceptionWorking', { isInterceptionWorking: true });
         }
 
         return packedNode;
     }
     catch (exception)
     {
-        if (typeof(exception) == "string" && exception.includes("counter"))
+        if (MultiDevice.isExpectedNoiseError(exception))
         {
             console.log(exception);
             return originalData;
         }
         
-        console.error("WhatsIncognito: Passing-through outgoing packet due to exception:");
+        console.error("WhatsIncognito: Dropping outgoing packet due to exception to prevent privacy leak:");
         console.error(exception);
         console.error("outgoing noise packet was:");
         console.error(originalData);
-        return originalData;
+        try
+        {
+            if (typeof window !== "undefined" && window.dispatchEvent)
+            {
+                window.dispatchEvent(new CustomEvent('wai:interception_failure', { detail: { error: String(exception && exception.message || exception), direction: 'outgoing' } }));
+            }
+        }
+        catch (_) {}
+        return null;
     }
 
     };
@@ -108,6 +139,9 @@ wsHook.before = function (originalData, url)
 //
 wsHook.after = function (messageEvent, url)
 {
+    // P5: see the note in wsHook.before — hoisted out of the call sites.
+    var isIncoming = true;
+
     var promise = async function(messageEvent) {
     
     if (WAPassthrough) return messageEvent;
@@ -118,7 +152,7 @@ wsHook.after = function (messageEvent, url)
 
         if (!(originalData instanceof ArrayBuffer || originalData instanceof Uint8Array)) return messageEvent;
 
-        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming=true);
+        var decryptedFrames = await MultiDevice.decryptNoisePacket(originalData, isIncoming);
         if (decryptedFrames == null) return messageEvent;
 
         var didBlockNode = false;
@@ -133,13 +167,10 @@ wsHook.after = function (messageEvent, url)
             
             if (WAdebugMode || WAPassthroughWithDebug)
             {
-                printNode(realNode, isIncoming=true, decryptedFrame.byteLength);
+                printNode(realNode, isIncoming, decryptedFrame.byteLength);
                 
                 if (WAPassthroughWithDebug) return messageEvent;
             }
-
-            // sanity check that our node parsing is deterministic
-            await checkNodeEncoderSanity(decryptedFrameOriginal, isIncoming = true);
 
             var [isAllowed, manipulatedNode] = await NodeHandler.interceptReceivedNode(realNode);
 
@@ -160,10 +191,9 @@ wsHook.after = function (messageEvent, url)
     }
     catch (exception)
     {
-        if (exception.message && exception.message.includes("stream end")) return messageEvent;
-        if (typeof(exception) == "string" && exception.includes("counter"))
+        if (MultiDevice.isExpectedNoiseError(exception))
         {
-            console.log(exception);
+            if (typeof(exception) == "string") console.log(exception);
             return messageEvent;
         }
 
@@ -171,7 +201,6 @@ wsHook.after = function (messageEvent, url)
         console.error(exception);
         console.error("incoming noise packet was:");
         console.error(originalData);
-        //debugger;
         return messageEvent;
     };
 
@@ -202,9 +231,7 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             }
 
-            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-                detail: deletedMessageId
-            }));
+            WAIPageBus.sendToHost('deletedMsg:pseudoAdded', { id: deletedMessageId });
 
             // Now, save the deleted message in the DB after a short wait
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
@@ -224,6 +251,17 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
 
 var deletedMessageSaveAttempts = 0;
 var MAX_DELETED_MSG_SAVE_ATTEMPTS = 30;
+
+function scheduleDeletedMessageSave(message, remoteJid, messageId, deletedMessageId, why)
+{
+    if (deletedMessageSaveAttempts >= MAX_DELETED_MSG_SAVE_ATTEMPTS) return;
+    console.warn("WAIncognito: Scheduling deleted message save for later (" + why + ")");
+    deletedMessageSaveAttempts++;
+    setTimeout(async function()
+    {
+        await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
+    }, 1000);
+}
 
 async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId)
 {
@@ -248,38 +286,23 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
             }
         }
 
-        if (!foundOriginalMessage && deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
+        if (!foundOriginalMessage)
             // We are probably starting up and the original message is not added yet to the message store,
             // just schedule the search for later
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+            scheduleDeletedMessageSave(message, remoteJid, messageId, deletedMessageId, "original message not in store yet");
     }
     else
     {
         console.warn("WAIncognito: Could not find chat for JID " + remoteJid + ", so did not save deleted message");
-
-        if (deletedMessageSaveAttempts < MAX_DELETED_MSG_SAVE_ATTEMPTS)
-        {
-            console.warn("WAIncognito: Scheduling deleted message save for later");
-            deletedMessageSaveAttempts++;
-            setTimeout(async function() 
-            {
-                await findDeletedMessageAndSaveContents(message, remoteJid, messageId, deletedMessageId);
-            }, 1000);
-        }
+        scheduleDeletedMessageSave(message, remoteJid, messageId, deletedMessageId, "chat not found");
     }
 }
 
 async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessageID)
 {
     // Determine author data
-    var author = deletedMessageKey.participant.split("@")[0].split(":")[0]
+    var participant = deletedMessageKey.participant;
+    var author = participant ? participant.split("@")[0].split(":")[0] : "";
     if (author == "")
     {
         // maybe it's an @lid or @g.us
@@ -327,31 +350,24 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
     deletedMsgRecord.lng = deletedMessage.lng;
     deletedMsgRecord.lat = deletedMessage.lat;
 
-    if ("id" in deletedMsgRecord)
+    const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
+    let request = transcation.objectStore("msgs").add(deletedMsgRecord);
+    request.onerror = (e) =>
     {
-        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
-        let request = transcation.objectStore("msgs").add(deletedMsgRecord);
-        request.onerror = (e) =>
+        if (request.error.name == "ConstraintError")
         {
-            if (request.error.name == "ConstraintError")
-            {
-                // ConstraintError occurs when an object with the same id already exists
-                // This will happen when we get the revoke message again from the server
-                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-            } 
-            else
-            {
-                console.log("WhatsIncognito: Unexpected error saving deleted message");
-            }
-        };
-        request.onsuccess = (e) =>
+            // ConstraintError occurs when an object with the same id already exists
+            // This will happen when we get the revoke message again from the server
+            console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
+        } 
+        else
         {
-            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
+            console.log("WhatsIncognito: Unexpected error saving deleted message");
         }
-    }
-    else
+    };
+    request.onsuccess = (e) =>
     {
-        console.log("WhatsIncognito: Deleted message contents not found");
+        console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
     }
 }
 
@@ -359,91 +375,106 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
 // View once feature
 //
 
-async function interceptViewOnceMessages(e2eMessage, messageId) 
+// When the WhatsApp API is not available yet, view-once interception retries this
+// many times before giving up on the message (it still passes through).
+var MAX_VIEW_ONCE_RETRIES = 3;
+
+async function interceptViewOnceMessages(e2eMessage, messageId, retries = 0) 
 {
-    if (e2eMessage.viewOnceMessageV2 !== null || e2eMessage.viewOnceMessageV2Extension !== null) 
+    var body = "";
+    var dataURI = "";
+    var caption = null;
+
+    var viewOnceMessage = e2eMessage.viewOnceMessageV2;
+    var viewOnceMessageExtension = e2eMessage.viewOnceMessageV2Extension;
+    if (viewOnceMessage == null && viewOnceMessageExtension == null)
+        return;
+
+    var retrievedMsg = null;
+    var type = "";
+    if (viewOnceMessage)
     {
-        var retrievedMsg = {};
-        var type = "";
-        if (e2eMessage.viewOnceMessageV2 !== null)
+        if (viewOnceMessage.message && viewOnceMessage.message.imageMessage != null) 
         {
-            if (e2eMessage.viewOnceMessageV2.message.imageMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.imageMessage;
-                type = "image";
-            }
-            else if (e2eMessage.viewOnceMessageV2.message.videoMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.videoMessage;
-                type = "video";
-            }
-            else
-            {
-                throw new Error("Unknown viewOnceMessageV2 type");
-            }
+            retrievedMsg = viewOnceMessage.message.imageMessage;
+            type = "image";
         }
-        else if (e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage !== null) 
+        else if (viewOnceMessage.message && viewOnceMessage.message.videoMessage != null)
         {
-            retrievedMsg = e2eMessage.viewOnceMessageV2Extension.message.audioMessage;
-            type = "audio";
-        }
-        else 
-        {
-            throw new Error("Unknown viewOnceMessageV2 or viewOnceMessageV2Extension type");
-        }
-        const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
-        const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
-        const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
-        
-        if (window.WhatsAppAPI !== undefined)
-        {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
-                directPath: retrievedMsg.directPath,
-                encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
-                type: type, signal: (new AbortController).signal
-            });
-
-            body = arrayBufferToBase64(decryptedData);
-            dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
-            var caption = retrievedMsg.caption;
-            // store in indexedDB called "view-once" messageID and dataURI 
-            var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
-            viewOnceDBOpenRequest.onupgradeneeded = function (event) {
-                const db = event.target.result;
-                var store = db.createObjectStore('msgs', { keyPath: 'id' });
-                if (WAdebugMode) {
-                    console.log('WhatsIncognito: Deleted messages database generated');
-                }
-                store.createIndex("id_index", "id");
-            };
-            viewOnceDBOpenRequest.onerror = function (e) {
-                console.error("WhatsIncognito: Error opening database");
-                console.error("Error", viewOnceDBOpenRequest);
-                console.error(e);
-            };
-            viewOnceDBOpenRequest.onsuccess = () => {
-                var viewOnceDB = viewOnceDBOpenRequest.result;
-                var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
-                var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI, caption});
-                viewOnceRequest.onerror = (e) => {
-                    if (viewOnceRequest.error.name == "ConstraintError") {
-                        if (WAdebugMode) {
-                            console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-                        }
-                    }
-
-                    else {
-                        console.warn("WhatsIncognito: Unexpected error saving deleted message");
-                    }
-                };
-            };
+            retrievedMsg = viewOnceMessage.message.videoMessage;
+            type = "video";
         }
         else
         {
-            // retry in 5 seconds
-            // don't know why it's 5 seconds, but that's what is done for decrypting deleted messages 
-            setTimeout(function(){
-                interceptViewOnceMessages(e2eMessage, messageId)
+            throw new Error("Unknown viewOnceMessageV2 type");
+        }
+    }
+    else if (viewOnceMessageExtension && viewOnceMessageExtension.message && viewOnceMessageExtension.message.audioMessage != null) 
+    {
+        retrievedMsg = viewOnceMessageExtension.message.audioMessage;
+        type = "audio";
+    }
+    else 
+    {
+        throw new Error("Unknown viewOnceMessageV2 or viewOnceMessageV2Extension type");
+    }
+    const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
+    const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
+    const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
+    
+    if (window.WhatsAppAPI !== undefined)
+    {
+        const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
+            directPath: retrievedMsg.directPath,
+            encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
+            type: type, signal: (new AbortController).signal
+        });
+
+        body = arrayBufferToBase64(decryptedData);
+        dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
+        caption = retrievedMsg.caption;
+        // store in indexedDB called "view-once" messageID and dataURI 
+        var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
+        viewOnceDBOpenRequest.onupgradeneeded = function (event) {
+            const db = event.target.result;
+            var store = db.createObjectStore('msgs', { keyPath: 'id' });
+            if (WAdebugMode) {
+                console.log('WhatsIncognito: Deleted messages database generated');
+            }
+            store.createIndex("id_index", "id");
+        };
+        viewOnceDBOpenRequest.onerror = function (e) {
+            console.error("WhatsIncognito: Error opening database");
+            console.error("Error", viewOnceDBOpenRequest);
+            console.error(e);
+        };
+        viewOnceDBOpenRequest.onsuccess = () => {
+            var viewOnceDB = viewOnceDBOpenRequest.result;
+            var viewOnceTransaction = viewOnceDB.transaction('msgs', "readwrite");
+            var viewOnceRequest = viewOnceTransaction.objectStore("msgs").add({ id: messageId, dataURI: dataURI, caption});
+            viewOnceRequest.onerror = (e) => {
+                if (viewOnceRequest.error.name == "ConstraintError") {
+                    if (WAdebugMode) {
+                        console.log("WhatsIncognito: Not saving message because the message ID already exists");
+                    }
+                }
+
+                else {
+                    console.warn("WhatsIncignito: Unexpected error saving deleted message");
+                }
+            };
+        };
+    }
+    else
+    {
+        // The WhatsApp API may appear later (the UI script loads after WA's main
+        // bundle); retry a bounded number of times, then give up quietly — the
+        // message is passed through unmodified either way.
+        if (retries < MAX_VIEW_ONCE_RETRIES)
+        {
+            setTimeout(function ()
+            {
+                interceptViewOnceMessages(e2eMessage, messageId, retries + 1);
             }, 5000);
         }
     }
@@ -454,21 +485,6 @@ async function interceptViewOnceMessages(e2eMessage, messageId)
 //
 // Miscellaneous 
 //
-
-async function decryptE2EMessagesFromNode(node)
-{
-    // decrypt the signal message
-    try
-    {
-        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
-    }
-    catch (exception)
-    {
-        console.error("Could not decrypt E2E message with type " + node.attrs["type"] + " due to exception:");
-        console.error(exception);
-        debugger;
-    }
-}
 
 function printNode(node, isIncoming = false, decryptedFrameLength)
 {
@@ -517,8 +533,52 @@ function exposeWhatsAppAPI()
     }
 }
 
+function applyOptionsToInterceptionGlobals(options)
+{
+    if (!options || typeof options !== 'object') return;
+    if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
+    if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
+    if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
+    if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
+    if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
+    if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
+    if ('stealthVoiceNotes' in options) stealthVoiceNotesEnabled = options.stealthVoiceNotes;
+    if ('mediaAutoDownloadGuard' in options) mediaAutoDownloadGuardEnabled = options.mediaAutoDownloadGuard;
+    if ('contactWhitelistRules' in options && options.contactWhitelistRules && typeof options.contactWhitelistRules === 'object')
+        contactWhitelistRules = options.contactWhitelistRules;
+}
+
+function subscribeToInterceptionOptions()
+{
+    document.addEventListener('onOptionsUpdate', function (e)
+    {
+        try
+        {
+            var options = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+            applyOptionsToInterceptionGlobals(options);
+        }
+        catch (err) {}
+    });
+
+    document.addEventListener('onContactWhitelistUpdate', function (e)
+    {
+        try
+        {
+            var rules = typeof e.detail === 'string' ? JSON.parse(e.detail) : e.detail;
+            if (rules && typeof rules === 'object') contactWhitelistRules = rules;
+        }
+        catch (err) {}
+    });
+}
+
 function initialize()
 {
+    if (typeof window !== 'undefined' && window.__WAI__ && typeof window.__WAI__.getPrefs === 'function')
+    {
+        applyOptionsToInterceptionGlobals(window.__WAI__.getPrefs());
+    }
+    subscribeToInterceptionOptions();
     if (WALogs)
         hookLogs();
     initializeDeletedMessagesDB();
@@ -542,15 +602,54 @@ function hookLogs()
         get: function() {return hookedLog;}
     });
 
-    setTimeout(() => {
-        var originalWALoggerLog = require("WALogger").LOG;
-        var originalWALoggerDev = require("WALogger").LOG;
-        var originalWALoggerERROR = require("WALogger").ERROR;
+    // P7: upstream ran this once, 2s after injection, with no guard at all. Two bugs:
+    //
+    //  a) `require("WALogger")` returns null until WhatsApp's webpack bundle has
+    //     registered that module, so 2s after document_start this threw
+    //     "Cannot read properties of null (reading 'LOG')" on every single launch — an
+    //     uncaught error inside a setTimeout, which then also surfaced through the
+    //     window.onunhandledrejection hook installed just above.
+    //  b) `originalWALoggerDev` was assigned `.LOG` instead of `.DEV`, so
+    //     hookedWALoggerDev called the *log* function's original with DEV arguments.
+    //
+    // The hook exists so WhatsApp's own error reports do not leak (see the comment at
+    // the top of hookLogs), so it is worth getting right — but it is not worth throwing
+    // over. Resolve the modules with a bounded retry; if they never appear, give up
+    // quietly rather than throwing on the page.
+    function installWALoggerHooks(attempt)
+    {
+        var WALogger = null, WAUtils = null;
+        try { WALogger = require("WALogger"); } catch (e) { WALogger = null; }
+        try { WAUtils = require("WALoggerUtils"); } catch (e) { WAUtils = null; }
 
-        require("WALogger").LOG = hookedWALoggerLog;
-        require("WALogger").DEV = hookedWALoggerDev;
-        require("WALogger").ERROR = hookedWALoggerError;
-        require("WALogger").WARN = hookedWALoggerWarn;
+        if (!WALogger)
+        {
+            if (attempt < 40) setTimeout(function () { installWALoggerHooks(attempt + 1); }, 500);
+            return;
+        }
+
+        // P7b: DEV, not LOG.
+        var originalWALoggerLog = WALogger.LOG;
+        var originalWALoggerDev = WALogger.DEV;
+        var originalWALoggerERROR = WALogger.ERROR;
+        var originalWALoggerWARN = WALogger.WARN;
+
+        WALogger.LOG = hookedWALoggerLog;
+        WALogger.DEV = hookedWALoggerDev;
+        WALogger.ERROR = hookedWALoggerError;
+        WALogger.WARN = hookedWALoggerWarn;
+
+        // rebuildTemplate is unavailable until WALoggerUtils registers, and can itself
+        // throw on an unexpected template. Fall back to the raw arguments so a log line
+        // is never lost to a null dereference.
+        function rebuild(n, r)
+        {
+            if (WAUtils && typeof WAUtils.rebuildTemplate === 'function')
+            {
+                try { return WAUtils.rebuildTemplate(n, r); } catch (e) { /* fall through */ }
+            }
+            return String(n) + (r && r.length ? ' ' + r.join(' ') : '');
+        }
 
         function hookedWALoggerDev(n)
         {
@@ -558,10 +657,10 @@ function hookLogs()
             {
                 for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
                     r[a - 1] = arguments[a];
-                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                var logLine = rebuild(n, r)
                 console.log("[WhatsApp DEV] " + logLine);
             }
-            return originalWALoggerDev.apply(null, arguments);
+            if (typeof originalWALoggerDev === 'function') return originalWALoggerDev.apply(null, arguments);
         }
         function hookedWALoggerLog(n)
         {
@@ -569,38 +668,39 @@ function hookLogs()
             {
                 for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
                     r[a - 1] = arguments[a];
-                var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                var logLine = rebuild(n, r)
                 console.log("[WhatsApp LOG] " + logLine);
             }
-            return originalWALoggerLog.apply(null, arguments);
+            if (typeof originalWALoggerLog === 'function') return originalWALoggerLog.apply(null, arguments);
         }
         function hookedWALoggerError(n)
         {
             for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
-                    r[a - 1] = arguments[a];
-            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                r[a - 1] = arguments[a];
+            var logLine = rebuild(n, r)
             console.error("[WhatsApp ERROR] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            if (typeof originalWALoggerERROR === 'function') return originalWALoggerERROR.apply(null, arguments);
         }
         function hookedWALoggerWarn(n)
         {
             for (var t = arguments.length, r = new Array(t > 1 ? t - 1 : 0), a = 1; a < t; a++)
-                    r[a - 1] = arguments[a];
-            var logLine = require("WALoggerUtils").rebuildTemplate(n, r)
+                r[a - 1] = arguments[a];
+            var logLine = rebuild(n, r)
             console.warn("[WhatsApp WARN] " + logLine);
-            return originalWALoggerERROR.apply(null, arguments);
+            if (typeof originalWALoggerWARN === 'function') return originalWALoggerWARN.apply(null, arguments);
         }
-        
-    }, 2000);
+    }
+
+    setTimeout(function () { installWALoggerHooks(0); }, 2000);
 
     
 
     function hookedPromiseError(event)
     {
-        debugger;
         console.error("Unhandled promise rejection:");
-        console.error(errorObject);
-        return originalOnUnhandledRejection.call(event);
+        console.error(event && event.reason);
+        if (typeof originalOnUnhandledRejection === "function")
+            return originalOnUnhandledRejection.call(event);
     }
 
     
@@ -609,19 +709,22 @@ function hookLogs()
     {        
         return function(strings, values)
         {
-            var message = "[WhatsApp][" + errorLevel + "] -- " + makeLogMessage(arguments);
+            if (WAdebugMode || errorLevel > 2)
+            {
+                var message = "[WhatsApp][" + errorLevel + "] -- " + makeLogMessage(arguments);
 
-            if (errorLevel <= 2 && WAdebugMode)
-            {
-                console.log(message);
-            }
-            else if (errorLevel > 2 && WAdebugMode)
-            {
-                console.error(message);
-            }
-            else if (errorLevel > 2)
-            {
-                console.info(message);
+                if (errorLevel <= 2 && WAdebugMode)
+                {
+                    console.log(message);
+                }
+                else if (errorLevel > 2 && WAdebugMode)
+                {
+                    console.error(message);
+                }
+                else if (errorLevel > 2)
+                {
+                    console.info(message);
+                }
             }
 
             if (originalLog)
@@ -642,7 +745,6 @@ function initializeDeletedMessagesDB()
     {
         // triggers if the client had no database
         // ...perform initialization...
-        debugger;
 
         // Get a reference to the request related to this event
         // @type IDBOpenRequest (a specialized type of IDBRequest)
@@ -679,34 +781,5 @@ function initializeDeletedMessagesDB()
     deletedDBOpenRequest.onsuccess = () =>
     {
         window.deletedMessagesDB = deletedDBOpenRequest.result;
-    }
-}
-
-
-async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
-{
-    var flags = new Uint8Array(originalFrame)[0];
-    var decryptedFrameOpened = originalFrame.slice(1);
-    if (flags & 2)
-    {
-        // zlib compressed. decompress
-        decryptedFrameOpened = toArrayBuffer(pako.inflate(new Uint8Array(decryptedFrameOpened)));
-    }
-
-    var realNode = await nodeReaderWriter.decodeStanza(originalFrame, gzipInflate);
-
-    // sanity check that our node parsing is deterministic
-    var encodedNodeData = await nodeReaderWriter.encodeStanza(realNode, isIncoming);
-    var looksGood = isEqualArray(new Uint8Array(decryptedFrameOpened), encodedNodeData.slice(1));
-    if (!looksGood && !isIncoming)
-    {
-        debugger;
-    }
-    if (!looksGood && isIncoming)
-    {
-        // This can sometimes hit because on the encoding path, strings that represent numbers are always encoded with NIBBLE_8 (255) encoding.
-        // But on the decoding path, WhatsApp servers could send us number strings encoded with regular BINARY_8 (252) encoding, 
-        // which we will re-encode as NIBBLE_8 (255).
-        //debugger;
     }
 }

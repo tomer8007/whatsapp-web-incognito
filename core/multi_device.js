@@ -5,6 +5,7 @@
 var MultiDevice = {};
 
 var originalImportKey = crypto.subtle.importKey;
+MultiDevice.MAX_NOISE_COUNTER_SLOTS = 10;
 
 MultiDevice.initialize = function()
 {
@@ -12,8 +13,6 @@ MultiDevice.initialize = function()
     MultiDevice.readKeyImported = null;
     MultiDevice.writeKey = null;
     MultiDevice.writeKeyImported = null;
-    MultiDevice.readCounter = 0;
-    MultiDevice.writeCounter = 0;
     MultiDevice.readCounters = [0];
     MultiDevice.writeCounters = [0];
     MultiDevice.readCounterIndex = 0;
@@ -32,17 +31,19 @@ MultiDevice.initialize = function()
             if (keyUsages.includes("encrypt"))
             {
                 MultiDevice.writeKey = keyData;
-                MultiDevice.writeCounter = 0;
                 MultiDevice.writeKeyImported = key;
-                MultiDevice.writeCounters.push(0);
+                // New key means old counter slots are for a stale key; reset conservatively.
+                MultiDevice.writeCounters = [0];
+                MultiDevice.writeCounterIndex = 0;
                 console.log("WAIncognito: Noise encryption key has been replaced.");
             }
             else if (keyUsages.includes("decrypt"))
             {
                 MultiDevice.readKey = keyData;
                 MultiDevice.readKeyImported = key;
-                MultiDevice.readCounter = 0;
-                MultiDevice.readCounters.push(0);
+                // New key means old counter slots are for a stale key; reset conservatively.
+                MultiDevice.readCounters = [0];
+                MultiDevice.readCounterIndex = 0;
                 console.log("WAIncognito: Noise decryption key has been replaced.");
             }
         }
@@ -89,12 +90,10 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
         var frame = binaryReader.readBuffer(size);
 
-        var counterIndex = await MultiDevice.getGoodCounterIndexForDecryption(frame, isIncoming);
-        var counter = isIncoming ? MultiDevice.readCounters[counterIndex]++ : MultiDevice.writeCounters[counterIndex]++;
+        var frameResult = await MultiDevice.getGoodCounterIndexForDecryption(frame, isIncoming);
+        var counter = isIncoming ? MultiDevice.readCounters[frameResult.counterIndex]++ : MultiDevice.writeCounters[frameResult.counterIndex]++;
         
-        var frameInfo = {frame: frame, counter: counter};
-
-        frames.push(frameInfo);
+        frames.push({frame: frame, counter: counter, decryptedFrame: frameResult.decryptedFrame});
     }
 
     try
@@ -102,14 +101,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
         for (var i = 0; i < frames.length; i++)
         {
             var frameInfo = frames[i];
-            
-            var currentFrame = frameInfo.frame;
+            var decryptedFrame = frameInfo.decryptedFrame;
             var counter = frameInfo.counter;
-            
-            var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
-            var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
-    
-            var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+
             var flags = new Uint8Array(decryptedFrame)[0];
             var decryptedFrameOpened = decryptedFrame.slice(1);
             if (flags & 2)
@@ -123,23 +117,9 @@ MultiDevice.decryptNoisePacket = async function(payload, isIncoming = true)
     }
     catch (exception)
     {
-        if (exception.name.includes("OperationError"))
-        {
-            // reverse the counter, in case this is another socket
-            if (isIncoming) MultiDevice.readCounter--;
-            else MultiDevice.writeCounter--;
-
-            var counter = isIncoming ? MultiDevice.readCounter : MultiDevice.writeCounter;
-
-            throw ("Couldn't decrypt Noise packet: wrong counter (" + counter + ") in decryption, isIncoming: " + isIncoming);
-        }
-        else
-        {
-            console.error("Could not decrypt Noise packet");
-            console.error(exception);
-            debugger;
-            throw exception;
-        }
+        console.error("Could not process decrypted Noise packet");
+        console.error(exception);
+        throw exception;
     }
 
     return frames;
@@ -184,22 +164,17 @@ MultiDevice.encryptPacket = async function(payload, isIncoming = true, counter =
     var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
 
     var algorithmInfo = {name: "AES-GCM", iv: MultiDevice.counterToIV(counter), additionalData: new ArrayBuffer(0)};
-    return window.crypto.subtle.encrypt(algorithmInfo, key, payload)
-    .catch(function(e) {
-        console.error(e);
-        //debugger;
-    });
-    
-};
-
-MultiDevice.sizeOfPacket = function(payload)
-{
-    var binaryReader = new BinaryReader();
-    binaryReader.writeBuffer(payload);
-    binaryReader._readIndex = 0;
-
-    var size = binaryReader.readUint8() << 16 | binaryReader.readUint16();
-    return size;
+    try
+    {
+        return await window.crypto.subtle.encrypt(algorithmInfo, key, payload);
+    }
+    catch (exception)
+    {
+        console.error("Could not encrypt a packet:");
+        console.error(exception);
+        // propagate: the packet must not be sent half-decoded on failure
+        throw exception;
+    }
 };
 
 
@@ -207,7 +182,6 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
 {
     var remoteJid = messageNode.attrs["jid"] ? messageNode.attrs["jid"] : messageNode.attrs["from"];
     var participant = messageNode.attrs["participant"];
-    var participantLid = messageNode.attrs["participant_lid"];
 
     var fromJid = participant ? participant : remoteJid;
     fromJid = fromJid.toString();
@@ -219,7 +193,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     if (!window.WhatsAppAPI) exposeWhatsAppAPI();
 
     var storageModule = window.WhatsAppAPI.SignalStore;
-    storage = storageModule.getSignalProtocolStore();
+    var storage = storageModule.getSignalProtocolStore();
     if (storage == undefined) 
     {
         storageModule.enableMemSignalStore();
@@ -227,52 +201,46 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     }
 
     var childMessages = messageNode.content;
-    for (var message of childMessages)
+    for (var ciphertextMessage of childMessages)
     {
-        if (message.tag != "enc") continue;
+        if (ciphertextMessage.tag != "enc") continue;
 
-        var ciphertext = message.content;
-        var chiphertextType = message.attrs["type"];
+        var ciphertext = ciphertextMessage.content;
+        var ciphertextType = ciphertextMessage.attrs["type"];
 
         // decrypt the message
         var address = fromJid;
-        var message = null;
+        var decryptedCiphertext = null;
 
         try
         {
-            // d.getSignalProtocolStore)().loadSession(t);
-            // t.decryptContent
-            // decryptSignalProto
-            switch (chiphertextType)
+            switch (ciphertextType)
             {
                 case "pkmsg":
-                    // Pre-Key message, aka establishing new secure session
-                    message = await MultiDevice.signalDecryptPrekeyWhisperMessage(ciphertext, storage, address);
+                    decryptedCiphertext = await MultiDevice.signalDecryptPrekeyWhisperMessage(ciphertext, storage, address);
                     break;
                 case "msg":
-                    // Regular message
-                    message = await MultiDevice.signalDecryptWhisperMessage(ciphertext, storage, address);
+                    decryptedCiphertext = await MultiDevice.signalDecryptWhisperMessage(ciphertext, storage, address);
                     break;
                 case "skmsg":
-                    // Sender Key message, aka group message
-                    message = await MultiDevice.signalDecryptSenderKeyMessage(ciphertext, storage, remoteJid, address, keyDistributionMessage);
+                    decryptedCiphertext = await MultiDevice.signalDecryptSenderKeyMessage(ciphertext, storage, remoteJid, address, keyDistributionMessage);
                     break;
             }
         }
         catch (e)
         {
-            console.warn("WhatsIncognito: Skipping decryption of " + chiphertextType + " from " + address + " due to exception.");
+            console.warn("WhatsIncognito: Skipping decryption of " + ciphertextType + " from " + address + " due to exception.");
             console.warn(e);
             if (e.name) console.warn(e.name);
             continue;
         }
         
         // unpad the message
-        if (message == null) continue; 
-        message = new Uint8Array(message);
-        message = new Uint8Array(message.buffer, message.byteOffset, message.length - message[message.length - 1]);
+        if (decryptedCiphertext == null) continue; 
+        decryptedCiphertext = new Uint8Array(decryptedCiphertext);
+        decryptedCiphertext = new Uint8Array(decryptedCiphertext.buffer, decryptedCiphertext.byteOffset, decryptedCiphertext.length - decryptedCiphertext[decryptedCiphertext.length - 1]);
     
-        var decryptedMessage = Message.read(new Pbf(message));
+        var decryptedMessage = Message.read(new Pbf(decryptedCiphertext));
         decryptedMessages.push(decryptedMessage);
 
         if (decryptedMessage.senderKeyDistributionMessage)
@@ -297,10 +265,9 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     if (sessionObject == null)
     {
         console.error("Can't get session for " + address.toString());
-        debugger;
+        return null;
     }
 
-    var version = (new Uint8Array(whisperMessageBuffer))[0];
     var messageProto = whisperMessageBuffer.slice(1, whisperMessageBuffer.byteLength - 8);
     var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
@@ -335,7 +302,6 @@ MultiDevice.signalDecryptWhisperMessage = async function(whisperMessageBuffer, s
     catch (exception)
     {
         console.error("E2E plaintext decryption failed.")
-        debugger;
         throw exception;
     }
     
@@ -348,7 +314,6 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     var lidAddress = WhatsAppAPI.WAWebSignalCommonUtils.createSignalAddress(widAddress, false);
     var sessionObject = await storage.loadSession(lidAddress);
 
-    var version = (new Uint8Array(prekeyWhisperMessageBuffer))[0];
     var messageProto = prekeyWhisperMessageBuffer.slice(1, prekeyWhisperMessageBuffer.byteLength);
     var prekeyMessage = PreKeyWhisperMessage.read(new Pbf(messageProto));
 
@@ -356,7 +321,6 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     var ourEphemeralKey = await storage.loadPreKey(prekeyMessage.preKeyId); // preKeyPair
     var ourSignedKey = await storage.loadSignedPreKey(prekeyMessage.signedPreKeyId);
 
-    version = (new Uint8Array(prekeyMessage.message))[0];
     messageProto = prekeyMessage.message.slice(1, prekeyMessage.message.byteLength - 8);
     var whisperMessage = WhisperMessage.read(new Pbf(messageProto));
 
@@ -386,8 +350,7 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     {
         // new session, see decryptPkMsgWithNewSession, // initiateSessionIncoming
         isNewSession = true;
-        var sharedSecret = (ourEphemeralKey === undefined || prekeyMessage.baseKey === undefined) ? 
-                            sharedSecret = new Uint8Array(32 * 4) : new Uint8Array(32 * 5);
+        var sharedSecret = new Uint8Array((ourEphemeralKey === undefined || prekeyMessage.baseKey === undefined) ? 32 * 4 : 32 * 5);
         for (var i = 0; i < 32; i++) {
             sharedSecret[i] = 0xff;
         }
@@ -423,7 +386,6 @@ MultiDevice.signalDecryptPrekeyWhisperMessage = async function(prekeyWhisperMess
     {
         console.error("E2E plaintext decryption failed at signalDecryptPrekeyWhisperMessage. is new session: " + isNewSession);
         console.error("session address: " + lidAddress);
-        debugger;
         throw exception;
     }
     // plaintext makes sense? good.
@@ -437,7 +399,6 @@ MultiDevice.signalDecryptSenderKeyMessage = async function(senderKeyMessageBuffe
     var senderKeyName = `${groupId}::${widAdress}`; // createSignalLikeSenderKeyName
     var senderKey = await storage.loadSenderKey(senderKeyName);
 
-    var version = new Uint8Array(senderKeyMessageBuffer)[0];
     var messageProto = senderKeyMessageBuffer.slice(1, senderKeyMessageBuffer.byteLength - 64);
     var senderKeyMessage = SenderKeyMessage.read(new Pbf(messageProto));
     var id = senderKeyMessage.id;
@@ -512,9 +473,7 @@ MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, coun
 
     if (counter < chainMsgCounter) 
     {
-        console.warn("Possible duplicated message (counter < chain message counter)"); // look in messageKeys?
-        throw "possbile duplicated message";
-        debugger;
+        throw new Error("Possible duplicated message (counter < chain message counter)");
     }
 
     var messageKey = null;
@@ -539,71 +498,89 @@ MultiDevice.signalGetMessageKey = async function(chainKey, chainMsgCounter, coun
 // Helper functions
 //
 
-MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIncoming)
+MultiDevice.getNoiseCounterState = function(isIncoming)
 {
-    // we'll try to decrypt the frame with all the counters, to see which one is the counter that belongs to the current socket
-    var mainCounter = isIncoming ? MultiDevice.readCounters[MultiDevice.readCounterIndex] : MultiDevice.writeCounters[MultiDevice.writeCounterIndex];
-    var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
+    return isIncoming ?
+        {counters: MultiDevice.readCounters, indexName: "readCounterIndex"} :
+        {counters: MultiDevice.writeCounters, indexName: "writeCounterIndex"};
+};
 
-    var foundCounterIndex = -1;
+MultiDevice.noteNoiseCounterSuccess = function(isIncoming, counterIndex)
+{
+    var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
+    if (counterIndex < 0 || counterIndex >= countersArray.length) return;
 
-    // Prepeare the known tracked counters,
+    // Keep last-good-first probing by moving the active slot to the front (MRU).
+    var counterValue = countersArray[counterIndex];
+    countersArray.splice(counterIndex, 1);
+    countersArray.unshift(counterValue);
+
+    if (isIncoming) MultiDevice.readCounterIndex = 0;
+    else MultiDevice.writeCounterIndex = 0;
+};
+
+MultiDevice.addNoiseCounterSlot = function(isIncoming, counterValue)
+{
     var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
 
+    // Bound slot growth; drop least-recently-active slots before adding a new one.
+    while (countersArray.length >= MultiDevice.MAX_NOISE_COUNTER_SLOTS && countersArray.length > 1)
+    {
+        countersArray.pop();
+    }
+
+    countersArray.push(counterValue);
+    return countersArray.length - 1;
+};
+
+MultiDevice.getGoodCounterIndexForDecryption = async function(currentFrame, isIncoming)
+{
+    // Try to decrypt the frame with known counters and return the decrypted plaintext
+    // to avoid a second AES-GCM decrypt in decryptNoisePacket.
+    var key = isIncoming ? MultiDevice.readKeyImported : MultiDevice.writeKeyImported;
+    var countersArray = isIncoming ? MultiDevice.readCounters : MultiDevice.writeCounters;
+    var rememberedIndex = isIncoming ? MultiDevice.readCounterIndex : MultiDevice.writeCounterIndex;
+
+    var probeOrder = [];
+    if (rememberedIndex >= 0 && rememberedIndex < countersArray.length)
+    {
+        probeOrder.push(rememberedIndex);
+    }
     for (var i = 0; i < countersArray.length; i++)
     {
-        var counter = countersArray[i];
+        if (i !== rememberedIndex) probeOrder.push(i);
+    }
 
-        var isCounterCorrect = await MultiDevice.testFrameDecryption(counter, key, currentFrame);
-        if (isCounterCorrect)
+    for (var j = 0; j < probeOrder.length; j++)
+    {
+        var counterIndex = probeOrder[j];
+        var counter = countersArray[counterIndex];
+        var decryptedFrame = await MultiDevice.testFrameDecryption(counter, key, currentFrame);
+        if (decryptedFrame)
         {
-            // decryption seemed successful
-            foundCounterIndex = i;
-            // remember the good one
-            if (isIncoming)
-            {
-                MultiDevice.readCounterIndex = i;
-            }
-            else
-            {
-                MultiDevice.writeCounterIndex = i;
-            }
-
-            break;
+            MultiDevice.noteNoiseCounterSuccess(isIncoming, counterIndex);
+            return {ok: true, decryptedFrame: decryptedFrame, counterIndex: 0};
         }
     }
 
-    if (foundCounterIndex == -1)
+    // Try the one stolen from within WA's javascript state
+    if (WhatsAppAPI.Communication.socket)
     {
-        // try the one stolen from within WA's javascript state
-        if (WhatsAppAPI.Communication.socket)
+        var socketCounter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
+        if (socketCounter != null)
         {
-            var counter = isIncoming ? WhatsAppAPI.Communication.socket.$7 : WhatsAppAPI.Communication.socket.$8;
-            if (MultiDevice.testFrameDecryption(counter, key, currentFrame))
+            var socketDecryptedFrame = await MultiDevice.testFrameDecryption(socketCounter, key, currentFrame);
+            if (socketDecryptedFrame)
             {
-                // add this counter
-                if (isIncoming) 
-                {
-                    MultiDevice.readCounters.push(WhatsAppAPI.Communication.socket.$7);
-                    foundCounterIndex = MultiDevice.readCounters.length - 1;
-                }
-                else
-                {
-                    MultiDevice.writeCounters.push(WhatsAppAPI.Communication.socket.$8);
-                    foundCounterIndex = MultiDevice.writeCounters.length - 1;
-                }
+                var foundCounterIndex = MultiDevice.addNoiseCounterSlot(isIncoming, socketCounter);
+                MultiDevice.noteNoiseCounterSuccess(isIncoming, foundCounterIndex);
+                return {ok: true, decryptedFrame: socketDecryptedFrame, counterIndex: 0};
             }
         }
-       
     }
 
-    if (foundCounterIndex == -1)
-    {
-        console.warn("WAIncongito: decryption is not working, COUNTER PROBLEM");
-        throw "Couldn't get the correct counter (isIncoming: " + isIncoming + ")" 
-    }
-
-    return foundCounterIndex;
+    console.warn("WAIncognito: decryption is not working, COUNTER PROBLEM");
+    throw waiNoiseError("Couldn't get the correct counter (isIncoming: " + isIncoming + ")");
 }
 
 MultiDevice.testFrameDecryption = async function(counter, key, currentFrame)
@@ -612,20 +589,18 @@ MultiDevice.testFrameDecryption = async function(counter, key, currentFrame)
 
     try
     {
-        var decryptedFrame = await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
+        return await window.crypto.subtle.decrypt(algorithmInfo, key, currentFrame);
     }
     catch (exception)
     {
-        if (exception.name.includes("OperationError"))
+        if (isOperationError(exception))
         {
             // wrong counter
-            return false;
+            return null;
         }
         else
             throw exception;
     }
-
-    return true;
 }
 
 MultiDevice.HMAC_SHA256 = async function(toSign, key)
@@ -662,9 +637,12 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
     binaryReader.writeBuffer(payload);
 
     var startOffset = 3;
-    if (binaryReader._readIndex = 0, binaryReader.readUint16() == 0x5741) startOffset = 0x7; // chat
-    if (binaryReader._readIndex = 0xB, binaryReader.readUint16() == 0x5741) startOffset = 0x12; // chat?ED={routingToken}
-    if (binaryReader._readIndex = 0xD, binaryReader.readUint16() == 0x5741) startOffset = 0x14; // chat?ED={routingToken} version 2
+    binaryReader._readIndex = 0;
+    if (binaryReader.readUint16() == 0x5741) startOffset = 0x7; // chat
+    binaryReader._readIndex = 0xB;
+    if (binaryReader.readUint16() == 0x5741) startOffset = 0x12; // chat?ED={routingToken}
+    binaryReader._readIndex = 0xD;
+    if (binaryReader.readUint16() == 0x5741) startOffset = 0x14; // chat?ED={routingToken} version 2
 
     if (startOffset > 3) MultiDevice.numPacketsSinceHandshake = 0; // client hello
     if (++MultiDevice.numPacketsSinceHandshake > 3) return false;
@@ -698,12 +676,16 @@ MultiDevice.looksLikeHandshakePacket = function(payload)
         if (MultiDevice.readKey != null)
         {
             MultiDevice.prevReadKey = MultiDevice.readKey;
-            MultiDevice.prevWriteKey = MultiDevice.prevWriteKey;
+            MultiDevice.prevWriteKey = MultiDevice.writeKey;
         }
 
         // reset the counters on a new connection to avoid weird stuff
         MultiDevice.readKey = null;
         MultiDevice.writeKey = null;
+        MultiDevice.readCounters = [0];
+        MultiDevice.writeCounters = [0];
+        MultiDevice.readCounterIndex = 0;
+        MultiDevice.writeCounterIndex = 0;
     }
 
     return looksLikeHandshakePacket;
@@ -736,6 +718,29 @@ MultiDevice.counterToIV = function(counter)
     const buffer = new ArrayBuffer(12);
     new DataView(buffer).setUint32(8, counter);
     return new Uint8Array(buffer);
+};
+
+function waiNoiseError(message)
+{
+    var error = new Error(message);
+    error.passthrough = true;
+    return error;
+}
+
+// True when crypto.subtle rejects with the AES-GCM authentication error: the
+// counter is wrong (another socket's frame, or a stale entry).
+function isOperationError(exception)
+{
+    return !!exception && typeof exception.name === "string" && exception.name.includes("OperationError");
+}
+
+MultiDevice.isExpectedNoiseError = function(exception)
+{
+    if (!exception) return false;
+    if (exception.passthrough) return true;
+    if (typeof(exception) == "string") return exception.includes("counter");
+    if (typeof(exception.message) !== "string" || exception.message === "") return false;
+    return exception.message.includes("stream end") || exception.message.includes("counter");
 };
 
 function toArrayBuffer(array)
