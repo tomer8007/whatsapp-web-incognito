@@ -20,14 +20,28 @@
     position: fixed;
     transform: translateY(-50%);
     z-index: 1200;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background: #242728;
-    color: #fff;
-    font-size: 13px;
-    line-height: 18px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--tooltip-background, #242728);
+    color: var(--tooltip-text, #fff);
+    box-shadow: 0 1px 4px rgba(11, 20, 26, .16);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
     white-space: nowrap;
     pointer-events: none;
+    animation: incognito-tooltip-appear .12s ease-out .12s both;
+}
+
+@keyframes incognito-tooltip-appear
+{
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .incognito-menu-tooltip { animation: none; }
 }
 
 .icon-incognito

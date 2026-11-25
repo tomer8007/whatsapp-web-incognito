@@ -186,7 +186,7 @@ async function addIconIfNeeded()
             if (tooltip.isConnected || drop?.isOpened()) return;
             shownMenuTooltip?.hide();
             const rect = button.getBoundingClientRect();
-            tooltip.style.left = rect.right + 10 + "px";
+            tooltip.style.left = rect.right + 4 + "px";
             tooltip.style.top = rect.top + rect.height / 2 + "px";
             document.body.appendChild(tooltip);
             shownMenuTooltip = { target: menuItemElem, hide: hideTooltip };
