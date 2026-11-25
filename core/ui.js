@@ -160,16 +160,27 @@ function onMutationsObserved(mutations)
         }
     }
 
-    const dropdownClasses = UIClassNames.OUTER_DROPDOWN_CLASS.split(/\s+/);
+    const popupSelector = '[data-menu-content="true"] [role="menu"]';
+    const popups = new Set();
     for (const mutation of mutations)
     {
         if (messagePanel?.contains(mutation.target)) continue;
+        const popup = mutation.target.closest?.(popupSelector);
+        if (popup)
+        {
+            popups.add(popup);
+            continue;
+        }
         for (const node of mutation.addedNodes)
         {
-            if (node.nodeName === "DIV" && dropdownClasses.every(className => node.classList.contains(className)))
-                setTimeout(() => document.dispatchEvent(new CustomEvent("onDropdownOpened")), 200);
+            if (node.nodeType !== 1) continue;
+            if (node.matches(popupSelector)) popups.add(node);
+            if (node.firstElementChild)
+                for (const popup of node.querySelectorAll(popupSelector)) popups.add(popup);
         }
     }
+    for (const popup of popups)
+        popup.dispatchEvent(new CustomEvent("onDropdownOpened", { bubbles: true }));
 }
 
 function scanMessageNodes(node)
@@ -193,15 +204,10 @@ function removeMenu()
 {
     if (!menu) return;
 
-    const { target, tooltip, drop, originalClose, closeTimer } = menu;
+    const { target, tooltip, dialog } = menu;
     menu = null;
-    clearTimeout(closeTimer);
-    if (drop)
-    {
-        drop.off("close");
-        drop.close = originalClose;
-        drop.destroy();
-    }
+    if (dialog?.open) dialog.close();
+    dialog?.remove();
     tooltip?.remove();
     target?.remove();
 }
@@ -269,9 +275,12 @@ async function addIconIfNeeded()
         tooltip.textContent = label;
         tooltip.setAttribute("aria-hidden", "true");
         const button = target.firstElementChild;
+        button.setAttribute("aria-haspopup", "dialog");
+        button.setAttribute("aria-controls", "incognito-settings");
+        button.setAttribute("aria-expanded", "false");
         function showTooltip()
         {
-            if (tooltip.isConnected || setup.drop?.isOpened()) return;
+            if (tooltip.isConnected || setup.dialog?.open) return;
             const rect = button.getBoundingClientRect();
             tooltip.style.left = rect.right + 4 + "px";
             tooltip.style.top = rect.top + rect.height / 2 + "px";
@@ -285,74 +294,25 @@ async function addIconIfNeeded()
         button.addEventListener("blur", () => tooltip.remove());
         button.addEventListener("keydown", event => { if (event.key === "Escape") tooltip.remove(); });
 
-        const drop = setup.drop = new Drop({
-            target,
-            content: generateDropContent(options),
-            position: "bottom left",
-            classes: "drop-theme-incognito",
-            openOn: "click",
-            tetherOptions: { offset: "-4px -4px 0 0" },
-        });
-        setup.originalClose = drop.close;
-        drop.close = function ()
-        {
-            if (!drop.isOpened() || setup.closeTimer) return;
-            document.dispatchEvent(new CustomEvent("onIncognitoOptionsClosed"));
-            setup.closeTimer = setTimeout(() =>
-            {
-                setup.closeTimer = null;
-                setup.originalClose.call(drop);
-            }, 100);
-        };
-
-        drop.on("open", function ()
+        button.addEventListener("click", () =>
         {
             tooltip.remove();
-            if (!checkInterception()) return;
+            if (!setup.dialog)
+            {
+                const dialog = setup.dialog = createOptionsDialog(options);
+                dialog.addEventListener("close", () =>
+                {
+                    if (dialog.open) return;
+                    target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito";
+                    button.setAttribute("aria-expanded", "false");
+                });
+                document.body.appendChild(dialog);
+            }
+            if (setup.dialog.open) return;
+            updateSettingsAvailability(setup.dialog);
+            setup.dialog.showModal();
             target.className = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
-            document.dispatchEvent(new CustomEvent("onIncognitoOptionsOpened"));
-        });
-        drop.on("close", () => target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-        const actions = {
-            "#incognito-option-read-confirmations": onReadConfirmaionsTick,
-            "#incognito-option-online-status": onOnlineUpdatesTick,
-            "#incognito-option-typing-status": onTypingUpdatesTick,
-            "#incognito-option-save-deleted-msgs": onSaveDeletedMsgsTick,
-            "#incognito-option-show-device-type": onShowDeviceTypesTick,
-            "#incognito-option-auto-receipt": onAutoReceiptsTick,
-            "#incognito-option-status-downloading": onStatusDownloadingTick,
-            ".incognito-next-button": onNextButtonClicked,
-            ".incognito-back-button": onBackButtonClicked,
-        };
-        for (const [selector, action] of Object.entries(actions))
-            for (const control of drop.content.querySelectorAll(selector))
-                control.addEventListener("click", event => { if (isInterceptionWorking) action(event); });
-        drop.content.querySelector("#incognito-extend-delete").addEventListener("change", event =>
-        {
-            extendedDeletePreference = event.currentTarget.checked;
-            const options = { extendDeleteForEveryone: extendedDeletePreference };
-            browser.runtime.sendMessage({ name: "setOptions", ...options });
-            document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
-        });
-        drop.content.querySelector("#incognito-keep-edits").addEventListener("change", event =>
-        {
-            const options = { keepEditedMessages: event.currentTarget.checked };
-            browser.runtime.sendMessage({ name: "setOptions", ...options });
-            document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
-        });
-        const accentInput = drop.content.querySelector("#incognito-accent-color");
-        function saveAccentColor(color)
-        {
-            applyAccentColor(color);
-            browser.runtime.sendMessage({ name: "setOptions", accentColor: color });
-        }
-        accentInput.addEventListener("input", () => applyAccentColor(accentInput.value));
-        accentInput.addEventListener("change", () => saveAccentColor(accentInput.value));
-        drop.content.querySelector("#incognito-reset-accent").addEventListener("click", () =>
-        {
-            accentInput.value = defaultAccentColor;
-            saveAccentColor("");
+            button.setAttribute("aria-expanded", "true");
         });
     }
     catch (error)
@@ -362,177 +322,160 @@ async function addIconIfNeeded()
     }
 }
 
-function generateDropContent(options)
+function createOptionsDialog(options)
 {
-    const accentColor = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor)
-        ? options.accentColor : defaultAccentColor;
-    var onlineStatusTitle = "Hide \"online\" status";
-    var onlineStatusCaption = "Stops sending presence updates. Will prevent you from seeing others' online status.";
+    const dialog = document.createElement("dialog");
+    dialog.id = "incognito-settings";
+    dialog.className = "incognito-settings";
+    dialog.setAttribute("aria-labelledby", "incognito-settings-title");
+    dialog.innerHTML = generateOptionsContent(options);
 
-    var typingStatusTitle = "Hide \"typing...\" status";
-    var typingStatusCaption = "Stops sending typing updates.";
+    const dismiss = dialog.querySelector(".incognito-settings-close");
+    dismiss.addEventListener("click", () => dialog.close());
+    let backdropPressed = false;
+    dialog.addEventListener("pointerdown", event => { backdropPressed = event.target === dialog; });
+    dialog.addEventListener("click", event =>
+    {
+        if (backdropPressed && event.target === dialog) dialog.close();
+        backdropPressed = false;
+    });
 
-    var readConfirmationsTitle = "Don't send read confirmations";
-    var readConfirmationsCaption = "Blocked messages will be marked with a button.";
-    var readConfirmationsNote = "Also works for stories and audio messages.";
+    const sections = dialog.querySelectorAll("[aria-controls]");
+    for (const section of sections)
+        section.addEventListener("click", () =>
+        {
+            for (const item of sections)
+            {
+                const selected = item === section;
+                item.setAttribute("aria-pressed", String(selected));
+                dialog.querySelector("#" + item.getAttribute("aria-controls")).hidden = !selected;
+            }
+        });
 
-    var deletedMessagesTitle = "Restore deleted messages";
-    var deletedMessagesCaption = "Marks deleted messages in red";
+    for (const control of dialog.querySelectorAll('input[role="switch"]'))
+        control.addEventListener("change", () => savePrivacySetting(control.name, control.checked));
 
-    var showDeviceTypeTitle = "Show device of messages";
-    var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
+    const accentInput = dialog.querySelector("#incognito-accent-color");
+    const accentValue = dialog.querySelector("#incognito-accent-value");
+    let savedAccent = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor)
+        ? options.accentColor : "";
+    function previewAccent(color)
+    {
+        applyAccentColor(color);
+        accentValue.textContent = color.toUpperCase();
+    }
+    function saveAccent(color)
+    {
+        savedAccent = color;
+        previewAccent(color);
+        browser.runtime.sendMessage({ name: "setOptions", accentColor: color });
+    }
+    accentInput.addEventListener("input", () => previewAccent(accentInput.value));
+    accentInput.addEventListener("change", () => saveAccent(accentInput.value));
+    dialog.querySelector("#incognito-reset-accent").addEventListener("click", () =>
+    {
+        accentInput.value = defaultAccentColor;
+        saveAccent("");
+    });
+    dialog.addEventListener("close", () =>
+    {
+        if (dialog.open) return;
+        accentInput.value = savedAccent || defaultAccentColor;
+        previewAccent(savedAccent);
+    });
+    return dialog;
+}
 
-    var autoReceiptTitle = "Auto-Send receipts on reply";
-    var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
+function savePrivacySetting(name, enabled)
+{
+    if (name === "extendDeleteForEveryone") extendedDeletePreference = enabled;
+    if (name === "onlineUpdatesHook")
+        document.dispatchEvent(new CustomEvent(enabled ? "onPresenceOptionTicked" : "onPresenceOptionUnticked"));
+    if (name === "readConfirmationsHook" && !enabled)
+        for (const chat of Array.from(document.getElementsByClassName("icon-meta unread-count incognito")))
+            chat.classList.remove("incognito");
 
-    var allowStatusDownloadTitle = "Allow status downloading";
-    var allowStatusDownloadCaption = "Adds a button to download statuses";
+    const options = { [name]: enabled };
+    browser.runtime.sendMessage({ name: "setOptions", ...options });
+    document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
+}
 
-    var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var onlineUpdatesCheckbox = (options.onlineUpdatesHook ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var showDeviceTypeCheckbox = (options.showDeviceTypes ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
-    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
-        <div class='incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='incognito-mark" + "'> </div>");
+function updateSettingsAvailability(dialog)
+{
+    dialog.querySelector(".incognito-settings-notice").hidden = isInterceptionWorking;
+    for (const control of dialog.querySelectorAll("[data-needs-interception]"))
+        control.disabled = !isInterceptionWorking;
+}
 
+function generateOptionsContent(options)
+{
+    const customAccent = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor);
+    const accent = customAccent ? options.accentColor : defaultAccentColor;
+    const activity = [
+        ["read-confirmations", "readConfirmationsHook", "Block read receipts", "Show a manual Mark as read button. Also applies to statuses and audio messages."],
+        ["online-status", "onlineUpdatesHook", "Hide online status", "Prevents others from seeing when you’re online and hides their online status from you."],
+        ["typing-status", "typingUpdatesHook", "Hide typing status", "Stops sending typing updates."],
+        ["auto-receipt", "autoReceiptOnReplay", "Send read receipts on reply", "Automatically marks the chat as read when you reply."]
+    ];
+    const messages = [
+        ["save-deleted-msgs", "saveDeletedMsgs", "Restore deleted messages", "Keeps deleted messages visible and marks them in red."],
+        ["show-device-type", "showDeviceTypes", "Show device of messages", "Shows whether new messages were sent from a phone or a computer."],
+        ["status-downloading", "allowStatusDownload", "Allow status downloading", "Adds a download button to statuses."],
+        ["extend-delete", "extendDeleteForEveryone", "Extend “Delete for everyone” to 3 days", "Applies to your messages. WhatsApp may reject the request, and recipients may still see the message.", false],
+        ["keep-edits", "keepEditedMessages", "Keep edited messages", "Saves text and caption edits in this browser and adds an Edit history button.", false]
+    ];
+    function renderGroup(title, items)
+    {
+        return `<h3>${title}</h3>${items.map(([id, name, label, description, needsInterception = true]) => `
+            <label class="incognito-setting">
+                <span class="incognito-setting-copy">
+                    <span id="incognito-${id}-label">${label}</span>
+                    <span id="incognito-${id}-note">${description}</span>
+                </span>
+                <input id='incognito-${id}' type='checkbox' ${options[name] === true ? "checked" : ""}
+                    aria-describedby='incognito-${id}-note' aria-labelledby="incognito-${id}-label"
+                    name="${name}" role="switch" ${needsInterception ? "data-needs-interception" : ""}>
+            </label>`).join("")}`;
+    }
 
-    var dropContent = ` \
-        <div class='incognito-options-container' dir='ltr'>
-            <div class='incognito-options-title'>Incognito options</div>
-
-            <div class='incognito-options-navigator'>
-                <div class='incognito-options-view-container' style='transform: translate(0%, 0%);' id='incognito-options-view1'>
-
-                    <div class='incognito-options-view'>
-                        <!---- First Page ---!>
-
-                        <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${readConfirmationCheckbox}
-                                </div>
-                            </div>
-                            <span>${readConfirmationsTitle}</span>
-                            <div class='incognito-options-description'>${readConfirmationsCaption}<br>${readConfirmationsNote}</div>
+    return `
+        <div class="incognito-settings-shell" dir="ltr">
+            <header class="incognito-settings-header">
+                <h1 id="incognito-settings-title">Incognito options</h1>
+                <button class="incognito-settings-close" type="button" aria-label="Close settings" autofocus>×</button>
+            </header>
+            <div class="incognito-settings-layout">
+                <nav class="incognito-settings-nav" aria-label="Settings sections">
+                    <button type="button" aria-controls="incognito-privacy" aria-pressed="true">Privacy</button>
+                    <button type="button" aria-controls="incognito-appearance" aria-pressed="false">Appearance</button>
+                </nav>
+                <section class="incognito-settings-pane" id="incognito-privacy" aria-labelledby="incognito-privacy-title">
+                    <h2 id="incognito-privacy-title">Privacy</h2>
+                    <p class="incognito-settings-notice" role="status" hidden>Some settings are unavailable until the extension connects to WhatsApp. If this persists, reload WhatsApp Web.</p>
+                    ${renderGroup("Activity", activity)}
+                    ${renderGroup("Messages and statuses", messages)}
+                </section>
+                <section class="incognito-settings-pane" id="incognito-appearance" aria-labelledby="incognito-appearance-title" hidden>
+                    <h2 id="incognito-appearance-title">Appearance</h2>
+                    <div class="incognito-appearance-card">
+                        <div class="incognito-setting-copy">
+                            <label for="incognito-accent-color">Accent color</label>
+                            <span>Changes highlights, links, and selected filters.</span>
                         </div>
-
-                        <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${onlineUpdatesCheckbox}
-                                </div>
-                            </div>
-                            <span>${onlineStatusTitle}</span>
-                            <div class='incognito-options-description'>${onlineStatusCaption}</div>
+                        <div class="incognito-accent-actions">
+                            <input id='incognito-accent-color' type='color' value='${accent}'>
+                            <span id="incognito-accent-value">${customAccent ? accent.toUpperCase() : ""}</span>
+                            <button id="incognito-reset-accent" type="button">Use default</button>
                         </div>
-                        <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${typingUpdatesCheckbox}
-                                </div>
-                            </div>
-                            <span>${typingStatusTitle}</span>
-                            <div class='incognito-options-description'>${typingStatusCaption}</div>
-                        </div>
-                        <div class='incognito-options-item incognito-accent-picker'>
-                            <label for='incognito-accent-color'>Accent color</label>
-                            <input id='incognito-accent-color' type='color' value='${accentColor}'>
-                            <button id='incognito-reset-accent' type='button'>Use default</button>
+                        <div class="incognito-accent-preview" aria-label="Accent shades">
+                            <div><span class="incognito-accent-soft"></span>Soft</div>
+                            <div><span class="incognito-accent-base"></span>Accent</div>
+                            <div><span class="incognito-accent-strong"></span>Strong</div>
                         </div>
                     </div>
-                    <div class='incognito-options-footer'>
-                        <button class='incognito-next-button'>Next &gt;</button>
-                    </div>
-                </div>
-
-                <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
-
-                    <!---- Second Page ---!>
-                    
-                    <div class='incognito-options-view' id='incognito-options-view-internal2'>
-                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${saveDeletedMessagesCheckbox}
-                                </div>
-                            </div>
-                            <span>${deletedMessagesTitle}</span>
-                            <div class='incognito-options-description'>${deletedMessagesCaption}</div>
-                        </div>
-                        <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${showDeviceTypeCheckbox}
-                                </div>
-                            </div>
-                            <span>${showDeviceTypeTitle}</span>
-                            <div class='incognito-options-description'>${showDeviceTypeCaption}</div>
-                        </div>
-                        <div id='incognito-option-auto-receipt' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${autoReceiptCheckbox}
-                                </div>
-                            </div>
-                            <span>${autoReceiptTitle}</span>
-                            <div class='incognito-options-description'>${autoReceiptCaption}</div>
-                        </div>
-                    </div>
-                    <div class='incognito-options-footer'>
-                        <button class='incognito-back-button'>&lt; Back</button>
-                        <button class='incognito-next-button'>Next &gt;</button>
-                    </div>
-                </div>
-
-                <div class='incognito-options-view-container' style='transform: translate(200%, 0%);' id='incognito-options-view3'>
-
-                    <!---- Third Page ---!>
-                    <div class='incognito-options-view' id='incognito-options-view-internal3'>
-                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito'>
-                                <div class='checkbox-incognito ${allowStatusDownloadCheckbox}
-                                </div>
-                            </div>
-                            <span>${allowStatusDownloadTitle}</span>
-                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
-                        </div>
-                        <label id='incognito-option-extend-delete' class='incognito-options-item'>
-                            <input id='incognito-extend-delete' type='checkbox' ${options.extendDeleteForEveryone === true ? "checked" : ""}
-                                aria-describedby='incognito-extend-delete-note'>
-                            <span>Extend “Delete for everyone” to 3 days</span>
-                            <span id='incognito-extend-delete-note' class='incognito-options-description'>
-                                Applies to messages you sent. WhatsApp may reject the request, and recipients may still see the message.
-                            </span>
-                        </label>
-                        <label id='incognito-option-keep-edits' class='incognito-options-item'>
-                            <input id='incognito-keep-edits' type='checkbox' ${options.keepEditedMessages === true ? "checked" : ""}
-                                aria-describedby='incognito-keep-edits-note'>
-                            <span>Keep edited messages</span>
-                            <span id='incognito-keep-edits-note' class='incognito-options-description'>
-                                Save text and caption edits in this browser and show an Edit history button on the message.
-                            </span>
-                        </label>
-                    </div>
-                    <div class='incognito-options-footer'>
-                        <button class='incognito-back-button'>&lt; Back</button>
-                    </div>
-                </div>
-
-                
+                </section>
             </div>
-            
         </div>`;
-
-    return dropContent;
 }
 
 document.addEventListener('onMarkAsReadClick', function (e)
@@ -581,6 +524,7 @@ document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
+    if (menu?.dialog?.open) updateSettingsAvailability(menu.dialog);
 });
 
 function getTheme() 
@@ -597,223 +541,6 @@ function getTheme()
         else 
             return "\"light\"";
     }
-}
-
-//
-// Drop handlers
-//
-
-function onReadConfirmaionsTick()
-{
-    var readConfirmationsHook = false;
-    var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        readConfirmationsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-
-        readConfirmationsHook = false;
-        var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
-        for (var i = 0; i < redChats.length; i++)
-        {
-            redChats[i].className = 'icon-meta unread-count';
-        }
-    }
-    browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
-    }));
-}
-
-function onOnlineUpdatesTick()
-{
-    var onlineUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-online-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = true;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = false;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
-    }
-    browser.runtime.sendMessage({ name: "setOptions", onlineUpdatesHook: onlineUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ onlineUpdatesHook: onlineUpdatesHook })
-    }));
-}
-
-function onTypingUpdatesTick()
-{
-    var typingUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-typing-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", typingUpdatesHook: typingUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ typingUpdatesHook: typingUpdatesHook })
-    }));
-}
-
-function onSaveDeletedMsgsTick()
-{
-    var saveDeletedMsgsHook = false;
-    var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
-    }));
-}
-
-function onShowDeviceTypesTick()
-{
-    var showDeviceTypes = false;
-    var checkbox = document.querySelector("#incognito-option-show-device-type .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        showDeviceTypes = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        showDeviceTypes = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", showDeviceTypes: showDeviceTypes });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ showDeviceTypes: showDeviceTypes })
-    }));
-}
-
-function onAutoReceiptsTick()
-{
-    var autoReceipts = false;
-    var checkbox = document.querySelector("#incognito-option-auto-receipt .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        autoReceipts = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        autoReceipts = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", autoReceiptOnReplay: autoReceipts });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ autoReceiptOnReplay: autoReceipts })
-    }));
-}
-
-function onStatusDownloadingTick()
-{
-    var allowStatusDownload = false;
-    var checkbox = document.querySelector("#incognito-option-status-downloading .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        allowStatusDownload = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        allowStatusDownload = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", allowStatusDownload: allowStatusDownload });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
-    }));
-}
-
-function onNextButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX - 100) + "%, 0%)";
-        }
-    });
-}
-
-function onBackButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX + 100) + "%, 0%)";
-        }
-    });
-}
-
-function getTransformXOfView(view)
-{
-    if (view.style.transform.includes("translate"))
-        return parseInt(view.style.transform.match(/-?[\d\.]+/g)[0]);
-    else
-        return 0;
 }
 
 //
@@ -863,9 +590,6 @@ function onNewMessageNodeAdded(messageNode)
 
 function editHistoryMessageId(node)
 {
-    const ownId = node.getAttribute("data-id");
-    if (ownId) return ownId;
-
     let id;
     const receive = event => { if (typeof event.detail === "string") id = event.detail; };
     document.addEventListener("onEditHistoryMessageId", receive);
@@ -878,8 +602,11 @@ function editHistoryMessageId(node)
         document.removeEventListener("onEditHistoryMessageId", receive);
     }
 
+    if (id) return id;
+    const ownId = node.getAttribute("data-id");
+    if (ownId) return ownId;
     const wrapper = node.closest("[data-id]");
-    return id ?? (wrapper?.querySelectorAll(messageSelector).length === 1 ? wrapper.getAttribute("data-id") : undefined);
+    return wrapper?.querySelectorAll(messageSelector).length === 1 ? wrapper.getAttribute("data-id") : undefined;
 }
 
 function refreshEditHistoryButtons(id)
@@ -893,7 +620,7 @@ async function renderEditHistoryButton(node, requestedId)
 {
     if (!node.isConnected || node.querySelector(messageSelector)) return;
     const id = editHistoryMessageId(node);
-    const existing = node.querySelector(":scope > .incognito-edit-history");
+    const existing = node.querySelector(".incognito-edit-history");
     if (id && existing?.dataset.messageId === id) return;
     existing?.remove();
     if (requestedId && id !== requestedId) return;
@@ -914,14 +641,16 @@ async function renderEditHistoryButton(node, requestedId)
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = "Edit history";
-            button.className = "incognito-edit-history";
+            button.className = id.startsWith("true_")
+                ? "incognito-edit-history incognito-edit-history-outgoing" : "incognito-edit-history";
             button.dataset.messageId = id;
             button.addEventListener("click", event =>
             {
                 event.stopPropagation();
                 if (keepEditedMessages && editHistoryMessageId(node) === id) showEditHistory(id);
             });
-            node.appendChild(button);
+            const bubble = node.querySelector('[data-testid="msg-container"]') ?? node;
+            bubble.appendChild(button);
         };
         request.onerror = () =>
         {
@@ -1327,25 +1056,11 @@ async function markMessageNodeDeviceIfPossible(messageNode, msgID, dataID)
     }
 }
 
-function tickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " incognito-checked");
-    checkmark.classList.add("incognito-marked");
-}
-
-function untickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    var chekmarkClass = checkmark.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("incognito-checked").join(" "));
-    checkmark.setAttribute("class", chekmarkClass.replace("incognito-marked", ""));
-}
-
 function checkInterception()
 {
     if (!isInterceptionWorking)
     {
+        if (menu?.dialog?.open) return false;
         Swal.fire({
             title: "Oops...",
             html: "WhatsApp Web Incognito has detected that interception is not working. \
@@ -1374,9 +1089,6 @@ function updateUIClassNamesIfNeeded()
         UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf x10w94by x1qhh985 x14e42zd xtnn1bt x9v5kkp xmw7ebm xrdum7p xt8t1vi x1xc408v x129tdwq x15urzxu xh8yej3 x1iorvi4 x11lfxj5 xjkvuk6 x135b78x"; // inner button
         UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = " xhslqc4 x14ug900 xzs022t"; // you need to find the differences between the classes groups
         
-        UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
-        UIClassNames.DROPDOWN_CLASS = "_ap4_";
-        UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_ _asi6 _ap51";
         
         UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the span class that sets background-color to var(--unread-marker-background)
         

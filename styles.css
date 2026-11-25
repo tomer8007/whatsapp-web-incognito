@@ -15,6 +15,25 @@
   margin: auto;
 }
 
+.incognito-chat-read-menu-fallback
+{
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 16px;
+    text-align: start;
+}
+
+.incognito-chat-read-menu-icon
+{
+    display: block;
+    flex: none;
+    background: currentColor;
+    mask: center / 80% no-repeat;
+}
+
 .incognito-menu-tooltip
 {
     position: fixed;
@@ -70,208 +89,324 @@
 	background-color: rgba(255,0,0,0.3) !important;
 }
 
-.drop-theme-incognito.drop-element
+/* Settings dialog */
+.incognito-settings
 {
-  z-index: 1100 !important;
-	transform-origin: left top 0px;
-  background: var(--app-background);
-}
-
-/*
-  Checkbox
-*/
-
-:root {
-  --primary-rgb: #008069;
-  --checkbox-background: #008069;
-  --checkbox-mark: #f4f9f8;
-}
-
-.checkbox-container-incognito
-{
-    display: block;
-    height: 18px;
-    width: 18px;
-    cursor: pointer;
-}
-
-.checkbox-incognito
-{
-  border-bottom-left-radius: 2px;
-  border-bottom-right-radius: 2px;
-  border-top-right-radius: 2px;
-  border-top-left-radius: 2px;
-  transition-duration: .14s,.14s;
-  transition-property: background-color,border-color;
-  pointer-events: none;
-  background-color: transparent;
-  box-sizing: border-box;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-left: 2px solid rgba(var(--primary-rgb),.75);
-  border-right: 2px solid rgba(var(--primary-rgb),.75);
-  border-bottom: 2px solid rgba(var(--primary-rgb),.75);
-  border-top: 2px solid rgba(var(--primary-rgb),.75);
-}
-
-.incognito-checked
-{
-  border-left-color: var(--checkbox-background);
-  border-right-color: var(--checkbox-background);
-  border-bottom-color: var(--checkbox-background);
-  border-top-color: var(--checkbox-background);
-
-  background-color: var(--checkbox-background);
-}
-
-.incognito-mark
-{
-  width: 12px;
-  height: 10px;
-  opacity: 0;
-  background-color: var(--checkbox-mark);
-  clip-path: polygon(0 45%, 13% 30%, 38% 60%, 87% 0, 100% 15%, 38% 100%);
-}
-
-@keyframes ckbox_animation
-{
-  from { transform: scale(0.6); }
-  to { transform: scale(1); }
-}
-
-.incognito-marked
-{
-  animation-duration: .16s;
-  animation-fill-mode: forwards;
-  animation-timing-function: ease-out;
-  animation-name: ckbox_animation;
-  opacity: 1 !important;
-}
-
-/*
-  Options
-*/
-
-.incognito-options-container
-{
-    display: flex !important;
-    flex-direction: column;
-    background-color: var(--dropdown-background) !important;
-    padding: 9px 0 !important;
-    font-family: Roboto, sans-serif !important;
-    font-size: 14.5px !important;
-    color: var(--primary) !important;
-    max-width: 500px !important;
-    border-radius: 3px !important;
-    box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.26), 0 2px 10px 0 rgba(0, 0, 0, 0.16) !important;
-
-    height: 310px;
-    width: 370px;
+    --settings-surface: var(--WDS-surface-default, #fff);
+    --settings-text: var(--WDS-content-default, #171b1a);
+    --settings-muted: var(--WDS-content-deemphasized, #4f5c57);
+    --settings-line: var(--WDS-lines-divider, rgba(31, 45, 39, .14));
+    --settings-rail: var(--WDS-background-wash-inset, #f5f7f5);
+    --settings-accent: var(--WDS-accent, #1daa61);
+    --settings-soft: var(--WDS-accent-deemphasized, #d9fdd3);
+    --settings-strong: var(--WDS-accent-emphasized, #15603e);
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    padding: 0;
+    width: min(46rem, calc(100% - 2rem));
+    height: min(40rem, calc(100dvh - 2rem));
+    max-width: none;
+    max-height: none;
     overflow: hidden;
+    border: 1px solid var(--settings-line);
+    border-radius: 22px;
+    background: var(--settings-surface);
+    color: var(--settings-text);
+    box-shadow: 0 24px 90px rgba(9, 21, 17, .32);
+    font: 14px/1.45 system-ui, sans-serif;
+    opacity: 0;
+    transform: translateY(10px) scale(.98);
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1),
+        display 220ms allow-discrete, overlay 220ms allow-discrete;
 }
 
-.incognito-options-navigator
+.incognito-settings[open]
 {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
+    opacity: 1;
+    transform: none;
 }
 
-.incognito-options-footer
+.incognito-settings::backdrop
 {
-  display: flex;
-  flex: none;
-  align-items: center;
-  padding: 8px 20px;
+    background: rgba(10, 21, 18, .45);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 220ms ease, display 220ms allow-discrete, overlay 220ms allow-discrete;
 }
 
-.incognito-next-button,
-.incognito-back-button
+.incognito-settings[open]::backdrop { opacity: 1; }
+
+@starting-style
 {
-  color: inherit;
+    .incognito-settings[open] { opacity: 0; transform: translateY(10px) scale(.98); }
+    .incognito-settings[open]::backdrop { opacity: 0; }
 }
 
-.incognito-next-button
+.incognito-settings-shell
 {
-  margin-inline-start: auto;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
 }
 
-.incognito-options-view
-{
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.incognito-options-view-container
-{
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  transition: all .1s ease;
-}
-
-.incognito-options-title
-{
-    flex: none;
-    height: 50px !important;
-    padding: 12.5px 18px 0 24px !important;
-    font-size: 20px !important;
-}
-
-.incognito-options-item
-{
-    padding: 10px 25px !important;
-}
-
-.incognito-accent-picker
+.incognito-settings-header
 {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--settings-line);
+}
+
+.incognito-settings h1,
+.incognito-settings h2,
+.incognito-settings h3 { margin: 0; font-weight: 650; }
+.incognito-settings h1 { font-size: 20px; letter-spacing: -.025em; }
+.incognito-settings h2 { font-size: 23px; letter-spacing: -.025em; }
+.incognito-settings h3 { margin: 22px 0 6px; font-size: 13px; color: var(--settings-muted); }
+
+.incognito-settings button
+{
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.incognito-settings button:hover { background: var(--WDS-surface-emphasized, var(--settings-line)); }
+.incognito-settings :is(button, input):focus-visible { outline: 2px solid var(--settings-strong); outline-offset: 2px; }
+
+.incognito-settings .incognito-settings-close
+{
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    font-size: 27px;
+    line-height: 1;
+    color: var(--settings-muted);
+}
+
+.incognito-settings-layout
+{
+    display: grid;
+    grid-template-columns: 155px minmax(0, 1fr);
+    min-height: 0;
+}
+
+.incognito-settings-nav
+{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 12px;
+    border-inline-end: 1px solid var(--settings-line);
+    background: var(--settings-rail);
+}
+
+.incognito-settings-nav button
+{
+    min-height: 42px;
+    padding: 8px 12px;
+    text-align: start;
+    font-weight: 600;
+}
+
+.incognito-settings-nav button[aria-pressed="true"]
+{
+    background: var(--settings-soft);
+    color: var(--settings-strong);
+}
+
+.incognito-settings-pane
+{
+    min-height: 0;
+    padding: 20px 26px 24px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    animation: incognito-settings-pane-in 150ms ease-out;
+}
+
+.incognito-settings [hidden] { display: none; }
+
+@keyframes incognito-settings-pane-in
+{
+    from { opacity: .5; }
+    to { opacity: 1; }
+}
+
+.incognito-settings-notice
+{
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-radius: 9px;
+    background: var(--settings-rail);
+    color: var(--settings-muted);
+    font-size: 13px;
+}
+
+.incognito-setting
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--settings-line);
+    cursor: pointer;
+}
+
+.incognito-setting:has(input:disabled) { opacity: .58; cursor: default; }
+
+.incognito-setting-copy
+{
+    display: grid;
+    gap: 3px;
+    font-weight: 600;
+}
+
+.incognito-setting-copy > :last-child
+{
+    color: var(--settings-muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+.incognito-setting input
+{
+    appearance: none;
+    box-sizing: border-box;
+    display: grid;
+    align-items: center;
+    flex: none;
+    width: 42px;
+    height: 24px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--settings-muted);
+    border-radius: 99px;
+    background: var(--settings-rail);
+    cursor: inherit;
+    transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.incognito-setting input::before
+{
+    content: "";
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--settings-muted);
+    transition: transform 180ms ease, background-color 160ms ease;
+}
+
+.incognito-setting input:checked { background: var(--settings-accent); border-color: var(--settings-strong); }
+.incognito-setting input:checked::before
+{
+    background: var(--WDS-content-on-accent, #fff);
+    transform: translateX(18px);
+}
+
+.incognito-appearance-card
+{
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid var(--settings-line);
+    border-radius: 14px;
+}
+
+.incognito-accent-actions
+{
+    display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    align-items: center;
+    gap: 10px;
 }
 
 #incognito-accent-color
 {
-    width: 30px;
-    height: 24px;
+    box-sizing: border-box;
+    width: 46px;
+    height: 34px;
+    padding: 3px;
+    border: 1px solid var(--settings-line);
+    border-radius: 8px;
+    background: var(--settings-rail);
     cursor: pointer;
 }
 
-#incognito-reset-accent
+#incognito-accent-value { color: var(--settings-muted); font-variant-numeric: tabular-nums; }
+#incognito-accent-value:empty { display: none; }
+
+.incognito-settings #incognito-reset-accent
 {
+    min-height: 36px;
     margin-inline-start: auto;
-    color: inherit;
-    text-decoration: underline;
-    cursor: pointer;
+    padding: 5px 10px;
+    border: 1px solid var(--settings-line);
 }
 
-.incognito-options-item[id^="incognito-option-"]
+.incognito-accent-preview
 {
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
-    align-items: center;
-    gap: 5px 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    color: var(--settings-muted);
+    font-size: 12px;
 }
 
-#incognito-extend-delete,
-#incognito-keep-edits
+.incognito-accent-preview span
 {
-    width: 18px;
-    height: 18px;
-    margin: 0;
-    accent-color: var(--checkbox-background);
+    box-sizing: border-box;
+    display: block;
+    height: 34px;
+    margin-bottom: 4px;
+    border: 1px solid var(--settings-line);
+    border-radius: 7px;
+}
+
+.incognito-accent-soft { background: var(--settings-soft); }
+.incognito-accent-base { background: var(--settings-accent); }
+.incognito-accent-strong { background: var(--settings-strong); }
+
+@media (max-width: 540px)
+{
+    .incognito-settings { border-radius: 16px; }
+    .incognito-settings-header { padding-inline: 16px; }
+    .incognito-settings-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    .incognito-settings-nav { flex-direction: row; padding: 8px 12px; border-inline-end: 0; border-bottom: 1px solid var(--settings-line); }
+    .incognito-settings-pane { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .incognito-settings,
+    .incognito-settings::backdrop,
+    .incognito-setting input,
+    .incognito-setting input::before { transition: none; }
+    .incognito-settings-pane { animation: none; }
+}
+
+@media (forced-colors: active)
+{
+    .incognito-setting input { appearance: auto; }
+    .incognito-setting input::before { content: none; }
+    .incognito-settings-nav button[aria-pressed="true"] { border: 1px solid Highlight; }
 }
 
 .incognito-edit-history
 {
     display: block;
-    margin: 2px 6px;
+    width: max-content;
+    margin: 2px 0 0;
     padding: 2px 6px;
     border-radius: 4px;
     background: var(--WDS-surface-emphasized, rgba(127, 127, 127, .16));
@@ -280,24 +415,17 @@
     cursor: pointer;
 }
 
+.incognito-edit-history-outgoing
+{
+    margin-inline-start: auto;
+}
+
 .incognito-edit-history-list
 {
     padding-inline-start: 1.5em;
     text-align: start;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-}
-
-.incognito-options-item:hover
-{ 
-    background-color: var(--WDS-surface-emphasized) !important;
-}
-
-.incognito-options-description
-{
-    grid-column: 2;
-    font-size: 12px !important;
-    opacity: 0.8 !important;
 }
 
 :root[data-incognito-accent]
@@ -333,8 +461,6 @@
     --WDS-persistent-always-branded: rgba(var(--WDS-persistent-always-branded-RGB), var(--incognito-branded-opacity, 1)) !important;
     --WDS-persistent-activity-indicator-RGB: var(--WDS-accent-RGB) !important;
     --WDS-persistent-activity-indicator: var(--WDS-accent) !important;
-    --checkbox-background: var(--WDS-accent);
-    --checkbox-mark: var(--WDS-content-on-accent);
 }
 
 .sweet-alert

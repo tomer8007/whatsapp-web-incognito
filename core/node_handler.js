@@ -177,7 +177,7 @@ NodeHandler.onSentEncNode = async function (encNode, remoteJid)
         {
             var chat = await getChatByJID(remoteJid);
             if (!chat?.lastReceivedKey) return encNode;
-            var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
+            var data = { jid: chat.id.toString(), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
             setTimeout(function () { document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) })); }, 600);
         }
     }

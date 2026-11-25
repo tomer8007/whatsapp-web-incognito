@@ -3,44 +3,18 @@
 // --------------------
 
 
-// TODO: this function currently does not support @lid JIDs, 
-//       I need to find a way to get the React element's LID
 function findChatEntryElementForJID(jid)
 {
-    var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
-    var blockedChat = null;
-    for (var i = 0; i < chatsShown.length; i++)
+    const target = normalizeJID(jid.toString());
+    for (const entry of document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS))
     {
-        var reactElement = FindReact(chatsShown[i]);
-        if (reactElement.props.data == undefined) continue;
-
-        var data = reactElement.props.data;
-        if (data.data == undefined && data.chat == undefined) continue;
-
-        var id = data.data ? data.data.id : data.chat.id;
-
-        var matches = false;
-        if (typeof (jid) == "object" && id == jid)
-        {
-            matches = true;
-        }
-        else if (typeof (jid) == "string" && id.user == jid.split("@")[0].split(":")[0])
-        {
-            matches = true;
-        }
-        else if (data.data.accountLid && data.data.accountLid.toString() == jid)
-        {
-            matches = true;
-        }
-
-        if (matches)
-        {
-            blockedChat = chatsShown[i];
-            break;
-        }
+        const data = FindReact(entry)?.props?.data;
+        const chat = data?.data ?? data?.chat;
+        if (!chat?.id) continue;
+        if (normalizeJID(chat.id.toString()) === target ||
+            (chat.accountLid && normalizeJID(chat.accountLid.toString()) === target)) return entry;
     }
-
-    return blockedChat;
+    return null;
 }
 
 function getModuleFinder()
@@ -139,11 +113,13 @@ async function getChatByJID(jid)
     if (jid == undefined) debugger;
     jid = normalizeJID(jid);
 
-    if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
+    const api = window.WhatsAppAPI;
+    if (api?.ChatCollection)
     {
         try
         {
-            var chat = await WhatsAppAPI.ChatCollection.find(jid);
+            const wid = api.WAWebWidFactory?.createWid?.(jid) ?? jid;
+            const chat = api.ChatCollection.get?.(wid) ?? await api.ChatCollection.find?.(wid);
             if (chat != null)
                 return chat;
         }
@@ -380,17 +356,6 @@ function FindReact(dom, traverseUp = 0)
     }
 
     return reactElement;
-}
-
-function fixCSSPositionIfNeeded(drop)
-{
-    if (drop.style.transform.includes("translateX") && drop.style.transform.includes("translateY"))
-    {
-        var matrix = drop.style.transform.replace(/[^0-9\-.,\s]/g, '').split(' ');
-        drop.style.left = matrix[0] + "px";
-        drop.style.top = matrix[1] + "px";
-        drop.style.transform = "";
-    }
 }
 
 function getCSSRule(ruleName)

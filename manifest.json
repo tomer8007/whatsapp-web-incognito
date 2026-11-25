@@ -23,8 +23,8 @@
   	},
   	{
       "matches": ["https://web.whatsapp.com/*"],
-      "js": ["core/ui_class_names.js", "core/utils.js", "core/ui.js", "lib/drop.js", "lib/sweetalert.min.js","core/status_download.js"],
-  	  "css": ["styles.css", "lib/css/drop-theme-basic.css"]
+      "js": ["core/ui_class_names.js", "core/utils.js", "core/ui.js", "lib/sweetalert.min.js","core/status_download.js"],
+      "css": ["styles.css"]
   	}
    ],
 	"web_accessible_resources": [{"resources": ["lib/*", "core/*", "images/*"], "matches": ["https://web.whatsapp.com/*"]} ]

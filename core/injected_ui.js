@@ -34,7 +34,7 @@ function updateEditHistoryListener()
 
 function serializedEditMessageId(key)
 {
-    const id = typeof key === "string" ? key : key?._serialized;
+    const id = typeof key === "string" ? key : key?._serialized ?? key?.$1;
     return typeof id === "string" && id.length > 0 && id.length <= 512 ? id : undefined;
 }
 
@@ -60,10 +60,11 @@ function recordMessageEdit(message, field, next, previous)
     queueMicrotask(async () =>
     {
         if (!keepEditedMessages || message.type === "revoked") return;
-        if (!keyAtChange && !timestampAtChange && (message[field] ?? "") !== next) return;
-        const key = keyAtChange ?? message.latestEditMsgKey;
+        const isCurrentChange = (message[field] ?? "") === next;
+        if (!keyAtChange && !timestampAtChange && !isCurrentChange) return;
+        const key = isCurrentChange ? message.latestEditMsgKey ?? keyAtChange : keyAtChange;
         const editId = serializedEditMessageId(key) ?? serializedEditMessageId(key?.id);
-        const timestamp = timestampAtChange || message.latestEditSenderTimestampMs;
+        const timestamp = isCurrentChange ? message.latestEditSenderTimestampMs || timestampAtChange : timestampAtChange;
         if (typeof editId !== "string" && !(Number.isFinite(timestamp) && timestamp > 0)) return;
         try
         {
@@ -197,22 +198,6 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
 });
 
 
-document.addEventListener('onIncognitoOptionsOpened', function (e)
-{
-    var drop = document.querySelector(".drop.drop-theme-incognito");
-    if (!drop) return;
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-});
-
-document.addEventListener('onIncognitoOptionsClosed', function (e)
-{
-    var drop = document.querySelector(".drop.drop-theme-incognito");
-    if (!drop) return;
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-});
-
 document.addEventListener('onOptionsUpdate', function (e)
 {
     // update enforcing globals
@@ -293,59 +278,108 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     for (const alias of aliases) blockedChats.set(alias, aliases);
 });
 
-document.addEventListener('onDropdownOpened', function (e)
+const chatReadMenuClass = "incognito-chat-read-menu-item";
+const chatMenuItemSelector = 'button[role="menuitem"]';
+const chatReadIcon = document.currentScript?.src
+    ? new URL("../images/incognito_gray_24_hollow_9.svg", document.currentScript.src).href : "";
+
+document.addEventListener("onDropdownOpened", async function (event)
 {
-    // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
+    const menu = event.target;
+    if (!globalThis.readConfirmationsHookEnabled || !menu.matches?.('[role="menu"]') ||
+        menu.querySelector("." + chatReadMenuClass)) return;
 
-    var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
-    if (dropdown == undefined) return;
-
-    var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
-    var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
-    if (reactResult == null) return;
-    if (reactResult.props.children.length == 0) return;
-
-    var reactMenuItems = reactResult.props.children[0].props.children;
-    if (reactMenuItems.props == undefined) return;
-    
-    reactMenuItems = reactMenuItems.props.children;
-
-    var markAsReadButton = null;
-    var props = null;
-    for (var i = 0; i < reactMenuItems.length; i++)
+    for (const row of menu.querySelectorAll(chatMenuItemSelector))
     {
-        if (reactMenuItems[i] == null) continue;
-
-        if (reactMenuItems[i].key == "mark_unread")
+        if (row.closest('[role="menu"]') !== menu) continue;
+        const fiberKey = Object.keys(row).find(key => key.startsWith("__reactFiber$"));
+        for (let fiber = row[fiberKey]; fiber && fiber.stateNode !== menu; fiber = fiber.return)
         {
-            markAsReadButton = menuItems[i];
-            props = reactMenuItems[i].props;
-            break;
-        }
-    }
+            if (fiber.key !== "mark_unread") continue;
+            const props = fiber.memoizedProps;
+            const chatId = props?.chatId?._serialized ?? props?.chatId?.toString();
+            const chat = props?.chat ?? (typeof chatId === "string" && chatId.includes("@") ? await getChatByJID(chatId) : null);
+            if (!chat?.id || !(chat.unreadCount > 0) || !row.isConnected ||
+                row.closest('[role="menu"]') !== menu || menu.querySelector("." + chatReadMenuClass)) return;
 
-    if (props != null)
-    {
-        var name = props.chat.name;
-        var formattedName = props.chat.contact.name;
-        var jid = getJidOfChat(props.chat);
-        var lastMessageIndex = props.chat.lastReceivedKey.id;
-        var unreadCount = props.chat.unreadCount;
-        var isGroup = props.chat.isGroup;
-        var fromMe = props.chat.lastReceivedKey.fromMe;
-        if (unreadCount > 0)
-        {
-            // this is mark-as-read button, not mark-as-unread
-            markAsReadButton.addEventListener("mousedown", function (e)
+            const button = createChatReadMenuItem(row);
+            button.addEventListener("click", click =>
             {
-                var data = { name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, 
-                            fromMe: fromMe, unreadCount: unreadCount, isGroup: isGroup };
-
-                document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
+                click.stopPropagation();
+                row.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+                requestMarkAsRead(chat);
             });
+            row.after(button);
+            menu.addEventListener("keydown", navigateChatReadMenuItem, true);
+            return;
         }
     }
 });
+
+function createChatReadMenuItem(row)
+{
+    const button = row.cloneNode(true);
+    const label = "Mark as read · Incognito";
+    const nativeLabel = row.getAttribute("aria-label")?.trim();
+    const nativeIcon = button.querySelector("svg");
+    const text = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+    let labelNode = text.nextNode();
+    while (labelNode && labelNode.textContent.trim() !== nativeLabel) labelNode = text.nextNode();
+
+    const icon = document.createElement("span");
+    icon.className = "incognito-chat-read-menu-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.style.maskImage = 'url("' + chatReadIcon + '")';
+    icon.style.width = (Number(nativeIcon?.getAttribute("width")) || 20) + "px";
+    icon.style.height = (Number(nativeIcon?.getAttribute("height")) || 20) + "px";
+
+    button.classList.add(chatReadMenuClass);
+    button.tabIndex = -1;
+    button.removeAttribute("aria-describedby");
+    button.setAttribute("aria-label", label);
+    if (nativeIcon && labelNode)
+    {
+        nativeIcon.replaceWith(icon);
+        labelNode.textContent = label;
+    }
+    else
+    {
+        button.classList.add("incognito-chat-read-menu-fallback");
+        button.replaceChildren(icon, label);
+    }
+    for (const element of [button, ...button.querySelectorAll("[id], [data-testid], [data-icon]")])
+    {
+        element.removeAttribute("id");
+        element.removeAttribute("data-testid");
+        element.removeAttribute("data-icon");
+    }
+    return button;
+}
+
+function navigateChatReadMenuItem(event)
+{
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const menu = event.currentTarget;
+    const items = Array.from(menu.querySelectorAll(chatMenuItemSelector + ":not(:disabled)"))
+        .filter(item => item.closest('[role="menu"]') === menu && item.getAttribute("aria-disabled") !== "true");
+    const current = items.indexOf(event.target);
+    if (current === -1) return;
+    const next = items[current + (event.key === "ArrowDown" ? 1 : -1)];
+    if (!next || !(event.target.classList.contains(chatReadMenuClass) || next.classList.contains(chatReadMenuClass))) return;
+    event.preventDefault();
+    event.stopPropagation();
+    next.focus();
+}
+
+function requestMarkAsRead(chat)
+{
+    const data = {
+        jid: chat.id.toString(),
+        unreadCount: chat.unreadCount,
+        formattedName: chat.contact?.name || chat.name || "This contact"
+    };
+    document.dispatchEvent(new CustomEvent("onMarkAsReadClick", { detail: JSON.stringify(data) }));
+}
 
 document.addEventListener('sendReadConfirmation', async function (e)
 {
@@ -353,10 +387,15 @@ document.addEventListener('sendReadConfirmation', async function (e)
     if (typeof data?.jid !== "string" || !data.jid.includes("@")) return;
     const jid = normalizeJID(data.jid);
     const chat = await getChatByJID(jid);
-    if (!chat) return;
+    if (!chat)
+    {
+        console.warn("WAIncognito: Could not find the chat for Mark as read");
+        return;
+    }
     const chatJid = getJidOfChat(chat);
 
-    const receiptJids = new Set([jid, chatJid, normalizeJID(chat.id.toString())]);
+    const aliases = blockedChats.get(jid) ?? blockedChats.get(chatJid);
+    const receiptJids = new Set([jid, chatJid, normalizeJID(chat.id.toString()), ...(aliases ?? [])]);
     const exception = { expiresAt: Date.now() + 2000 };
     function expireException()
     {
@@ -366,10 +405,11 @@ document.addEventListener('sendReadConfirmation', async function (e)
     const expiryTimer = setTimeout(expireException, 2000);
     for (const receiptJid of receiptJids) readReceiptExceptions.set(receiptJid, exception);
     const unreadCount = chat.unreadCount;
-    const aliases = blockedChats.get(jid);
     try
     {
-        await window.WhatsAppAPI.Seen.sendSeen({chat});
+        const marked = await window.WhatsAppAPI.Seen.sendSeen({ chat, afterAvailable: false });
+        if (marked === false || (unreadCount > 0 && chat.unreadCount >= unreadCount))
+            throw new Error("WhatsApp did not update the unread count");
     }
     catch (error)
     {
@@ -379,10 +419,9 @@ document.addEventListener('sendReadConfirmation', async function (e)
         return;
     }
 
-    if (aliases && blockedChats.get(jid) === aliases)
-        for (const alias of aliases) blockedChats.delete(alias);
-    if (chat.unreadCount === unreadCount)
-        chat.unreadCount = Math.max(0, unreadCount - (data.unreadCount ?? 0));
+    if (aliases)
+        for (const alias of aliases)
+            if (blockedChats.get(alias) === aliases) blockedChats.delete(alias);
     const warningMessage = document.getElementsByClassName("incognito-message")[0];
     if (warningMessage?.messageID?.startsWith(chatJid))
     {
@@ -530,15 +569,7 @@ function markChatAsBlocked(chat)
         var sendButton = warningMessage.lastChild;
         sendButton.setAttribute('class', 'incognito-send-button');
         sendButton.innerHTML = "Mark as read";
-        sendButton.onclick = function ()
-        {
-            var data = {
-                name: chat.name, jid: getJidOfChat(chat), lastMessageIndex: chat.lastReceivedKey.id,
-                fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
-                formattedName: chat.contact.name
-            };
-            document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
-        };
+        sendButton.onclick = () => requestMarkAsRead(chat);
 
         warningMessage.messageID = messageID;
 
