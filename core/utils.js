@@ -129,12 +129,6 @@ function getCurrentChat()
     return chat;
 }
 
-function getCurrentChatPanel()
-{
-    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    return elements[0];
-}
-
 function isChatBlocked(jid)
 {
     return Boolean(jid && blockedChats.has(normalizeJID(jid)));
@@ -232,18 +226,6 @@ function openMessageArchive(name)
         messageArchives.set(name, connection);
     }
     return messageArchives.get(name);
-}
-
-function showToast(message)
-{
-    var appElement = document.getElementsByClassName("app-wrapper-web")[0];
-    var toast = document.createElement("div");
-    toast.setAttribute("class", "f1UZe");
-    toast.style.transformOrigin = "left top";
-    toast.innerHTML = "<div class=\"hYvJ8\">" + message + "</div>";
-    appElement.insertBefore(toast, appElement.firstChild);
-    Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-    setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
 }
 
 function exportIdbDatabase(idbDatabase) 

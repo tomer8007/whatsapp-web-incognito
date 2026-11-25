@@ -712,44 +712,6 @@ function getTransformXOfView(view)
 }
 
 //
-//    Safety Delay
-//
-function onSafetyDelayChanged(event)
-{
-    if (isSafetyDelayValid(event.srcElement.value))
-    {
-        var delay = parseInt(event.srcElement.value);
-        document.getElementById("incognito-option-safety-delay").disabled = false;
-        browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-        document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ safetyDelay: delay })
-        }));
-    }
-}
-
-function onSafetyDelayDisabled()
-{
-    document.getElementById("incognito-option-safety-delay").disabled = true;
-    document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ safetyDelay: 0 })
-    }));
-}
-
-function onSafetyDelayEnabled()
-{
-    var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
-    if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
-    document.getElementById("incognito-option-safety-delay").disabled = false;
-    document.getElementById("incognito-radio-disable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {detail: JSON.stringify({ safetyDelay: delay })}));
-}
-
-//
 // Utils
 //
 
@@ -1165,12 +1127,6 @@ function untickCheckbox(checkbox, checkmark)
     checkmark.setAttribute("class", chekmarkClass.replace("incognito-marked", ""));
 }
 
-function isSafetyDelayValid(string)
-{
-    var number = Math.floor(Number(string));
-    return (String(number) === string && number >= 1 && number <= 30) || string == ""
-}
-
 function checkInterception()
 {
     if (!isInterceptionWorking)
@@ -1209,7 +1165,7 @@ function updateUIClassNamesIfNeeded()
         
         UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the span class that sets background-color to var(--unread-marker-background)
         
-        UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class (was used in the past for safety delay feature)
+        UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class
         UIClassNames.INNER_CHAT_PANEL_CLASS = "x3psx0u"; // the innermost chat panel class ('conversation-panel-messages')
         
         UIClassNames.CHAT_ENTRY_CLASS = "x10l6tqk xh8yej3 x1g42fcv "; // the chat entry in the chats list

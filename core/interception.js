@@ -9,11 +9,9 @@ var typingUpdatesHookEnabled = false;
 var saveDeletedMsgsHookEnabled = false;
 var showDeviceTypesEnabled = true;
 var autoReceiptOnReplay = true;
-var safetyDelay = 0;
 
 var isInitializing = true;
 var readReceiptExceptions = new Map();
-var blinkingChats = new Map();
 var blockedChats = new Map();
 var deviceTypesPerMessage = new Map();
 

@@ -19,7 +19,7 @@ var UIClassNames = {};
      
      UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the span class that sets background-color to var(--unread-marker-background)
      
-     UIClassNames.CHAT_PANEL_CLASS = "x9f619 x1n2onr6 x5yr21d x6ikm8r x10wlt62 x17dzmu4 x1i1dayz x2ipvbc xjdofhw xyyilfv x1iyjqo2 xpilrb4 x1t7ytsu x1vb5itz x12xzxwr"; // the outermost chat panel class (was used in the past for safety delay feature)
+     UIClassNames.CHAT_PANEL_CLASS = "x9f619 x1n2onr6 x5yr21d x6ikm8r x10wlt62 x17dzmu4 x1i1dayz x2ipvbc xjdofhw xyyilfv x1iyjqo2 xpilrb4 x1t7ytsu x1vb5itz x12xzxwr"; // the outermost chat panel class
      UIClassNames.INNER_CHAT_PANEL_CLASS = "x10l6tqk x13vifvy x1o0tod xupqr0c x9f619 x78zum5 xdt5ytf xh8yej3 x5yr21d x6ikm8r x1rife3k xjbqb8w x1ewm37j"; // the innermost chat panel class ('conversation-panel-messages')
      
      UIClassNames.CHAT_ENTRY_CLASS = "x10l6tqk xh8yej3 x1g42fcv"; // the chat entry in the chats list
