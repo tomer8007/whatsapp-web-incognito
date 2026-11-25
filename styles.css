@@ -228,6 +228,29 @@
     padding: 10px 25px !important;
 }
 
+.incognito-accent-picker
+{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+#incognito-accent-color
+{
+    width: 30px;
+    height: 24px;
+    cursor: pointer;
+}
+
+#incognito-reset-accent
+{
+    margin-inline-start: auto;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
 .incognito-options-item[id^="incognito-option-"]
 {
     display: grid;
@@ -275,6 +298,43 @@
     grid-column: 2;
     font-size: 12px !important;
     opacity: 0.8 !important;
+}
+
+:root[data-incognito-accent]
+{
+    --incognito-accent-soft-theme-rgb: var(--incognito-accent-soft-rgb);
+    --incognito-accent-strong-theme-rgb: var(--incognito-accent-strong-rgb);
+}
+
+:root[data-incognito-accent]:is(.dark, :has(body.dark, .web.dark))
+{
+    --incognito-accent-soft-theme-rgb: var(--incognito-accent-soft-dark-rgb);
+    --incognito-accent-strong-theme-rgb: var(--incognito-accent-strong-dark-rgb);
+}
+
+:root[data-incognito-accent],
+:root[data-incognito-accent] :is(.x1yxlj09, .color-refresh, .xj6uduu, .x8mwjyx, .x1h89ln0, .xul6ihk, .x1646n1n, .x8rilwt, .xfmqtgv, body.dark, .web.dark)
+{
+    --WDS-accent-RGB: var(--incognito-accent-rgb) !important;
+    --WDS-accent: rgb(var(--WDS-accent-RGB)) !important;
+    --WDS-accent-deemphasized-RGB: var(--incognito-accent-soft-theme-rgb) !important;
+    --WDS-accent-deemphasized: rgb(var(--WDS-accent-deemphasized-RGB)) !important;
+    --WDS-accent-emphasized-RGB: var(--incognito-accent-strong-theme-rgb) !important;
+    --WDS-accent-emphasized: rgb(var(--WDS-accent-emphasized-RGB)) !important;
+    --WDS-content-on-accent-RGB: var(--incognito-accent-text-rgb) !important;
+    --WDS-content-on-accent: rgb(var(--WDS-content-on-accent-RGB)) !important;
+    --WDS-content-action-emphasized-RGB: var(--WDS-accent-emphasized-RGB) !important;
+    --WDS-content-action-emphasized: var(--WDS-accent-emphasized) !important;
+    --WDS-content-external-link-RGB: var(--WDS-accent-emphasized-RGB) !important;
+    --WDS-content-external-link: var(--WDS-accent-emphasized) !important;
+    --WDS-components-filter-surface-selected-RGB: var(--WDS-accent-deemphasized-RGB) !important;
+    --WDS-components-filter-surface-selected: var(--WDS-accent-deemphasized) !important;
+    --WDS-persistent-always-branded-RGB: var(--WDS-accent-RGB) !important;
+    --WDS-persistent-always-branded: rgba(var(--WDS-persistent-always-branded-RGB), var(--incognito-branded-opacity, 1)) !important;
+    --WDS-persistent-activity-indicator-RGB: var(--WDS-accent-RGB) !important;
+    --WDS-persistent-activity-indicator: var(--WDS-accent) !important;
+    --checkbox-background: var(--WDS-accent);
+    --checkbox-mark: var(--WDS-content-on-accent);
 }
 
 .sweet-alert

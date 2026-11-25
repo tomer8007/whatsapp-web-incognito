@@ -11,6 +11,8 @@ let menu;
 const messageSelector = '[data-testid^="conv-msg"]';
 const messageObservation = { childList: true, subtree: true, attributeFilter: ["data-id"] };
 const deviceIconTemplates = new Map();
+const defaultAccentColor = "#1daa61";
+const accentColorPattern = /^#[0-9a-f]{6}$/i;
 let extendedDeletePreference;
 let keepEditedMessages = false;
 const pendingEditHistory = new WeakMap();
@@ -36,7 +38,10 @@ document.addEventListener("onEditHistoryPreferenceRequested", function ()
 
 document.addEventListener("onOptionsUpdate", function (event)
 {
-    const enabled = JSON.parse(event.detail)?.keepEditedMessages;
+    const options = JSON.parse(event.detail);
+    if (typeof options?.readConfirmationsHook === "boolean")
+        document.documentElement?.style.setProperty("--incognito-branded-opacity", options.readConfirmationsHook ? "0.3" : "1");
+    const enabled = options?.keepEditedMessages;
     if (typeof enabled !== "boolean" || enabled === keepEditedMessages) return;
     keepEditedMessages = enabled;
     if (messagePanel?.isConnected)
@@ -57,6 +62,7 @@ function initialize()
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
     {
         extendedDeletePreference = options?.extendDeleteForEveryone === true;
+        applyAccentColor(options?.accentColor);
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
         {
             detail: JSON.stringify(options)
@@ -71,6 +77,40 @@ function initialize()
     if (!document.body) return;
     new MutationObserver(onMutationsObserved).observe(document.body, { childList: true, subtree: true });
     onMutationsObserved([]);
+}
+
+function applyAccentColor(color)
+{
+    const root = document.documentElement;
+    const rgb = typeof color === "string" && accentColorPattern.test(color)
+        ? color.slice(1).match(/../g).map(channel => parseInt(channel, 16))
+        : null;
+    if (!rgb && !root?.hasAttribute("data-incognito-accent")) return;
+
+    const mix = (target, weight) => rgb?.map((channel, index) =>
+        Math.round(channel * weight + target[index] * (1 - weight))).join(", ");
+    const white = [255, 255, 255];
+    const luminance = rgb?.reduce((total, channel, index) =>
+    {
+        const value = channel / 255;
+        const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        return total + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    const shades = {
+        "": rgb?.join(", "),
+        "-soft": mix(white, 0.18),
+        "-strong": mix([0, 0, 0], 0.42),
+        "-soft-dark": mix([17, 27, 33], 0.24),
+        "-strong-dark": mix(white, 0.45),
+        "-text": rgb && (luminance > 0.179 ? "0, 0, 0" : "255, 255, 255")
+    };
+    for (const [shade, value] of Object.entries(shades))
+    {
+        const token = "--incognito-accent" + shade + "-rgb";
+        if (value) root.style.setProperty(token, value);
+        else root.style.removeProperty(token);
+    }
+    root.toggleAttribute("data-incognito-accent", Boolean(rgb));
 }
 
 function onMutationsObserved(mutations)
@@ -301,6 +341,19 @@ async function addIconIfNeeded()
             browser.runtime.sendMessage({ name: "setOptions", ...options });
             document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
         });
+        const accentInput = drop.content.querySelector("#incognito-accent-color");
+        function saveAccentColor(color)
+        {
+            applyAccentColor(color);
+            browser.runtime.sendMessage({ name: "setOptions", accentColor: color });
+        }
+        accentInput.addEventListener("input", () => applyAccentColor(accentInput.value));
+        accentInput.addEventListener("change", () => saveAccentColor(accentInput.value));
+        drop.content.querySelector("#incognito-reset-accent").addEventListener("click", () =>
+        {
+            accentInput.value = defaultAccentColor;
+            saveAccentColor("");
+        });
     }
     catch (error)
     {
@@ -311,6 +364,8 @@ async function addIconIfNeeded()
 
 function generateDropContent(options)
 {
+    const accentColor = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor)
+        ? options.accentColor : defaultAccentColor;
     var onlineStatusTitle = "Hide \"online\" status";
     var onlineStatusCaption = "Stops sending presence updates. Will prevent you from seeing others' online status.";
 
@@ -390,6 +445,11 @@ function generateDropContent(options)
                             </div>
                             <span>${typingStatusTitle}</span>
                             <div class='incognito-options-description'>${typingStatusCaption}</div>
+                        </div>
+                        <div class='incognito-options-item incognito-accent-picker'>
+                            <label for='incognito-accent-color'>Accent color</label>
+                            <input id='incognito-accent-color' type='color' value='${accentColor}'>
+                            <button id='incognito-reset-accent' type='button'>Use default</button>
                         </div>
                     </div>
                     <div class='incognito-options-footer'>

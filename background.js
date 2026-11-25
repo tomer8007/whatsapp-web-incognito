@@ -50,6 +50,11 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         {
             chrome.storage.local.set({ keepEditedMessages: messageEvent.keepEditedMessages });
         }
+        if (typeof messageEvent.accentColor === "string" &&
+            (messageEvent.accentColor === "" || /^#[0-9a-f]{6}$/i.test(messageEvent.accentColor)))
+        {
+            chrome.storage.local.set({ accentColor: messageEvent.accentColor });
+        }
     }
     else if (messageEvent.name == "getOptions")
     {
@@ -72,7 +77,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                                 'autoReceiptOnReplay',
                                 'allowStatusDownload',
                                 'extendDeleteForEveryone',
-                                'keepEditedMessages']).then(function(storage)
+                                'keepEditedMessages',
+                                'accentColor']).then(function(storage)
         {
             if (storage["onlineUpdatesHook"] != undefined)
             {
@@ -117,7 +123,8 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
                 autoReceiptOnReplay: autoReceiptOnReplay,
                 allowStatusDownload: allowStatusDownload,
                 extendDeleteForEveryone: storage.extendDeleteForEveryone === true,
-                keepEditedMessages: storage.keepEditedMessages === true
+                keepEditedMessages: storage.keepEditedMessages === true,
+                accentColor: storage.accentColor ?? ""
             });
         });   
     }
