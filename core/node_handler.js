@@ -72,17 +72,23 @@ NodeHandler.isSentNodeAllowed = function (node)
 
                     // TODO: Is the unsent message problem due to blocking read-self?
                     // why there are read receipts we need to block after sending a message to a lot of people?
-                    setTimeout(function()
+                setTimeout(function()
+                {
+                    if (WhatsAppAPI.Communication)
                     {
-                        if (WhatsAppAPI.Communication)
-                        {
-                            console.log("Clearing ack expections after blocking a receipt.");
-                            // clear expectations for acks that will never be received (becase we blocked them earlier)
-                            WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => !(ack.stanza.attrs.type == "read" && 
-                                                                                                                    ack.stanza.attrs.to.toString() == jid));
-                        }
-            
-                    }, 200);
+                        
+                        WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => {
+                            var isMatch = (ack.stanza && ack.stanza.attrs && ack.stanza.attrs.type == "read" && ack.stanza.attrs.to.toString() == jid);
+                            if (isMatch) {
+                                
+                                if (typeof ack.reject === "function") ack.reject(new Error("Blocked by WAIncognito"));
+                                else if (typeof ack.resolve === "function") ack.resolve();
+                            }
+                            return !isMatch;
+                        });
+                    }
+
+                }, 200);
 
                 }
                 break;

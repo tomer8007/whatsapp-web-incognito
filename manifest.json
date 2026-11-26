@@ -16,6 +16,12 @@
    "host_permissions": ["https://web.whatsapp.com/*"],
    "content_scripts": 
    [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["core/comms_worker_fix.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
   	{
       "matches": ["https://web.whatsapp.com/*"],
   	  "js": ["core_injection.js"],
