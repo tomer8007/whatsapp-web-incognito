@@ -285,7 +285,10 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
             if (fromStatus || key.remoteJid === "status@broadcast")
                 recordBlockedStatusDeletion(key.id);
             else
+            {
                 onDeletionMessageBlocked(message, remoteJid, messageId, key.id);
+                document.dispatchEvent(new CustomEvent("onChatMessageDeletionBlocked"));
+            }
         }
 
         return true;

@@ -15,6 +15,15 @@
   margin: auto;
 }
 
+/* shortcut: match the home shortcut's clip path, update the selector if WhatsApp changes the glyph. */
+:root[data-incognito-hide-meta-ai] button:has(svg [clip-path*="LogoMetaAiColor" i]),
+:root[data-incognito-hide-meta-ai] button[data-navbar-item="true"][aria-label="Meta AI" i],
+/* The sidebar's outer span can still trigger the tooltip when only the button is hidden. */
+:root[data-incognito-hide-meta-ai] span:has(> div > button[data-navbar-item="true"][aria-label="Meta AI" i])
+{
+    display: none !important;
+}
+
 .incognito-chat-read-menu-fallback
 {
     display: flex;
@@ -61,6 +70,34 @@
 @media (prefers-reduced-motion: reduce)
 {
     .incognito-menu-tooltip { animation: none; }
+}
+
+.incognito-message-toast
+{
+    position: fixed;
+    inset-block-start: 16px;
+    inset-inline: 16px;
+    z-index: 1200;
+    width: fit-content;
+    margin-inline: auto;
+    border-radius: 8px;
+    background: var(--tooltip-background, #242728);
+    color: var(--tooltip-text, #fff);
+    box-shadow: 0 2px 8px rgb(11 20 26 / 20%);
+    font-size: 14px;
+    line-height: 20px;
+    pointer-events: none;
+}
+
+.incognito-message-toast:not(:empty)
+{
+    padding: 8px 12px;
+}
+
+.incognito-settings > .incognito-message-toast
+{
+    position: absolute;
+    inset-block-start: 64px;
 }
 
 .icon-incognito
@@ -420,12 +457,37 @@
     margin-inline-start: auto;
 }
 
+.incognito-edit-history-dialog
+{
+    width: min(28rem, calc(100% - 2rem));
+    height: fit-content;
+    max-height: calc(100dvh - 2rem);
+}
+
+.incognito-edit-history-dialog .incognito-settings-shell
+{
+    height: auto;
+}
+
+.incognito-edit-history-dialog .incognito-settings-pane
+{
+    max-height: min(28rem, calc(100dvh - 7rem));
+}
+
 .incognito-edit-history-list
 {
+    margin: 0;
     padding-inline-start: 1.5em;
     text-align: start;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.incognito-edit-history-list li + li
+{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--settings-line);
 }
 
 :root[data-incognito-accent]

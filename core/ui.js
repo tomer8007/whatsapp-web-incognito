@@ -16,6 +16,8 @@ const accentColorPattern = /^#[0-9a-f]{6}$/i;
 let extendedDeletePreference;
 let keepEditedMessages = false;
 const pendingEditHistory = new WeakMap();
+let messageEventToast;
+let messageEventToastTimeout;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
 var renderedMessages = new WeakMap();
@@ -41,6 +43,8 @@ document.addEventListener("onOptionsUpdate", function (event)
     const options = JSON.parse(event.detail);
     if (typeof options?.readConfirmationsHook === "boolean")
         document.documentElement?.style.setProperty("--incognito-branded-opacity", options.readConfirmationsHook ? "0.3" : "1");
+    if (typeof options?.hideMetaAI === "boolean")
+        document.documentElement?.toggleAttribute("data-incognito-hide-meta-ai", options.hideMetaAI);
     const enabled = options?.keepEditedMessages;
     if (typeof enabled !== "boolean" || enabled === keepEditedMessages) return;
     keepEditedMessages = enabled;
@@ -52,9 +56,40 @@ document.addEventListener("onOptionsUpdate", function (event)
         for (const button of messagePanel?.querySelectorAll(".incognito-edit-history") ?? []) button.remove();
 });
 
-document.addEventListener("onEditHistorySaved", event => refreshEditHistoryButtons(event.detail));
+document.addEventListener("onEditHistorySaved", event =>
+{
+    refreshEditHistoryButtons(event.detail);
+    showMessageEventToast("Message edited");
+});
+document.addEventListener("onChatMessageDeletionBlocked", () => showMessageEventToast("Message deletion blocked"));
 
 initialize();
+
+function showMessageEventToast(text)
+{
+    // The settings dialog sits above the page while it is open.
+    const container = menu?.dialog?.open ? menu.dialog : document.body;
+    if (!container) return;
+    if (!messageEventToast)
+    {
+        messageEventToast = document.createElement("div");
+        messageEventToast.className = "incognito-message-toast";
+        messageEventToast.setAttribute("role", "status");
+    }
+    if (messageEventToast.parentNode !== container)
+    {
+        messageEventToast.textContent = "";
+        container.appendChild(messageEventToast);
+    }
+
+    clearTimeout(messageEventToastTimeout);
+    // Let the live region mount before announcing its first update.
+    messageEventToastTimeout = setTimeout(() =>
+    {
+        messageEventToast.textContent = text;
+        messageEventToastTimeout = setTimeout(() => { messageEventToast.textContent = ""; }, 4000);
+    }, 0);
+}
 
 function initialize()
 {
@@ -322,16 +357,9 @@ async function addIconIfNeeded()
     }
 }
 
-function createOptionsDialog(options)
+function bindDialogDismissal(dialog)
 {
-    const dialog = document.createElement("dialog");
-    dialog.id = "incognito-settings";
-    dialog.className = "incognito-settings";
-    dialog.setAttribute("aria-labelledby", "incognito-settings-title");
-    dialog.innerHTML = generateOptionsContent(options);
-
-    const dismiss = dialog.querySelector(".incognito-settings-close");
-    dismiss.addEventListener("click", () => dialog.close());
+    dialog.querySelector(".incognito-settings-close").addEventListener("click", () => dialog.close());
     let backdropPressed = false;
     dialog.addEventListener("pointerdown", event => { backdropPressed = event.target === dialog; });
     dialog.addEventListener("click", event =>
@@ -339,6 +367,16 @@ function createOptionsDialog(options)
         if (backdropPressed && event.target === dialog) dialog.close();
         backdropPressed = false;
     });
+}
+
+function createOptionsDialog(options)
+{
+    const dialog = document.createElement("dialog");
+    dialog.id = "incognito-settings";
+    dialog.className = "incognito-settings";
+    dialog.setAttribute("aria-labelledby", "incognito-settings-title");
+    dialog.innerHTML = generateOptionsContent(options);
+    bindDialogDismissal(dialog);
 
     const sections = dialog.querySelectorAll("[aria-controls]");
     for (const section of sections)
@@ -353,7 +391,7 @@ function createOptionsDialog(options)
         });
 
     for (const control of dialog.querySelectorAll('input[role="switch"]'))
-        control.addEventListener("change", () => savePrivacySetting(control.name, control.checked));
+        control.addEventListener("change", () => saveToggleSetting(control.name, control.checked));
 
     const accentInput = dialog.querySelector("#incognito-accent-color");
     const accentValue = dialog.querySelector("#incognito-accent-value");
@@ -386,7 +424,7 @@ function createOptionsDialog(options)
     return dialog;
 }
 
-function savePrivacySetting(name, enabled)
+function saveToggleSetting(name, enabled)
 {
     if (name === "extendDeleteForEveryone") extendedDeletePreference = enabled;
     if (name === "onlineUpdatesHook")
@@ -424,9 +462,9 @@ function generateOptionsContent(options)
         ["extend-delete", "extendDeleteForEveryone", "Extend “Delete for everyone” to 3 days", "Applies to your messages. WhatsApp may reject the request, and recipients may still see the message.", false],
         ["keep-edits", "keepEditedMessages", "Keep edited messages", "Saves text and caption edits in this browser and adds an Edit history button.", false]
     ];
-    function renderGroup(title, items)
+    function renderSettings(items)
     {
-        return `<h3>${title}</h3>${items.map(([id, name, label, description, needsInterception = true]) => `
+        return items.map(([id, name, label, description, needsInterception = true]) => `
             <label class="incognito-setting">
                 <span class="incognito-setting-copy">
                     <span id="incognito-${id}-label">${label}</span>
@@ -435,7 +473,7 @@ function generateOptionsContent(options)
                 <input id='incognito-${id}' type='checkbox' ${options[name] === true ? "checked" : ""}
                     aria-describedby='incognito-${id}-note' aria-labelledby="incognito-${id}-label"
                     name="${name}" role="switch" ${needsInterception ? "data-needs-interception" : ""}>
-            </label>`).join("")}`;
+            </label>`).join("");
     }
 
     return `
@@ -448,12 +486,15 @@ function generateOptionsContent(options)
                 <nav class="incognito-settings-nav" aria-label="Settings sections">
                     <button type="button" aria-controls="incognito-privacy" aria-pressed="true">Privacy</button>
                     <button type="button" aria-controls="incognito-appearance" aria-pressed="false">Appearance</button>
+                    <button type="button" aria-controls="incognito-misc" aria-pressed="false">Misc</button>
                 </nav>
                 <section class="incognito-settings-pane" id="incognito-privacy" aria-labelledby="incognito-privacy-title">
                     <h2 id="incognito-privacy-title">Privacy</h2>
                     <p class="incognito-settings-notice" role="status" hidden>Some settings are unavailable until the extension connects to WhatsApp. If this persists, reload WhatsApp Web.</p>
-                    ${renderGroup("Activity", activity)}
-                    ${renderGroup("Messages and statuses", messages)}
+                    <h3>Activity</h3>
+                    ${renderSettings(activity)}
+                    <h3>Messages and statuses</h3>
+                    ${renderSettings(messages)}
                 </section>
                 <section class="incognito-settings-pane" id="incognito-appearance" aria-labelledby="incognito-appearance-title" hidden>
                     <h2 id="incognito-appearance-title">Appearance</h2>
@@ -473,6 +514,10 @@ function generateOptionsContent(options)
                             <div><span class="incognito-accent-strong"></span>Strong</div>
                         </div>
                     </div>
+                </section>
+                <section class="incognito-settings-pane" id="incognito-misc" aria-labelledby="incognito-misc-title" hidden>
+                    <h2 id="incognito-misc-title">Misc</h2>
+                    ${renderSettings([["hide-meta-ai", "hideMetaAI", "Hide Meta AI", "Hides Meta AI buttons on the home screen and in the sidebar.", false]])}
                 </section>
             </div>
         </div>`;
@@ -641,6 +686,7 @@ async function renderEditHistoryButton(node, requestedId)
             const button = document.createElement("button");
             button.type = "button";
             button.textContent = "Edit history";
+            button.setAttribute("aria-haspopup", "dialog");
             button.className = id.startsWith("true_")
                 ? "incognito-edit-history incognito-edit-history-outgoing" : "incognito-edit-history";
             button.dataset.messageId = id;
@@ -688,7 +734,26 @@ async function showEditHistory(id)
                     last = text;
                 }
             }
-            Swal.fire({ title: "Edit history", html: list, confirmButtonText: "Close" });
+            let dialog = document.getElementById("incognito-edit-history-dialog");
+            if (!dialog)
+            {
+                dialog = document.createElement("dialog");
+                dialog.id = "incognito-edit-history-dialog";
+                dialog.className = "incognito-settings incognito-edit-history-dialog";
+                dialog.setAttribute("aria-labelledby", "incognito-edit-history-title");
+                dialog.innerHTML = `
+                    <div class="incognito-settings-shell">
+                        <header class="incognito-settings-header">
+                            <h1 id="incognito-edit-history-title">Edit history</h1>
+                            <button class="incognito-settings-close" type="button" aria-label="Close edit history" autofocus>×</button>
+                        </header>
+                        <div class="incognito-settings-pane"></div>
+                    </div>`;
+                bindDialogDismissal(dialog);
+                document.body.appendChild(dialog);
+            }
+            dialog.querySelector(".incognito-settings-pane").replaceChildren(list);
+            if (!dialog.open) dialog.showModal();
         };
         request.onerror = () => console.error("WAIncognito: Could not load edit history", request.error);
     }
