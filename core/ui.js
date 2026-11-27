@@ -192,6 +192,7 @@ function onMutationsObserved(mutations)
             });
             messageObserver.observe(messagePanel, { ...messageObservation, characterData: keepEditedMessages });
             scanMessageNodes(messagePanel);
+            document.dispatchEvent(new CustomEvent('onPaneChatOpened'));
         }
     }
 

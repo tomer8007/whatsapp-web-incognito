@@ -278,6 +278,19 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     for (const alias of aliases) blockedChats.set(alias, aliases);
 });
 
+document.addEventListener('onPaneChatOpened', function ()
+{
+    const chat = getCurrentChat();
+    if (chat && isChatBlocked(getJidOfChat(chat)))
+    {
+        setTimeout(function ()
+        {
+            if (readConfirmationsHookEnabled && getCurrentChat() === chat && isChatBlocked(getJidOfChat(chat)))
+                markChatAsBlocked(chat);
+        }, 200);
+    }
+});
+
 const chatReadMenuClass = "incognito-chat-read-menu-item";
 const chatMenuItemSelector = 'button[role="menuitem"]';
 const chatReadIcon = document.currentScript?.src
@@ -577,7 +590,10 @@ function markChatAsBlocked(chat)
         // Put that warning in the chat panel, under the unread counter or at the bottom
         //
 
-        var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+        var innerChatPanel = document.querySelector('[data-testid="conversation-panel-messages"]')
+            || document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0]
+            || document.getElementById("main");
+        if (!innerChatPanel) return;
         var unreadMarker = getUnreadMarkerElement(innerChatPanel);
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
