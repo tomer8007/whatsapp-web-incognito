@@ -86,6 +86,7 @@ function onMutationsObserved(mutations)
             });
             messageObserver.observe(messagePanel, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-id"] });
             scanMessageNodes(messagePanel);
+            document.dispatchEvent(new CustomEvent('onPaneChatOpened'));
         }
     }
 

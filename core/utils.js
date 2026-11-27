@@ -118,15 +118,14 @@ function nodeToXML(node)
 
 function getCurrentChat()
 {
-    if (window.WhatsAppAPI &&  WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
-        return WhatsAppAPI.ChatCollection.getActive();
+    const chatCollection = window.WhatsAppAPI?.ChatCollection;
+    if (chatCollection?.getActive) return chatCollection.getActive();
 
     // fallback to old method. TODO: this is not currently working
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    var reactResult = FindReact(elements[0], traverseUp = 2);
-    var chat = reactResult.props.children.props.children.props.chat;
-    
-    return chat;
+    if (!elements[0]) return;
+    var reactResult = FindReact(elements[0], 2);
+    return reactResult?.props?.children?.props?.children?.props?.chat;
 }
 
 function isChatBlocked(jid)

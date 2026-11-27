@@ -66,20 +66,23 @@ NodeHandler.isSentNodeAllowed = function (node)
                     // invoke the callback and fake a failure response from server
                     document.dispatchEvent(new CustomEvent('onReadConfirmationBlocked', { detail: jid }));
 
-                    // TODO: Is the unsent message problem due to blocking read-self?
-                    // why there are read receipts we need to block after sending a message to a lot of people?
-                    setTimeout(function()
+                    setTimeout(function ()
                     {
-                        if (WhatsAppAPI.Communication)
+                        const comms = window.WhatsAppAPI?.Communication;
+                        if (!jid || !Array.isArray(comms?.ackHandlers)) return;
+                        comms.ackHandlers = comms.ackHandlers.filter(ack =>
                         {
-                            console.log("Clearing ack expections after blocking a receipt.");
-                            // clear expectations for acks that will never be received (becase we blocked them earlier)
-                            WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => !(ack.stanza.attrs.type == "read" && 
-                                                                                                                    ack.stanza.attrs.to.toString() == jid));
-                        }
-            
-                    }, 200);
+                            const attrs = ack?.stanza?.attrs;
+                            if (attrs?.type !== (data.type ?? "read") || attrs.to == null
+                                || normalizeJID(attrs.to.toString()) !== jid
+                                || (data.id != null && attrs.id != null && data.id !== attrs.id))
+                                return true;
 
+                            if (typeof ack.reject === "function") ack.reject(new Error("Blocked by WAIncognito"));
+                            else if (typeof ack.resolve === "function") ack.resolve();
+                            return false;
+                        });
+                    }, 200);
                 }
                 break;
 
