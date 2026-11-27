@@ -216,31 +216,6 @@ function onMainUIReady()
     setTimeout(addIconIfNeeded, 1000);
 }
 
-// Puts our icon into WhatsApp's left navigation. WhatsApp wraps its first item (Chats) as
-//   container (the nav items) > DIV (1 child) > SPAN > [item wrapper, ...]
-// and draws the hover tooltip of that first item for everything inside the SPAN, so an icon placed next to the item would show the
-// "Chats" tooltip. When that structure is found, the icon gets a wrapper of its own (a shallow copy of the DIV) as a sibling of the DIV
-// in the container. Otherwise the icon goes right before the first item, as before. Returns "own-entry" or "fallback".
-function placeNavIcon(firstMenuItem, iconElement)
-{
-    try
-    {
-        var span = firstMenuItem.parentElement;
-        var entry = span ? span.parentElement : null;      // the DIV with one child
-        var container = entry ? entry.parentElement : null; // the nav container with several entries
-        if (span && entry && container && container.children.length >= 3 && entry.children.length == 1)
-        {
-            var wrapper = entry.cloneNode(false);
-            wrapper.appendChild(iconElement);
-            container.insertBefore(wrapper, entry);
-            return "own-entry";
-        }
-    }
-    catch (exception) { /* use the fallback below */ }
-    firstMenuItem.parentElement.insertBefore(iconElement, firstMenuItem);
-    return "fallback";
-}
-
 async function addIconIfNeeded()
 {
     if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
@@ -252,7 +227,7 @@ async function addIconIfNeeded()
         var menuItemElem = await generateSVGElement(extensionUrl("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, t("nav.title"), 24, "button");
         menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
 
-        placeNavIcon(firstMenuItem, menuItemElem);
+        firstMenuItem.parentElement.insertBefore(menuItemElem, firstMenuItem);
 
         safeSendMessage({ name: "getOptions" }, function (options)
         {
