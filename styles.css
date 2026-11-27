@@ -15,6 +15,47 @@
   margin: auto;
 }
 
+/* shortcut: match the home shortcut's clip path, update the selector if WhatsApp changes the glyph. */
+:root[data-incognito-hide-meta-ai] button:has(svg [clip-path*="LogoMetaAiColor" i]),
+:root[data-incognito-hide-meta-ai] button[data-navbar-item="true"][aria-label="Meta AI" i],
+/* The sidebar's outer span can still trigger the tooltip when only the button is hidden. */
+:root[data-incognito-hide-meta-ai] span:has(> div > button[data-navbar-item="true"][aria-label="Meta AI" i])
+{
+    display: none !important;
+}
+
+.incognito-contact-privacy-row
+{
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    min-height: 64px;
+    padding-block: 12px;
+    padding-inline: 42px 24px;
+    border: 0;
+    background: transparent;
+    color: var(--WDS-content-default, var(--primary));
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.incognito-contact-privacy-row:hover,
+.incognito-contact-privacy-row:focus-visible
+{
+    background: var(--WDS-surface-emphasized, rgba(127, 127, 127, .12));
+}
+
+.incognito-contact-privacy-row img { flex: none; width: 20px; height: 20px; }
+
+.incognito-contact-options { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.incognito-contact-list { list-style: none; padding: 0; }
+.incognito-contact-list button { width: 100%; padding: 12px; text-align: start; }
+.incognito-contact-actions { display: flex; justify-content: end; gap: 8px; margin-top: 16px; }
+.incognito-contact-actions button { min-height: 40px; padding: 8px 12px; }
+.incognito-settings .incognito-contact-save { background: var(--settings-soft); color: var(--settings-strong); }
+
 .incognito-menu-tooltip
 {
     position: fixed;
@@ -44,6 +85,34 @@
     .incognito-menu-tooltip { animation: none; }
 }
 
+.incognito-message-toast
+{
+    position: fixed;
+    inset-block-start: 16px;
+    inset-inline: 16px;
+    z-index: 1200;
+    width: fit-content;
+    margin-inline: auto;
+    border-radius: 8px;
+    background: var(--tooltip-background, #242728);
+    color: var(--tooltip-text, #fff);
+    box-shadow: 0 2px 8px rgb(11 20 26 / 20%);
+    font-size: 14px;
+    line-height: 20px;
+    pointer-events: none;
+}
+
+.incognito-message-toast:not(:empty)
+{
+    padding: 8px 12px;
+}
+
+.incognito-settings > .incognito-message-toast
+{
+    position: absolute;
+    inset-block-start: 64px;
+}
+
 .icon-incognito
 {
     background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
@@ -70,188 +139,478 @@
 	background-color: rgba(255,0,0,0.3) !important;
 }
 
-.unread-count.blinking
+/* Incognito options */
+.incognito-settings,
+.incognito-quick-options
 {
-	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+    --settings-surface: var(--WDS-surface-default, #fff);
+    --settings-text: var(--WDS-content-default, #171b1a);
+    --settings-muted: var(--WDS-content-deemphasized, #4f5c57);
+    --settings-line: var(--WDS-lines-divider, rgba(31, 45, 39, .14));
+    --settings-rail: var(--WDS-background-wash-inset, #f5f7f5);
+    --settings-accent: var(--WDS-accent, #1daa61);
+    --settings-soft: var(--WDS-accent-deemphasized, #d9fdd3);
+    --settings-strong: var(--WDS-accent-emphasized, #15603e);
+    box-sizing: border-box;
+    position: fixed;
+    border: 1px solid var(--settings-line);
+    background: var(--settings-surface);
+    color: var(--settings-text);
+    font: 14px/1.45 system-ui, sans-serif;
 }
 
-.blinking
+.incognito-quick-options
 {
-	-webkit-animation:blink normal 0.7s infinite ease-in-out;
+    inset: clamp(8px, var(--quick-options-top, 8px), max(8px, calc(100dvh - 21rem)))
+        auto auto clamp(8px, var(--quick-options-left, 8px), max(8px, calc(100% - 19rem - 8px)));
+    width: min(19rem, calc(100% - 16px));
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: 16px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgb(9 21 17 / 24%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease, display 140ms, overlay 140ms;
+    transition-behavior: allow-discrete;
 }
 
-.drop-theme-incognito.drop-element
+.incognito-quick-options:popover-open
 {
-  z-index: 1100 !important;
-	transform-origin: left top 0px;
-  background: var(--app-background);
+    opacity: 1;
+    pointer-events: auto;
 }
 
-/*
-  Checkbox
-*/
-
-:root {
-  --primary-rgb: #008069;
-  --checkbox-background: #008069;
-  --checkbox-mark: #f4f9f8;
+.incognito-quick-header
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin: 0 0 4px;
 }
 
-.checkbox-container-incognito
+.incognito-quick-header h2
 {
-    display: inline-block !important;
-    margin-right: 5px;
-    border-bottom-left-radius: 2px;
-    border-bottom-right-radius: 2px;
-    border-top-right-radius: 2px;
-    border-top-left-radius: 2px;
-    vertical-align: middle;
-    height: 18px;
-    width: 18px;
-    position: relative;
-    cursor: pointer;
-    display: inline-block;
-    transform: translateZ(0);
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650;
 }
 
-.checkbox-incognito
+.incognito-version
 {
-  border-bottom-left-radius: 2px;
-  border-bottom-right-radius: 2px;
-  border-top-right-radius: 2px;
-  border-top-left-radius: 2px;
-  transition-duration: .14s,.14s;
-  transition-property: background-color,border-color;
-  pointer-events: none;
-  background-color: transparent;
-  box-sizing: border-box;
-  height: 100%;
-  position: relative;
-  border-left: 2px solid rgba(var(--primary-rgb),.75);
-  border-right: 2px solid rgba(var(--primary-rgb),.75);
-  border-bottom: 2px solid rgba(var(--primary-rgb),.75);
-  border-top: 2px solid rgba(var(--primary-rgb),.75);
+    color: var(--settings-muted);
+    font-size: 12px;
+    white-space: nowrap;
 }
 
-.incognito-checked
+.incognito-settings
 {
-  border-left-color: var(--checkbox-background);
-  border-right-color: var(--checkbox-background);
-  border-bottom-color: var(--checkbox-background);
-  border-top-color: var(--checkbox-background);
-
-  background-color: var(--checkbox-background);
-}
-
-.incognito-mark
-{
-  height: 10px;
-  width: 5px;
-  left: 4px;
-  top: -1px;
-  position: absolute;
-  opacity: 0;
-  border-left: none;
-  border-bottom: 2px solid var(--checkbox-mark);
-  border-right: 2px solid var(--checkbox-mark);
-  border-top: none;
-  transform: rotate(45deg);
-}
-
-@keyframes ckbox_animation{0%{top:9px;left:6px;width:0;height:0;}100%{top:-1px;left:4px;width:5px;height:10px;}}
-
-.incognito-marked
-{
-  animation-duration: .16s;
-  animation-fill-mode: forwards;
-  animation-timing-function: ease-out;
-  animation-name: ckbox_animation;
-  opacity: 1 !important;
-}
-
-/*
-  Options
-*/
-
-.incognito-options-container
-{
-    display: block !important;
-    background-color: var(--dropdown-background) !important;
-    padding: 9px 0 !important;
-    font-family: Roboto, sans-serif !important;
-    font-size: 14.5px !important;
-    color: var(--primary) !important;
-    max-width: 500px !important;
-    border-radius: 3px !important;
-    box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.26), 0 2px 10px 0 rgba(0, 0, 0, 0.16) !important;
-
-    height: 310px;
-    width: 370px;
+    inset: 0;
+    margin: auto;
+    padding: 0;
+    width: min(46rem, calc(100% - 2rem));
+    height: min(40rem, calc(100dvh - 2rem));
+    max-width: none;
+    max-height: none;
     overflow: hidden;
+    border-radius: 22px;
+    box-shadow: 0 24px 90px rgba(9, 21, 17, .32);
+    opacity: 0;
+    transform: translateY(10px) scale(.98);
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1),
+        display 220ms allow-discrete, overlay 220ms allow-discrete;
 }
 
-.incognito-options-navigator
+.incognito-settings[open]
 {
-  position: relative;
-  overflow: hidden;
-  height: -webkit-fill-available;
+    opacity: 1;
+    transform: none;
 }
 
-.incognito-next-button
+.incognito-settings::backdrop
 {
-  float: right;
-  margin-right: 20px;
-  color: inherit;
+    background: rgba(10, 21, 18, .45);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 220ms ease, display 220ms allow-discrete, overlay 220ms allow-discrete;
 }
 
-.incognito-back-button
+.incognito-settings[open]::backdrop { opacity: 1; }
+
+@starting-style
 {
-  position: absolute;
-  float: left;
-  left: 20px;
-  top: 215px;
-  color: inherit;
+    .incognito-quick-options:popover-open { opacity: 0; }
+    .incognito-settings[open] { opacity: 0; transform: translateY(10px) scale(.98); }
+    .incognito-settings[open]::backdrop { opacity: 0; }
 }
 
-.incognito-options-view
+.incognito-settings-shell
 {
-  position: absolute;
-  left: 0px;
-  right: 0px;
-  transition: all .1s ease;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
 }
 
-.incognito-options-view-container
+.incognito-settings-shell:has(> .incognito-settings-footer)
 {
-  position: absolute;
-  left: 0px;
-  right: 0px;
-  transition: all .1s ease;
+    grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.incognito-options-title
+.incognito-settings-footer
 {
-    height: 50px !important;
-    padding: 12.5px 18px 0 24px !important;
-    font-size: 20px !important;
+    padding: 8px 24px;
+    border-top: 1px solid var(--settings-line);
+    text-align: end;
 }
 
-.incognito-options-item
+.incognito-settings-header
 {
-    padding: 10px 25px !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--settings-line);
 }
 
-.incognito-options-item:hover
-{ 
-    background-color: var(--WDS-surface-emphasized) !important;
-}
+.incognito-settings h1,
+.incognito-settings h2,
+.incognito-settings h3 { margin: 0; font-weight: 650; }
+.incognito-settings h1 { font-size: 20px; letter-spacing: -.025em; }
+.incognito-settings h2 { font-size: 23px; letter-spacing: -.025em; }
+.incognito-settings h3 { margin: 22px 0 6px; font-size: 13px; color: var(--settings-muted); }
 
-.incognito-options-description
+:is(.incognito-settings, .incognito-quick-options) button
 {
-    padding-top: 10px !important;
-    padding-left: 28px !important;
-    font-size: 12px !important;
-    opacity: 0.8 !important;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+:is(.incognito-settings, .incognito-quick-options) button:hover { background: var(--WDS-surface-emphasized, var(--settings-line)); }
+:is(.incognito-settings, .incognito-quick-options) :is(button, input):focus-visible { outline: 2px solid var(--settings-strong); outline-offset: 2px; }
+
+.incognito-quick-options .incognito-quick-more
+{
+    width: 100%;
+    min-height: 40px;
+    margin-top: 8px;
+    color: var(--settings-strong);
+    font-weight: 650;
+}
+
+.incognito-settings .incognito-settings-close
+{
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    font-size: 27px;
+    line-height: 1;
+    color: var(--settings-muted);
+}
+
+.incognito-settings-layout
+{
+    display: grid;
+    grid-template-columns: 155px minmax(0, 1fr);
+    min-height: 0;
+}
+
+.incognito-settings-nav
+{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px 12px;
+    border-inline-end: 1px solid var(--settings-line);
+    background: var(--settings-rail);
+}
+
+.incognito-settings-nav button
+{
+    min-height: 42px;
+    padding: 8px 12px;
+    text-align: start;
+    font-weight: 600;
+}
+
+.incognito-settings-nav button[aria-pressed="true"]
+{
+    background: var(--settings-soft);
+    color: var(--settings-strong);
+}
+
+.incognito-settings-pane
+{
+    min-height: 0;
+    padding: 20px 26px 24px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    animation: incognito-settings-pane-in 150ms ease-out;
+}
+
+:is(.incognito-settings, .incognito-quick-options) [hidden] { display: none; }
+
+@keyframes incognito-settings-pane-in
+{
+    from { opacity: .5; }
+    to { opacity: 1; }
+}
+
+.incognito-settings-notice
+{
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-radius: 9px;
+    background: var(--settings-rail);
+    color: var(--settings-muted);
+    font-size: 13px;
+}
+
+.incognito-setting
+{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--settings-line);
+    cursor: pointer;
+}
+
+.incognito-setting:has(input:disabled) { opacity: .58; cursor: default; }
+
+.incognito-setting-copy
+{
+    display: grid;
+    gap: 3px;
+    font-weight: 600;
+}
+
+.incognito-setting-copy > :nth-child(2)
+{
+    color: var(--settings-muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+.incognito-setting input
+{
+    appearance: none;
+    box-sizing: border-box;
+    display: grid;
+    align-items: center;
+    flex: none;
+    width: 42px;
+    height: 24px;
+    margin: 0;
+    padding: 2px;
+    border: 1px solid var(--settings-muted);
+    border-radius: 99px;
+    background: var(--settings-rail);
+    cursor: inherit;
+    transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.incognito-setting input::before
+{
+    content: "";
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--settings-muted);
+    transition: transform 180ms ease, background-color 160ms ease;
+}
+
+.incognito-setting input:checked { background: var(--settings-accent); border-color: var(--settings-strong); }
+.incognito-setting input:checked::before
+{
+    background: var(--WDS-content-on-accent, #fff);
+    transform: translateX(18px);
+}
+
+.incognito-appearance-card
+{
+    display: grid;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 18px;
+    border: 1px solid var(--settings-line);
+    border-radius: 14px;
+}
+
+.incognito-accent-actions
+{
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+#incognito-accent-color
+{
+    box-sizing: border-box;
+    width: 46px;
+    height: 34px;
+    padding: 3px;
+    border: 1px solid var(--settings-line);
+    border-radius: 8px;
+    background: var(--settings-rail);
+    cursor: pointer;
+}
+
+#incognito-accent-value { color: var(--settings-muted); font-variant-numeric: tabular-nums; }
+#incognito-accent-value:empty { display: none; }
+
+.incognito-settings #incognito-reset-accent
+{
+    min-height: 36px;
+    margin-inline-start: auto;
+    padding: 5px 10px;
+    border: 1px solid var(--settings-line);
+}
+
+.incognito-accent-preview
+{
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    color: var(--settings-muted);
+    font-size: 12px;
+}
+
+.incognito-accent-preview span
+{
+    box-sizing: border-box;
+    display: block;
+    height: 34px;
+    margin-bottom: 4px;
+    border: 1px solid var(--settings-line);
+    border-radius: 7px;
+}
+
+.incognito-accent-soft { background: var(--settings-soft); }
+.incognito-accent-base { background: var(--settings-accent); }
+.incognito-accent-strong { background: var(--settings-strong); }
+
+@media (max-width: 540px)
+{
+    .incognito-settings { border-radius: 16px; }
+    .incognito-settings-header { padding-inline: 16px; }
+    .incognito-settings-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+    .incognito-settings-nav { flex-direction: row; flex-wrap: wrap; padding: 8px 12px; border-inline-end: 0; border-bottom: 1px solid var(--settings-line); }
+    .incognito-settings-pane { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .incognito-quick-options,
+    .incognito-settings,
+    .incognito-settings::backdrop,
+    .incognito-setting input,
+    .incognito-setting input::before { transition: none; }
+    .incognito-settings-pane { animation: none; }
+}
+
+@media (forced-colors: active)
+{
+    .incognito-setting input { appearance: auto; }
+    .incognito-setting input::before { content: none; }
+    .incognito-settings-nav button[aria-pressed="true"] { border: 1px solid Highlight; }
+}
+
+.incognito-edit-history
+{
+    display: block;
+    width: max-content;
+    margin: 2px 0 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--WDS-surface-emphasized, rgba(127, 127, 127, .16));
+    color: var(--primary);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.incognito-edit-history-outgoing
+{
+    margin-inline-start: auto;
+}
+
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog)
+{
+    width: min(28rem, calc(100% - 2rem));
+    height: fit-content;
+    max-height: calc(100dvh - 2rem);
+}
+
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog) .incognito-settings-shell
+{
+    height: auto;
+}
+
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog) .incognito-settings-pane
+{
+    max-height: min(28rem, calc(100dvh - 7rem));
+}
+
+.incognito-edit-history-list
+{
+    margin: 0;
+    padding-inline-start: 1.5em;
+    text-align: start;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.incognito-edit-history-list li + li
+{
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--settings-line);
+}
+
+:root[data-incognito-accent]
+{
+    --incognito-accent-soft-theme-rgb: var(--incognito-accent-soft-rgb);
+    --incognito-accent-strong-theme-rgb: var(--incognito-accent-strong-rgb);
+}
+
+:root[data-incognito-accent]:is(.dark, :has(body.dark, .web.dark))
+{
+    --incognito-accent-soft-theme-rgb: var(--incognito-accent-soft-dark-rgb);
+    --incognito-accent-strong-theme-rgb: var(--incognito-accent-strong-dark-rgb);
+}
+
+:root[data-incognito-accent],
+:root[data-incognito-accent] :is(.x1yxlj09, .color-refresh, .xj6uduu, .x8mwjyx, .x1h89ln0, .xul6ihk, .x1646n1n, .x8rilwt, .xfmqtgv, body.dark, .web.dark)
+{
+    --WDS-accent-RGB: var(--incognito-accent-rgb) !important;
+    --WDS-accent: rgb(var(--WDS-accent-RGB)) !important;
+    --WDS-accent-deemphasized-RGB: var(--incognito-accent-soft-theme-rgb) !important;
+    --WDS-accent-deemphasized: rgb(var(--WDS-accent-deemphasized-RGB)) !important;
+    --WDS-accent-emphasized-RGB: var(--incognito-accent-strong-theme-rgb) !important;
+    --WDS-accent-emphasized: rgb(var(--WDS-accent-emphasized-RGB)) !important;
+    --WDS-content-on-accent-RGB: var(--incognito-accent-text-rgb) !important;
+    --WDS-content-on-accent: rgb(var(--WDS-content-on-accent-RGB)) !important;
+    --WDS-content-action-emphasized-RGB: var(--WDS-accent-emphasized-RGB) !important;
+    --WDS-content-action-emphasized: var(--WDS-accent-emphasized) !important;
+    --WDS-content-external-link-RGB: var(--WDS-accent-emphasized-RGB) !important;
+    --WDS-content-external-link: var(--WDS-accent-emphasized) !important;
+    --WDS-components-filter-surface-selected-RGB: var(--WDS-accent-deemphasized-RGB) !important;
+    --WDS-components-filter-surface-selected: var(--WDS-accent-deemphasized) !important;
+    --WDS-persistent-always-branded-RGB: var(--WDS-accent-RGB) !important;
+    --WDS-persistent-always-branded: rgba(var(--WDS-persistent-always-branded-RGB), var(--incognito-branded-opacity, 1)) !important;
+    --WDS-persistent-activity-indicator-RGB: var(--WDS-accent-RGB) !important;
+    --WDS-persistent-activity-indicator: var(--WDS-accent) !important;
 }
 
 .sweet-alert
@@ -302,31 +661,6 @@ Messages
 	margin-top: 12px;
 }
 
-.incognito-cancel-button 
-{
-	display: inline; 
-	cursor: pointer;
-	margin-left: 10px;
-    box-sizing: border-box;
-    height: 19px;
-    min-width: 19px;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(255,0,0,0.3);
-    color: rgb(255, 255, 255);
-    font-size: 12px;
-    font-weight: 500;
-    line-height: normal;
-    vertical-align: top;
-    padding: 0px 5px;
-    border-radius: 11px;
-}
-
-.incognito-cancel-button:hover
-{
-	background-color: rgba(255,0,0,1.0);
-}
-
 .incognito-send-button 
 {
 	display: inline; 
@@ -347,94 +681,11 @@ Messages
     border-radius: 11px;
 }
 
+.incognito-send-button[hidden] { display: none; }
+
 .incognito-send-button:hover
 {
 	background-color: rgba(0,255,0,0.6);
-}
-
-@keyframes blink {
-    0% {
-           background-color: rgba(9, 210, 97, 0.3)
-    }
-    50% {
-           background-color: rgba(9, 210, 97, 1.0)
-    }
-    100% {
-           background-color: rgba(9, 210, 97, 0.3)
-    }
-}
-
-@keyframes click-wave {
-  0% {
-    height: 20px;
-    width: 20px;
-    opacity: 0.35;
-    position: relative;
-  }
-  100% {
-    height: 100px;
-    width: 100px;
-    margin-left: -40px;
-    margin-top: -40px;
-    opacity: 0;
-  }
-}
-
-.radio-input {
-  -webkit-appearance: none;
-  appearance: none;
-  position: relative;
-  height: 15px;
-  width: 15px;
-  transition: all 0.15s ease-out 0s;
-  background: #cbd1d8;
-  top: 3px;
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  display: inline-block;
-  margin-right: 0.5rem;
-  outline: none;
-  position: relative;
-  z-index: 1000;
-  border-radius: 50%;
-}
-.radio-input:hover {
-  background: #9faab7;
-}
-.radio-input:checked {
-  background: #40e0d0;
-}
-.radio-input:checked::before {
-  height: 15px;
-  width: 15px;
-  position: absolute;
-  content: '';
-  display: inline-block;
-  font-size: 26px;
-  text-align: center;
-  line-height: 18px;
-}
-.radio-input:checked::after {
-  -webkit-animation: click-wave 0.65s;
-  -moz-animation: click-wave 0.65s;
-  animation: click-wave 0.65s;
-  background: #40e0d0;
-  content: '';
-  display: block;
-  position: relative;
-  z-index: 100;
-  border-radius: 50%;
-}
-
-input[type=number]::-webkit-inner-spin-button {
-  opacity: 1;
-}
-
-.seconds-incognito-input {
-	width: 40px;
-	margin-left: 7px;
-	margin-right: 7px;
 }
 
 [deleted-message="true"] {
@@ -488,6 +739,20 @@ input[type=number]::-webkit-inner-spin-button {
 
 #status-download-fail-button{
   width: 100px;
+}
+
+.status-deletion-incognito
+{
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: white;
+  background: #8a2d2d;
+  z-index: 1000;
+  pointer-events: none;
 }
 
 .incognito-view-once-learn-more{

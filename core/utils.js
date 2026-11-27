@@ -3,44 +3,18 @@
 // --------------------
 
 
-// TODO: this function currently does not support @lid JIDs, 
-//       I need to find a way to get the React element's LID
 function findChatEntryElementForJID(jid)
 {
-    var chatsShown = document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS);
-    var blockedChat = null;
-    for (var i = 0; i < chatsShown.length; i++)
+    const target = normalizeJID(jid.toString());
+    for (const entry of document.getElementsByClassName(UIClassNames.CHAT_ENTRY_CLASS))
     {
-        var reactElement = FindReact(chatsShown[i]);
-        if (reactElement.props.data == undefined) continue;
-
-        var data = reactElement.props.data;
-        if (data.data == undefined && data.chat == undefined) continue;
-
-        var id = data.data ? data.data.id : data.chat.id;
-
-        var matches = false;
-        if (typeof (jid) == "object" && id == jid)
-        {
-            matches = true;
-        }
-        else if (typeof (jid) == "string" && id.user == jid.split("@")[0].split(":")[0])
-        {
-            matches = true;
-        }
-        else if (data.data.accountLid && data.data.accountLid.toString() == jid)
-        {
-            matches = true;
-        }
-
-        if (matches)
-        {
-            blockedChat = chatsShown[i];
-            break;
-        }
+        const data = FindReact(entry)?.props?.data;
+        const chat = data?.data ?? data?.chat;
+        if (!chat?.id) continue;
+        if (normalizeJID(chat.id.toString()) === target ||
+            (chat.accountLid && normalizeJID(chat.accountLid.toString()) === target)) return entry;
     }
-
-    return blockedChat;
+    return null;
 }
 
 function getModuleFinder()
@@ -118,35 +92,19 @@ function nodeToXML(node)
 
 function getCurrentChat()
 {
-    if (window.WhatsAppAPI &&  WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.getActive)
-        return WhatsAppAPI.ChatCollection.getActive();
+    const chatCollection = window.WhatsAppAPI?.ChatCollection;
+    if (chatCollection?.getActive) return chatCollection.getActive();
 
     // fallback to old method. TODO: this is not currently working
     var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    var reactResult = FindReact(elements[0], traverseUp = 2);
-    var chat = reactResult.props.children.props.children.props.chat;
-    
-    return chat;
-}
-
-function getCurrentChatPanel()
-{
-    var elements = document.getElementsByClassName(UIClassNames.CHAT_PANEL_CLASS);
-    return elements[0];
+    if (!elements[0]) return;
+    var reactResult = FindReact(elements[0], 2);
+    return reactResult?.props?.children?.props?.children?.props?.chat;
 }
 
 function isChatBlocked(jid)
 {
-    var user = jid.split("@")[0].split(":")[0];
-
-    for (jid in blockedChats)
-    {
-        var possibleLid = blockedChats[jid].accountLid ? blockedChats[jid].accountLid.toString() : "";
-        if (jid.split("@")[0].split(":")[0] == user || possibleLid.split("@")[0].split(":")[0] == user)
-            return true;
-    }
-
-    return false;
+    return Boolean(jid && blockedChats.has(normalizeJID(jid)));
 }
 
 async function getChatByJID(jid)
@@ -154,11 +112,13 @@ async function getChatByJID(jid)
     if (jid == undefined) debugger;
     jid = normalizeJID(jid);
 
-    if (window.WhatsAppAPI && WhatsAppAPI.ChatCollection && WhatsAppAPI.ChatCollection.find)
+    const api = window.WhatsAppAPI;
+    if (api?.ChatCollection)
     {
         try
         {
-            var chat = await WhatsAppAPI.ChatCollection.find(jid);
+            const wid = api.WAWebWidFactory?.createWid?.(jid) ?? jid;
+            const chat = api.ChatCollection.get?.(wid) ?? await api.ChatCollection.find?.(wid);
             if (chat != null)
                 return chat;
         }
@@ -170,18 +130,9 @@ async function getChatByJID(jid)
 
     // try to get it thorugh GUI
     var chatElem = findChatEntryElementForJID(jid);
-    if (chatElem != null)
-    {
-        var data = FindReact(chatElem).props.data;
-        if (data.data) chat = data.data;
-        else chat = data.chat;
-    }
-    else
-    {
-        chat = chats[jid];
-    }
-
-    return chat;
+    if (chatElem == null) return;
+    const data = FindReact(chatElem)?.props?.data;
+    return data?.data ?? data?.chat;
 }
 
 function getJidOfChat(chat)
@@ -199,6 +150,35 @@ function normalizeJID(jid)
     return prefix + "@" + suffix;
 }
 
+const contactPrivacyByJid = new Map();
+
+function contactPrivacyJid(value)
+{
+    if (typeof value === "string" && /^\d+(?::\d+)?@(?:s\.whatsapp\.net|c\.us|lid)$/.test(value))
+        return normalizeJID(value);
+}
+
+function contactPrivacyJids(chat)
+{
+    return [...new Set([chat.id, chat.accountLid, chat.lid, chat.phoneNumber, chat.contact?.id, chat.contact?.lid, chat.contact?.phoneNumber]
+        .map(id => contactPrivacyJid(id?.toString())).filter(Boolean))];
+}
+
+function getContactPrivacy(jid)
+{
+    return contactPrivacyByJid.get(contactPrivacyJid(jid));
+}
+
+function getChatContactPrivacy(chat)
+{
+    return contactPrivacyJids(chat).map(getContactPrivacy).find(Boolean);
+}
+
+function blocksReadReceipts(jid)
+{
+    return getContactPrivacy(jid)?.readConfirmationsHook ?? readConfirmationsHookEnabled;
+}
+
 const arrayBufferToBase64 = (buffer) =>
 {
     var binary = '';
@@ -211,16 +191,46 @@ const arrayBufferToBase64 = (buffer) =>
     return btoa(binary);
 }
 
-function showToast(message)
+const messageArchives = new Map();
+
+function openMessageArchive(name)
 {
-    var appElement = document.getElementsByClassName("app-wrapper-web")[0];
-    var toast = document.createElement("div");
-    toast.setAttribute("class", "f1UZe");
-    toast.style.transformOrigin = "left top";
-    toast.innerHTML = "<div class=\"hYvJ8\">" + message + "</div>";
-    appElement.insertBefore(toast, appElement.firstChild);
-    Velocity(toast, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-    setTimeout(function () { Velocity(toast, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] }); }, 4000);
+    if (!messageArchives.has(name))
+    {
+        const request = indexedDB.open(name, 2);
+        const connection = new Promise((resolve, reject) =>
+        {
+            request.onupgradeneeded = (event) =>
+            {
+                const store = event.oldVersion === 0
+                    ? request.result.createObjectStore("msgs", { keyPath: "id" })
+                    : request.transaction.objectStore("msgs");
+                if (name === "waIncognitoEditedMsgs") return;
+                const index = name === "viewOnce" ? "id" : "originalID";
+                if (!store.indexNames.contains(index + "_index"))
+                    store.createIndex(index + "_index", index);
+            };
+            request.onerror = () =>
+            {
+                messageArchives.delete(name);
+                reject(request.error);
+            };
+            request.onblocked = () => console.warn("WAIncognito: Archive upgrade is waiting for another tab", name);
+            request.onsuccess = () =>
+            {
+                const db = request.result;
+                db.onclose = () => messageArchives.delete(name);
+                db.onversionchange = () =>
+                {
+                    db.close();
+                    messageArchives.delete(name);
+                };
+                resolve(db);
+            };
+        });
+        messageArchives.set(name, connection);
+    }
+    return messageArchives.get(name);
 }
 
 function exportIdbDatabase(idbDatabase) 
@@ -374,17 +384,6 @@ function FindReact(dom, traverseUp = 0)
     }
 
     return reactElement;
-}
-
-function fixCSSPositionIfNeeded(drop)
-{
-    if (drop.style.transform.includes("translateX") && drop.style.transform.includes("translateY"))
-    {
-        var matrix = drop.style.transform.replace(/[^0-9\-.,\s]/g, '').split(' ');
-        drop.style.left = matrix[0] + "px";
-        drop.style.top = matrix[1] + "px";
-        drop.style.transform = "";
-    }
 }
 
 function getCSSRule(ruleName)

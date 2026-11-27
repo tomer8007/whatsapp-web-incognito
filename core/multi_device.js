@@ -219,7 +219,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     if (!window.WhatsAppAPI) exposeWhatsAppAPI();
 
     var storageModule = window.WhatsAppAPI.SignalStore;
-    storage = storageModule.getSignalProtocolStore();
+    var storage = storageModule.getSignalProtocolStore();
     if (storage == undefined) 
     {
         storageModule.enableMemSignalStore();
@@ -227,12 +227,12 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
     }
 
     var childMessages = messageNode.content;
-    for (var message of childMessages)
+    for (const encryptedNode of childMessages)
     {
-        if (message.tag != "enc") continue;
+        if (encryptedNode.tag != "enc") continue;
 
-        var ciphertext = message.content;
-        var chiphertextType = message.attrs["type"];
+        var ciphertext = encryptedNode.content;
+        var chiphertextType = encryptedNode.attrs["type"];
 
         // decrypt the message
         var address = fromJid;
@@ -273,7 +273,7 @@ MultiDevice.decryptE2EMessagesFromMessageNode = async function(messageNode)
         message = new Uint8Array(message.buffer, message.byteOffset, message.length - message[message.length - 1]);
     
         var decryptedMessage = Message.read(new Pbf(message));
-        decryptedMessages.push(decryptedMessage);
+        decryptedMessages.push({ message: decryptedMessage, encryptedNode });
 
         if (decryptedMessage.senderKeyDistributionMessage)
         {

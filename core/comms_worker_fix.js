@@ -28,7 +28,7 @@
         report.patched = true;
         report.method = method;
         report.patchedAt = Date.now();
-        
+
         return true;
     }
 

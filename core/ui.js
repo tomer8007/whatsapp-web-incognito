@@ -4,25 +4,128 @@ This is a content script responsible for some UI.
 
 
 // Global variables
-var mutationObserver = null;
-let shownMenuTooltip;
+let mainUI;
+let messagePanel;
+let messageObserver;
+let menu;
+const messageSelector = '[data-testid^="conv-msg"]';
+const messageObservation = { childList: true, subtree: true, attributeFilter: ["data-id"] };
+const editHistoryObservation = { ...messageObservation, attributeFilter: ["data-id", "data-testid"], characterData: true };
+const deviceIconTemplates = new Map();
+const defaultAccentColor = "#1daa61";
+const accentColorPattern = /^#[0-9a-f]{6}$/i;
+const quickActivitySettings = [
+    ["read-confirmations", "readConfirmationsHook", "Block read receipts", "Show a manual Mark as read button. Also applies to statuses and audio messages."],
+    ["online-status", "onlineUpdatesHook", "Hide online status", "Prevents others from seeing when you’re online and hides their online status from you."],
+    ["typing-status", "typingUpdatesHook", "Hide typing status", "Stops sending typing updates."]
+];
+const restoreDeletedMessagesSetting = ["save-deleted-msgs", "saveDeletedMsgs", "Restore deleted messages", "Keeps deleted messages visible and marks them in red."];
+const contactPrivacyAnchor = '[data-testid="block-mute"]';
+let extendedDeletePreference;
+let keepEditedMessages = false;
+const pendingEditHistory = new WeakMap();
+let messageEventToast;
+let messageEventToastTimeout;
 var isInterceptionWorking = false;
 var isUIClassesWorking = true;
-var deletedMessagesDB = null;
-var pseudoMsgsIDs = new Set();
+var renderedMessages = new WeakMap();
 
 if (chrome != undefined) 
 {
 	var browser = chrome;
 }
 
+const extensionVersion = browser.runtime.getManifest?.().version;
+const versionLabel = extensionVersion ? "v" + extensionVersion : "";
+
+document.addEventListener("onExtendedDeletePreferenceRequested", function ()
+{
+    if (extendedDeletePreference !== undefined)
+        document.dispatchEvent(new CustomEvent("onExtendedDeletePreference", { detail: extendedDeletePreference }));
+});
+
+document.addEventListener("onEditHistoryPreferenceRequested", function ()
+{
+    document.dispatchEvent(new CustomEvent("onEditHistoryPreference", { detail: keepEditedMessages }));
+});
+
+document.addEventListener("onOptionsUpdate", function (event)
+{
+    const options = JSON.parse(event.detail);
+    if (menu?.options && options)
+    {
+        menu.options = { ...menu.options, ...options };
+        for (const panel of [menu.quickOptions, menu.dialog])
+            for (const control of panel?.querySelectorAll('input[role="switch"]') ?? [])
+                if (typeof options[control.name] === "boolean") control.checked = options[control.name];
+    }
+    if (typeof options?.readConfirmationsHook === "boolean")
+        document.documentElement?.style.setProperty("--incognito-branded-opacity", options.readConfirmationsHook ? "0.3" : "1");
+    if (typeof options?.hideMetaAI === "boolean")
+        document.documentElement?.toggleAttribute("data-incognito-hide-meta-ai", options.hideMetaAI);
+    const enabled = options?.keepEditedMessages;
+    if (typeof enabled !== "boolean" || enabled === keepEditedMessages) return;
+    keepEditedMessages = enabled;
+    if (messagePanel?.isConnected)
+        messageObserver.observe(messagePanel, enabled ? editHistoryObservation : messageObservation);
+    if (enabled)
+        refreshEditHistoryButtons();
+    else
+        for (const button of messagePanel?.querySelectorAll(".incognito-edit-history") ?? []) button.remove();
+});
+
+document.addEventListener("onEditHistorySaved", event =>
+{
+    refreshEditHistoryButtons(event.detail);
+    showMessageEventToast("Message edited");
+});
+document.addEventListener("onChatMessageDeletionBlocked", () => showMessageEventToast("Message deletion blocked"));
+document.addEventListener("onViewOnceMediaSaved", event =>
+{
+    if (typeof event.detail !== "string") return;
+    for (const node of messagePanel?.querySelectorAll(messageSelector) ?? [])
+    {
+        const dataID = node.closest("[data-id]")?.getAttribute("data-id");
+        if (messageIdFromDataId(dataID) === event.detail)
+            restoreViewOnceMessageIfNeeded(node, event.detail, dataID);
+    }
+});
+
 initialize();
+
+function showMessageEventToast(text)
+{
+    // The settings dialog sits above the page while it is open.
+    const container = menu?.dialog?.open ? menu.dialog : document.body;
+    if (!container) return;
+    if (!messageEventToast)
+    {
+        messageEventToast = document.createElement("div");
+        messageEventToast.className = "incognito-message-toast";
+        messageEventToast.setAttribute("role", "status");
+    }
+    if (messageEventToast.parentNode !== container)
+    {
+        messageEventToast.textContent = "";
+        container.appendChild(messageEventToast);
+    }
+
+    clearTimeout(messageEventToastTimeout);
+    // Let the live region mount before announcing its first update.
+    messageEventToastTimeout = setTimeout(() =>
+    {
+        messageEventToast.textContent = text;
+        messageEventToastTimeout = setTimeout(() => { messageEventToast.textContent = ""; }, 4000);
+    }, 0);
+}
 
 function initialize()
 {
     // load saved settings
     browser.runtime.sendMessage({ name: "getOptions" }, function (options)
     {
+        extendedDeletePreference = options?.extendDeleteForEveryone === true;
+        applyAccentColor(options?.accentColor);
         document.dispatchEvent(new CustomEvent('onOptionsUpdate',
         {
             detail: JSON.stringify(options)
@@ -34,98 +137,243 @@ function initialize()
         browser.runtime.sendMessage(optionsMessage);
     });
 
-    // initialize mutation observer
-    var appElem = document.getElementsByTagName("body")[0];
-    if (!appElem) return;
-    mutationObserver = new MutationObserver(onMutationsObserved);
+    if (!document.body) return;
+    new MutationObserver(onMutationsObserved).observe(document.body, { childList: true, subtree: true });
+    onMutationsObserved([]);
+}
 
-    mutationObserver.observe(appElem, { childList: true, subtree: true });
+function applyAccentColor(color)
+{
+    const root = document.documentElement;
+    const rgb = typeof color === "string" && accentColorPattern.test(color)
+        ? color.slice(1).match(/../g).map(channel => parseInt(channel, 16))
+        : null;
+    if (!rgb && !root?.hasAttribute("data-incognito-accent")) return;
+
+    const mix = (target, weight) => rgb?.map((channel, index) =>
+        Math.round(channel * weight + target[index] * (1 - weight))).join(", ");
+    const white = [255, 255, 255];
+    const luminance = rgb?.reduce((total, channel, index) =>
+    {
+        const value = channel / 255;
+        const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        return total + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    const shades = {
+        "": rgb?.join(", "),
+        "-soft": mix(white, 0.18),
+        "-strong": mix([0, 0, 0], 0.42),
+        "-soft-dark": mix([17, 27, 33], 0.24),
+        "-strong-dark": mix(white, 0.45),
+        "-text": rgb && (luminance > 0.179 ? "0, 0, 0" : "255, 255, 255")
+    };
+    for (const [shade, value] of Object.entries(shades))
+    {
+        const token = "--incognito-accent" + shade + "-rgb";
+        if (value) root.style.setProperty(token, value);
+        else root.style.removeProperty(token);
+    }
+    root.toggleAttribute("data-incognito-accent", Boolean(rgb));
 }
 
 function onMutationsObserved(mutations)
 {
-    if (shownMenuTooltip && !shownMenuTooltip.target.isConnected) shownMenuTooltip.hide();
-
-    var found = false;
-    for (var i = 0; i < mutations.length; i++)
+    if (!mutations.length) addContactPrivacyItem(document.querySelector(contactPrivacyAnchor));
+    if (!mainUI?.isConnected)
     {
-        var mutation = mutations[i];
-        var mutationType = mutations[i].type;
-        var addedNodes = mutations[i].addedNodes;
-        var removedNodes = mutations[i].removedNodes;
-
-        // Scan for added nodes
-        for (var j = 0; j < addedNodes.length; j++)
+        mainUI = document.querySelector(".two");
+        if (mainUI)
         {
-            var addedNode = addedNodes[j];
-            if (addedNode.classList == undefined) continue;
-
-            if (addedNode.getElementsByClassName("two").length > 0)
-            {
-                // main app was added, UI is ready
-                addIconIfNeeded();
-                setTimeout(function () { onMainUIReady(); }, 100);
-
-                found = true;
-                break;
-            }
-            else if (addedNode.nodeName.toLowerCase() == "div" && addedNode.classList.contains(UIClassNames.OUTER_DROPDOWN_CLASS))
-            {
-                // dropdown was opened
-                setTimeout(function ()
-                {
-                    document.dispatchEvent(new CustomEvent('onDropdownOpened', {}));
-
-                }, 200);
-            }
-
-            // Scan for added message nodes and modify if needed
-            function isMessageNode(node)
-            {
-                if (node.childNodes[0] && node.childNodes[0].getAttribute)
-                {
-                    if (node.childNodes[0].getAttribute("data-testid"))
-                        return node.childNodes[0].getAttribute("data-testid").startsWith("conv-msg")
-                }
-
-                return false;
-            }
-            var msgNodes = [];
-            if (isMessageNode(addedNode)) {
-                msgNodes.push(addedNode);
-            }
-            msgNodes.push(...addedNode.querySelectorAll('[data-testid^="conv-msg"]'));
-
-            for (let i = 0; i < msgNodes.length; i++)
-            {
-                const currentNode = msgNodes[i];
-                onNewMessageNodeAdded(currentNode);
-            }
+            addIconIfNeeded();
+            setTimeout(onMainUIReady, 100);
         }
-
-        
-        // Remove the menu item when the app is removed
-        for (var j = 0; j < removedNodes.length; j++)
-        {
-            var removedNode = removedNodes[j];
-            if (removedNode.classList == undefined) continue;
-            if (removedNode.classList.contains("two"))
-            {
-                // main app was removed, remove our artifacts
-                var menuItem = document.getElementsByClassName("menu-item-incognito")[0];
-                var dropItem = document.getElementsByClassName("drop")[0];
-                if (menuItem != undefined) menuItem.remove();
-                if (dropItem != undefined) dropItem.remove();
-                shownMenuTooltip?.hide();
-
-                found = true;
-                break;
-            }
-
-        }
-        if (found) break;
     }
 
+    if (menu && (!menu.anchor.isConnected || (menu.target && !menu.target.isConnected)))
+    {
+        removeMenu();
+        if (mainUI) addIconIfNeeded();
+    }
+
+    if (!messagePanel?.isConnected)
+    {
+        messageObserver?.disconnect();
+        messagePanel = document.querySelector('[data-testid="conversation-panel-messages"]')
+            || document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0]
+            || document.getElementById("main");
+        if (messagePanel)
+        {
+            messageObserver ??= new MutationObserver(records =>
+            {
+                for (const record of records)
+                {
+                    if (record.type === "attributes") scanMessageNodes(record.target);
+                    else if (record.type === "childList")
+                    {
+                        for (const node of record.addedNodes) scanMessageNodes(node);
+                    }
+
+                    if (!keepEditedMessages) continue;
+                    const target = record.type === "characterData" ? record.target.parentElement : record.target;
+                    const bubble = target?.closest?.(messageSelector);
+                    if (bubble) renderEditHistoryButton(bubble);
+                }
+            });
+            messageObserver.observe(messagePanel, keepEditedMessages ? editHistoryObservation : messageObservation);
+            scanMessageNodes(messagePanel);
+            document.dispatchEvent(new CustomEvent('onPaneChatOpened'));
+        }
+    }
+
+    for (const mutation of mutations)
+    {
+        if (messagePanel?.contains(mutation.target)) continue;
+        for (const node of mutation.addedNodes)
+        {
+            if (node.nodeType !== 1) continue;
+            addContactPrivacyItem(node.matches(contactPrivacyAnchor) ? node : node.querySelector?.(contactPrivacyAnchor));
+        }
+    }
+}
+
+function addContactPrivacyItem(mute)
+{
+    const row = mute?.closest('[role="none"]') ?? mute;
+    if (!row?.isConnected || row.previousElementSibling?.classList.contains("incognito-contact-privacy-row")) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "incognito-contact-privacy-row";
+    button.setAttribute("aria-haspopup", "dialog");
+    const icon = document.createElement("img");
+    icon.src = chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg");
+    icon.alt = "";
+    button.append(icon, "Contact privacy");
+    button.addEventListener("click", () =>
+    {
+        let target;
+        const receive = event =>
+        {
+            try { target = JSON.parse(event.detail); }
+            catch { }
+        };
+        document.addEventListener("onActiveContactPrivacyTarget", receive);
+        try { mute.dispatchEvent(new CustomEvent("getActiveContactPrivacyTarget", { bubbles: true })); }
+        finally { document.removeEventListener("onActiveContactPrivacyTarget", receive); }
+        if (!Array.isArray(target?.jids) || !target.jids.some(contactPrivacyJid))
+        {
+            showMessageEventToast("Could not identify this contact.");
+            return;
+        }
+        showContactPrivacy(target);
+    });
+    row.before(button);
+}
+
+async function showContactPrivacy(target)
+{
+    const dialogId = "incognito-contact-privacy";
+    const jids = [...new Set(target.jids.map(contactPrivacyJid).filter(Boolean))];
+    if (!jids.length || document.getElementById(dialogId)) return;
+
+    await contactPrivacyReady;
+    const existing = Array.from(savedContactPrivacy).find(([, rule]) =>
+        Array.isArray(rule?.jids) && rule.jids.some(jid => jids.includes(jid)));
+    const [key, rule] = existing ?? [contactPrivacyPrefix + jids[0]];
+    const isEnabled = Boolean(rule && rule.enabled !== false);
+    const options = rule ?? menu?.options ?? await new Promise(resolve =>
+        browser.runtime.sendMessage({ name: "getOptions" }, resolve));
+    if (document.getElementById(dialogId)) return;
+    const name = typeof target.name === "string" && target.name.trim() ? target.name.trim().slice(0, 200) : jids[0];
+    const dialog = document.createElement("dialog");
+    dialog.id = dialogId;
+    dialog.className = "incognito-settings incognito-contact-privacy-dialog";
+    dialog.setAttribute("aria-labelledby", "incognito-contact-privacy-title");
+    dialog.innerHTML = `
+        <div class="incognito-settings-shell" dir="ltr">
+            <header class="incognito-settings-header">
+                <h1 id="incognito-contact-privacy-title">Contact privacy</h1>
+                <button class="incognito-settings-close" type="button" aria-label="Close contact privacy">×</button>
+            </header>
+            <form class="incognito-settings-pane">
+                <h2 class="incognito-contact-name"></h2>
+                <p>Turn this off to use your global settings for this contact.</p>
+                ${renderSettings([["enable-privacy", "enabled", "Enable contact privacy", "", false]], { enabled: isEnabled }, "incognito-contact")}
+                <fieldset class="incognito-contact-options" ${isEnabled ? "" : "disabled"}>
+                    ${renderSettings([quickActivitySettings[0], quickActivitySettings[2]], options ?? {}, "incognito-contact")}
+                </fieldset>
+                <p role="status" class="incognito-contact-error" hidden>Could not save contact privacy. Try again.</p>
+                <div class="incognito-contact-actions">
+                    <button type="button" class="incognito-contact-reset" ${rule ? "" : "hidden"}>Remove override</button>
+                    <button type="submit" class="incognito-contact-save">Save</button>
+                </div>
+            </form>
+        </div>`;
+    dialog.querySelector(".incognito-contact-name").textContent = name;
+    const form = dialog.querySelector("form");
+    const enabled = form.elements.namedItem("enabled");
+    const contactOptions = form.querySelector("fieldset");
+    enabled.addEventListener("change", () => { contactOptions.disabled = !enabled.checked; });
+    const reset = form.querySelector(".incognito-contact-reset");
+    const save = form.querySelector(".incognito-contact-save");
+    const error = form.querySelector(".incognito-contact-error");
+    async function persist(remove)
+    {
+        reset.disabled = save.disabled = true;
+        error.hidden = true;
+        try
+        {
+            if (remove) await chrome.storage.local.remove(key);
+            else if (enabled.checked || rule) await chrome.storage.local.set({ [key]: {
+                jids: [...new Set([...jids, ...(rule?.jids ?? [])])],
+                name,
+                enabled: enabled.checked,
+                readConfirmationsHook: form.elements.namedItem("readConfirmationsHook").checked,
+                typingUpdatesHook: form.elements.namedItem("typingUpdatesHook").checked
+            } });
+            dialog.close();
+        }
+        catch
+        {
+            error.hidden = false;
+            reset.disabled = save.disabled = false;
+        }
+    }
+    form.addEventListener("submit", event => event.preventDefault());
+    save.addEventListener("click", event => { if (event.isTrusted) persist(false); });
+    reset.addEventListener("click", event => { if (event.isTrusted) persist(true); });
+    bindDialogDismissal(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    document.body.appendChild(dialog);
+    dialog.showModal();
+}
+
+function renderContactPrivacyList(dialog)
+{
+    const list = dialog?.querySelector(".incognito-contact-list");
+    if (!list) return;
+    list.replaceChildren();
+    for (const rule of savedContactPrivacy.values())
+    {
+        if (!Array.isArray(rule?.jids) || !rule.jids.length) continue;
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.setAttribute("aria-haspopup", "dialog");
+        button.textContent = (rule.name || rule.jids[0]) + (rule.enabled === false ? " (uses global settings)" : "");
+        button.addEventListener("click", () => showContactPrivacy(rule));
+        item.appendChild(button);
+        list.appendChild(item);
+    }
+    dialog.querySelector(".incognito-contact-empty").hidden = list.childElementCount > 0;
+}
+
+document.addEventListener("onContactPrivacyUpdate", () => renderContactPrivacyList(menu?.dialog));
+
+function scanMessageNodes(node)
+{
+    if (node.nodeType !== 1) return;
+    if (node.matches(messageSelector)) onNewMessageNodeAdded(node);
+    for (const messageNode of node.querySelectorAll(messageSelector)) onNewMessageNodeAdded(messageNode);
 }
 
 function onMainUIReady()
@@ -135,24 +383,64 @@ function onMainUIReady()
     setTimeout(checkInterception, 1000);
 
     // if the menu item is gone somehow after a short period of time (e.g because the layout changes from right-to-left) add it again
-    // TODO: a race can make the icon added twice
     setTimeout(addIconIfNeeded, 1000);
+}
+
+function removeMenu()
+{
+    if (!menu) return;
+
+    const { target, tooltip, quickOptions, dialog } = menu;
+    menu = null;
+    if (dialog?.open) dialog.close();
+    dialog?.remove();
+    quickOptions?.remove();
+    tooltip?.remove();
+    target?.remove();
 }
 
 async function addIconIfNeeded()
 {
-    if (document.getElementsByClassName("menu-item-incognito").length > 0) return; // already added
+    if (menu) return;
     updateUIClassNamesIfNeeded();
 
-    var firstMenuItem = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
-    if (firstMenuItem != undefined)
+    const anchor = document.getElementsByClassName(UIClassNames.MENU_ITEM_CLASS)[0];
+    if (!anchor)
+    {
+        if (isUIClassesWorking)
+        {
+            isUIClassesWorking = false;
+            Swal.fire({
+                title: "WAIncognito is temporarily broken",
+                html: "It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. Please be patient for a few days until a newer compatible version will be released.",
+                icon: "warning",
+                width: 600,
+                confirmButtonColor: "#DD6B55",
+                confirmButtonText: "Got it",
+            });
+        }
+        return;
+    }
+
+    const setup = menu = { anchor };
+    try
     {
         const label = "Incognito options";
-        var menuItemElem = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, label, 24, "button");
-        if (!firstMenuItem.isConnected || document.getElementsByClassName("menu-item-incognito").length > 0) return;
-        menuItemElem.setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
+        const target = await generateSVGElement(chrome.runtime.getURL("images/incognito_gray_24_hollow_9.svg"), UIClassNames.MENU_ITEM_INNER_CLASS, label, 24, "button");
+        const options = await new Promise(resolve => browser.runtime.sendMessage({ name: "getOptions" }, resolve));
+        if (menu !== setup) return;
+        if (!anchor.isConnected)
+        {
+            removeMenu();
+            return;
+        }
+        if (!options) throw new Error("Options are unavailable");
 
-        const nativeButton = firstMenuItem.closest('button, [role="button"], [role="tab"]') ?? firstMenuItem;
+        setup.options = options;
+        document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
+        setup.target = target;
+        target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito";
+        const nativeButton = anchor.closest('button, [role="button"], [role="tab"]') ?? anchor;
         const wrapper = nativeButton.parentElement;
         const tooltipWrapper = wrapper?.matches('[title], [aria-describedby], [data-tooltip], [data-testid*="tooltip"]');
         let insertionPoint = tooltipWrapper ? wrapper : nativeButton;
@@ -168,276 +456,268 @@ async function addIconIfNeeded()
                 break;
             }
         }
-        insertionPoint.before(menuItemElem);
+        insertionPoint.before(target);
 
-        const tooltip = document.createElement("div");
+        const tooltip = setup.tooltip = document.createElement("div");
         tooltip.className = "incognito-menu-tooltip";
         tooltip.textContent = label;
         tooltip.setAttribute("aria-hidden", "true");
-        const button = menuItemElem.firstElementChild;
-        let drop;
-        function hideTooltip()
-        {
-            tooltip.remove();
-            if (shownMenuTooltip?.hide === hideTooltip) shownMenuTooltip = undefined;
-        }
+        const button = target.firstElementChild;
+        const quickOptions = setup.quickOptions = document.createElement("div");
+        quickOptions.id = "incognito-quick-options";
+        quickOptions.className = "incognito-quick-options";
+        quickOptions.dir = "ltr";
+        quickOptions.setAttribute("popover", "auto");
+        quickOptions.setAttribute("role", "dialog");
+        quickOptions.setAttribute("aria-labelledby", "incognito-quick-options-title");
+        quickOptions.innerHTML = `
+            <header class="incognito-quick-header">
+                <h2 id="incognito-quick-options-title">Quick Incognito Options</h2>
+                <span class="incognito-version">${versionLabel}</span>
+            </header>
+            <p class="incognito-settings-notice" role="status" hidden>Waiting for WhatsApp to connect.</p>
+            ${renderSettings([...quickActivitySettings, restoreDeletedMessagesSetting], setup.options, "incognito-quick")}
+            <button class="incognito-quick-more" type="button" aria-haspopup="dialog" aria-controls="incognito-settings">More</button>`;
+        button.setAttribute("aria-haspopup", "dialog");
+        button.setAttribute("aria-controls", quickOptions.id);
+        button.setAttribute("popovertarget", quickOptions.id);
+        bindToggleSettings(quickOptions);
+        updateSettingsAvailability(quickOptions);
+        document.body.appendChild(quickOptions);
         function showTooltip()
         {
-            if (tooltip.isConnected || drop?.isOpened()) return;
-            shownMenuTooltip?.hide();
+            if (tooltip.isConnected || quickOptions.matches(":popover-open") || setup.dialog?.open) return;
             const rect = button.getBoundingClientRect();
             tooltip.style.left = rect.right + 4 + "px";
             tooltip.style.top = rect.top + rect.height / 2 + "px";
             document.body.appendChild(tooltip);
-            shownMenuTooltip = { target: menuItemElem, hide: hideTooltip };
         }
         for (const event of ["mouseover", "pointerover", "focusin"])
-            menuItemElem.addEventListener(event, event => event.stopPropagation());
-        menuItemElem.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") showTooltip(); });
-        menuItemElem.addEventListener("pointerleave", hideTooltip);
+            target.addEventListener(event, event => event.stopPropagation());
+        target.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") showTooltip(); });
+        target.addEventListener("pointerleave", () => tooltip.remove());
         button.addEventListener("focus", () => { if (button.matches(":focus-visible")) showTooltip(); });
-        button.addEventListener("blur", hideTooltip);
-        button.addEventListener("keydown", event => { if (event.key === "Escape") hideTooltip(); });
+        button.addEventListener("blur", () => tooltip.remove());
+        button.addEventListener("keydown", event => { if (event.key === "Escape") tooltip.remove(); });
 
-        browser.runtime.sendMessage({ name: "getOptions" }, function (options)
+        function updateActiveButton()
         {
-            if (!menuItemElem.isConnected) return;
-            document.dispatchEvent(new CustomEvent('onOptionsUpdate', { detail: JSON.stringify(options) }));
-
-            var dropContent = generateDropContent(options);
-            drop = new Drop(
+            const active = quickOptions.matches(":popover-open") || setup.dialog?.open;
+            target.className = UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito"
+                + (active ? " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active" : "");
+        }
+        quickOptions.addEventListener("beforetoggle", event =>
+        {
+            if (event.newState !== "open") return;
+            tooltip.remove();
+            const rect = button.getBoundingClientRect();
+            quickOptions.style.setProperty("--quick-options-left", rect.right + 8 + "px");
+            quickOptions.style.setProperty("--quick-options-top", rect.top + "px");
+        });
+        quickOptions.addEventListener("toggle", updateActiveButton);
+        quickOptions.querySelector(".incognito-quick-more").addEventListener("click", () =>
+        {
+            quickOptions.hidePopover();
+            if (!setup.dialog)
             {
-                target: menuItemElem,
-                content: dropContent,
-                position: "bottom left",
-                classes: "drop-theme-incognito",
-                openOn: "click",
-                tetherOptions:
+                const dialog = setup.dialog = createOptionsDialog(setup.options);
+                dialog.addEventListener("close", () =>
                 {
-                    offset: "-4px -4px 0 0"
-                },
-            });
-            var originalCloseFunction = drop.close;
-            drop.close = function ()
-            {
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsClosed', { detail: null }));
-                setTimeout(function () { originalCloseFunction.apply(drop, arguments); }, 100);
+                    if (dialog.open || menu !== setup) return;
+                    updateActiveButton();
+                    button.focus();
+                });
+                document.body.appendChild(dialog);
             }
-            drop.on("open", function ()
-            {
-                hideTooltip();
-                if (!checkInterception()) return;
-                var pressedMenuItemClass = UIClassNames.MENU_ITEM_CLASS + " " + UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS + " active menu-item-incognito";
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", pressedMenuItemClass);
-
-                document.getElementById("incognito-option-read-confirmations").addEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").addEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").addEventListener("click", onTypingUpdatesTick);
-                document.getElementById("incognito-option-save-deleted-msgs").addEventListener("click", onSaveDeletedMsgsTick);
-                document.getElementById("incognito-option-show-device-type").addEventListener("click", onShowDeviceTypesTick);
-                document.getElementById("incognito-option-auto-receipt").addEventListener("click", onAutoReceiptsTick);
-                document.getElementById("incognito-option-status-downloading").addEventListener("click", onStatusDownloadingTick);
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.addEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.addEventListener("click", onBackButtonClicked);
-                };
-                
-                //document.getElementById("incognito-option-safety-delay").addEventListener("input", onSafetyDelayChanged);
-                //document.getElementById("incognito-option-safety-delay").addEventListener("keypress", isNumberKey);
-                //document.getElementById("incognito-radio-enable-safety-delay").addEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").addEventListener("click", onSafetyDelayDisabled);
-
-                document.dispatchEvent(new CustomEvent('onIncognitoOptionsOpened', { detail: null }));
-            });
-            drop.on("close", function ()
-            {
-                document.getElementsByClassName("menu-item-incognito")[0].setAttribute("class", UIClassNames.MENU_ITEM_CLASS + " menu-item-incognito");
-
-                document.getElementById("incognito-option-read-confirmations").removeEventListener("click", onReadConfirmaionsTick);
-                document.getElementById("incognito-option-online-status").removeEventListener("click", onOnlineUpdatesTick);
-                document.getElementById("incognito-option-typing-status").removeEventListener("click", onTypingUpdatesTick);
-
-                for (var nextButton of document.getElementsByClassName('incognito-next-button'))
-                {
-                    nextButton.removeEventListener("click", onNextButtonClicked);
-                };
-                for (var nextButton of document.getElementsByClassName('incognito-back-button'))
-                {
-                    nextButton.removeEventListener("click", onBackButtonClicked);
-                };
-
-                //document.getElementById("incognito-radio-enable-safety-delay").removeEventListener("click", onSafetyDelayEnabled);
-                //document.getElementById("incognito-radio-disable-safety-delay").removeEventListener("click", onSafetyDelayDisabled);
-            });
+            if (setup.dialog.open) return;
+            updateSettingsAvailability(setup.dialog);
+            renderContactPrivacyList(setup.dialog);
+            setup.dialog.showModal();
+            updateActiveButton();
         });
     }
-    else if (isUIClassesWorking)
+    catch (error)
     {
-        isUIClassesWorking = false;
-        Swal.fire({
-            title: "WAIncognito is temporarily broken",
-            html: 'It seems that due to a recent WhatsApp Web update some graphical elements of the extension will not appear. \
-                    <br><Br> Please be patient for a few days until a newer compatible version will be released.',
-            icon: "warning",
-            width: 600,
-            confirmButtonColor: "#DD6B55",
-            confirmButtonText: "Got it",
-        });
+        if (menu === setup) removeMenu();
+        console.error("WAIncognito: Could not create options menu", error);
     }
 }
 
-function generateDropContent(options)
+function bindDialogDismissal(dialog)
 {
-    var onlineStatusTitle = "Hide \"online\" status";
-    var onlineStatusCaption = "Stops sending presence updates. Will prevent you from seeing others' online status.";
+    dialog.querySelector(".incognito-settings-close").addEventListener("click", () => dialog.close());
+    let backdropPressed = false;
+    dialog.addEventListener("pointerdown", event => { backdropPressed = event.target === dialog; });
+    dialog.addEventListener("click", event =>
+    {
+        if (backdropPressed && event.target === dialog) dialog.close();
+        backdropPressed = false;
+    });
+}
 
-    var typingStatusTitle = "Hide \"typing...\" status";
-    var typingStatusCaption = "Stops sending typing updates.";
+function createOptionsDialog(options)
+{
+    const dialog = document.createElement("dialog");
+    dialog.id = "incognito-settings";
+    dialog.className = "incognito-settings";
+    dialog.setAttribute("aria-labelledby", "incognito-settings-title");
+    dialog.innerHTML = generateOptionsContent(options);
+    bindDialogDismissal(dialog);
 
-    var readConfirmationsTitle = "Don't send read confirmations";
-    var readConfirmationsCaption = "Blocked messages will be marked with a button.";
-    var readConfirmationsNote = "Also works for stories and audio messages.";
+    const sections = dialog.querySelectorAll("[aria-controls]");
+    for (const section of sections)
+        section.addEventListener("click", () =>
+        {
+            for (const item of sections)
+            {
+                const selected = item === section;
+                item.setAttribute("aria-pressed", String(selected));
+                dialog.querySelector("#" + item.getAttribute("aria-controls")).hidden = !selected;
+            }
+        });
 
-    var deletedMessagesTitle = "Restore deleted messages";
-    var deletedMessagesCaption = "Marks deleted messages in red";
+    bindToggleSettings(dialog);
 
-    var showDeviceTypeTitle = "Show device of messages";
-    var showDeviceTypeCaption = "Shows whether each new message was sent from a phone or a computer";
+    const accentInput = dialog.querySelector("#incognito-accent-color");
+    const accentValue = dialog.querySelector("#incognito-accent-value");
+    let savedAccent = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor)
+        ? options.accentColor : "";
+    function previewAccent(color)
+    {
+        applyAccentColor(color);
+        accentValue.textContent = color.toUpperCase();
+    }
+    function saveAccent(color)
+    {
+        savedAccent = color;
+        previewAccent(color);
+        browser.runtime.sendMessage({ name: "setOptions", accentColor: color });
+    }
+    accentInput.addEventListener("input", () => previewAccent(accentInput.value));
+    accentInput.addEventListener("change", () => saveAccent(accentInput.value));
+    dialog.querySelector("#incognito-reset-accent").addEventListener("click", () =>
+    {
+        accentInput.value = defaultAccentColor;
+        saveAccent("");
+    });
+    dialog.addEventListener("close", () =>
+    {
+        if (dialog.open) return;
+        accentInput.value = savedAccent || defaultAccentColor;
+        previewAccent(savedAccent);
+    });
+    return dialog;
+}
 
-    var autoReceiptTitle = "Auto-Send receipts on reply";
-    var autoReceiptCaption = "Automatically mark messages as read when replying in a chat";
+function saveToggleSetting(name, enabled)
+{
+    if (name === "extendDeleteForEveryone") extendedDeletePreference = enabled;
+    if (name === "onlineUpdatesHook")
+        document.dispatchEvent(new CustomEvent(enabled ? "onPresenceOptionTicked" : "onPresenceOptionUnticked"));
+    if (name === "readConfirmationsHook" && !enabled)
+        for (const chat of Array.from(document.getElementsByClassName("icon-meta unread-count incognito")))
+            chat.classList.remove("incognito");
 
-    var allowStatusDownloadTitle = "Allow status downloading";
-    var allowStatusDownloadCaption = "Adds a button to download statuses";
+    const options = { [name]: enabled };
+    browser.runtime.sendMessage({ name: "setOptions", ...options });
+    document.dispatchEvent(new CustomEvent("onOptionsUpdate", { detail: JSON.stringify(options) }));
+}
 
-    var readConfirmationCheckbox = (options.readConfirmationsHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var onlineUpdatesCheckbox = (options.onlineUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var typingUpdatesCheckbox = (options.typingUpdatesHook ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var saveDeletedMessagesCheckbox = (options.saveDeletedMsgs ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var showDeviceTypeCheckbox = (options.showDeviceTypes ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var autoReceiptCheckbox = (options.autoReceiptOnReplay ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
-    var allowStatusDownloadCheckbox = (options.allowStatusDownload ? "checked incognito-checked'> \
-        <div class='checkmark incognito-mark incognito-marked'> </div>" :
-        "unchecked " + "'> <div class='checkmark incognito-mark" + "'> </div>");
+function bindToggleSettings(panel)
+{
+    for (const control of panel.querySelectorAll('input[role="switch"]'))
+        control.addEventListener("change", () => saveToggleSetting(control.name, control.checked));
+}
 
+function updateSettingsAvailability(panel)
+{
+    panel.querySelector(".incognito-settings-notice").hidden = isInterceptionWorking;
+    for (const control of panel.querySelectorAll("[data-needs-interception]"))
+        control.disabled = !isInterceptionWorking;
+}
 
-    var dropContent = ` \
-        <div class='incognito-options-container' dir='ltr'>
-            <div class='incognito-options-title'>Incognito options</div>
+function renderSettings(items, options, prefix = "incognito")
+{
+    const quick = prefix !== "incognito";
+    return items.map(([id, name, label, description, needsInterception = true]) => `
+        <label class="incognito-setting">
+            <span class="incognito-setting-copy">
+                <span id="${prefix}-${id}-label">${label}</span>
+                ${quick ? "" : `<span id="${prefix}-${id}-note">${description}</span>`}
+            </span>
+            <input id='${prefix}-${id}' type='checkbox' ${options[name] === true ? "checked" : ""}
+                ${quick ? "" : `aria-describedby='${prefix}-${id}-note'`} aria-labelledby="${prefix}-${id}-label"
+                name="${name}" role="switch" ${needsInterception ? "data-needs-interception" : ""}>
+        </label>`).join("");
+}
 
-            <div class='incognito-options-navigator'>
-                <div class='incognito-options-view-container' style='transform: translate(0%, 0%);' id='incognito-options-view1'>
-
-                    <!---- First Page ---!>
-                                                                            
-                    <div id='incognito-option-read-confirmations' style='cursor: pointer !important; margin-bottom: 0px' class='incognito-options-item'> 
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox-incognito ${readConfirmationCheckbox}
-                            </div>
+function generateOptionsContent(options)
+{
+    const customAccent = typeof options.accentColor === "string" && accentColorPattern.test(options.accentColor);
+    const accent = customAccent ? options.accentColor : defaultAccentColor;
+    const activity = [
+        ...quickActivitySettings,
+        ["auto-receipt", "autoReceiptOnReplay", "Send read receipts on reply", "Automatically marks the chat as read when you reply."]
+    ];
+    const messages = [
+        restoreDeletedMessagesSetting,
+        ["show-device-type", "showDeviceTypes", "Show device of messages", "Shows whether new messages were sent from a phone or a computer."],
+        ["status-downloading", "allowStatusDownload", "Allow status downloading", "Adds a download button to statuses."],
+        ["extend-delete", "extendDeleteForEveryone", "Extend “Delete for everyone”", "Applies to your messages. WhatsApp may reject the request, and recipients may still see the message. Use it at your own risk.", false],
+        ["keep-edits", "keepEditedMessages", "Keep edited messages", "Saves text and caption edits in this browser and adds an Edit history button.", false]
+    ];
+    return `
+        <div class="incognito-settings-shell" dir="ltr">
+            <header class="incognito-settings-header">
+                <h1 id="incognito-settings-title">Incognito options</h1>
+                <button class="incognito-settings-close" type="button" aria-label="Close settings" autofocus>×</button>
+            </header>
+            <div class="incognito-settings-layout">
+                <nav class="incognito-settings-nav" aria-label="Settings sections">
+                    <button type="button" aria-controls="incognito-privacy" aria-pressed="true">Privacy</button>
+                    <button type="button" aria-controls="incognito-appearance" aria-pressed="false">Appearance</button>
+                    <button type="button" aria-controls="incognito-misc" aria-pressed="false">Misc</button>
+                    <button type="button" aria-controls="incognito-contacts" aria-pressed="false">Contacts</button>
+                </nav>
+                <section class="incognito-settings-pane" id="incognito-privacy" aria-labelledby="incognito-privacy-title">
+                    <h2 id="incognito-privacy-title">Privacy</h2>
+                    <p class="incognito-settings-notice" role="status" hidden>Some settings are unavailable until the extension connects to WhatsApp. If this persists, reload WhatsApp Web.</p>
+                    <h3>Activity</h3>
+                    ${renderSettings(activity, options)}
+                    <h3>Messages and statuses</h3>
+                    ${renderSettings(messages, options)}
+                </section>
+                <section class="incognito-settings-pane" id="incognito-appearance" aria-labelledby="incognito-appearance-title" hidden>
+                    <h2 id="incognito-appearance-title">Appearance</h2>
+                    <div class="incognito-appearance-card">
+                        <div class="incognito-setting-copy">
+                            <label for="incognito-accent-color">Accent color</label>
+                            <span>Changes highlights, links, and selected filters.</span>
                         </div>
-                        ${readConfirmationsTitle}
-                        <div class='incognito-options-description'>${readConfirmationsCaption}</div>
-                        <br>
-                        <div style='margin-left: 28px !important; margin-top: 0px; font-size: 12px; opacity: 0.8'>
-                            ${readConfirmationsNote}
-                        </div> 
-                    </div> 
-                            
-                    <div id='incognito-option-online-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${onlineUpdatesCheckbox}
-                            </div>
+                        <div class="incognito-accent-actions">
+                            <input id='incognito-accent-color' type='color' value='${accent}'>
+                            <span id="incognito-accent-value">${customAccent ? accent.toUpperCase() : ""}</span>
+                            <button id="incognito-reset-accent" type="button">Use default</button>
                         </div>
-                        ${onlineStatusTitle}
-                        <div class='incognito-options-description'>${onlineStatusCaption}</div>
+                        <div class="incognito-accent-preview" aria-label="Accent shades">
+                            <div><span class="incognito-accent-soft"></span>Soft</div>
+                            <div><span class="incognito-accent-base"></span>Accent</div>
+                            <div><span class="incognito-accent-strong"></span>Strong</div>
+                        </div>
                     </div>
-                    <div id='incognito-option-typing-status' class='incognito-options-item' style='cursor: pointer;'>
-                        <div class='checkbox-container-incognito' style=''>
-                            <div class='checkbox checkbox checkbox-incognito ${typingUpdatesCheckbox}
-                            </div>
-                        </div>
-                        ${typingStatusTitle}
-                        <div class='incognito-options-description'>${typingStatusCaption}</div>
-                    </div>
-                    <button class='incognito-next-button'>Next &gt</button>
-                </div>
-
-                <div class='incognito-options-view-container'  style='transform: translate(100%, 0%);' id='incognito-options-view2'>
-
-                    <!---- Second Page ---!>
-                    
-                    <div class='incognito-options-view' id='incognito-options-view-internal2'>
-                        <div id='incognito-option-save-deleted-msgs' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${saveDeletedMessagesCheckbox}
-                                </div>
-                            </div>
-                            ${deletedMessagesTitle}
-                            <div class='incognito-options-description'>${deletedMessagesCaption}</div>
-                        </div>
-                        <div id='incognito-option-show-device-type' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${showDeviceTypeCheckbox}
-                                </div>
-                            </div>
-                            ${showDeviceTypeTitle}
-                            <div class='incognito-options-description'>${showDeviceTypeCaption}</div>
-                        </div>
-                        <div id='incognito-option-auto-receipt' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${autoReceiptCheckbox}
-                                </div>
-                            </div>
-                            ${autoReceiptTitle}
-                            <div class='incognito-options-description'>${autoReceiptCaption}</div>
-                        </div>
-                        <br>
-                        <button class='incognito-next-button'>Next &gt</button>
-                        <button class='incognito-back-button'>&lt Back</button>
-                    </div>
-                </div>
-
-                <div class='incognito-options-view-container' style='transform: translate(200%, 0%);' id='incognito-options-view3'>
-
-                    <!---- Third Page ---!>
-                    <div class='incognito-options-view' id='incognito-options-view-internal3'>
-                        <div id='incognito-option-status-downloading' class='incognito-options-item' style='cursor: pointer;'>
-                            <div class='checkbox-container-incognito' style=''>
-                                <div class='checkbox checkbox checkbox-incognito ${allowStatusDownloadCheckbox}
-                                </div>
-                            </div>
-                            ${allowStatusDownloadTitle}
-                            <div class='incognito-options-description'>${allowStatusDownloadCaption}</div>
-                        </div>
-                        <div class='incognito-options-item' style='cursor: pointer;'>
-                            More options coming soon!
-                        </div>
-                        <button class='incognito-back-button'>&lt Back</button>
-                    </div>
-                </div>
-
-                
+                </section>
+                <section class="incognito-settings-pane" id="incognito-misc" aria-labelledby="incognito-misc-title" hidden>
+                    <h2 id="incognito-misc-title">Misc</h2>
+                    ${renderSettings([["hide-meta-ai", "hideMetaAI", "Hide Meta AI", "Hides Meta AI buttons on the home screen and in the sidebar.", false]], options)}
+                </section>
+                <section class="incognito-settings-pane" id="incognito-contacts" aria-labelledby="incognito-contacts-title" hidden>
+                    <h2 id="incognito-contacts-title">Contacts</h2>
+                    <p class="incognito-contact-empty">Set contact privacy from a chat’s contact info.</p>
+                    <ul class="incognito-contact-list"></ul>
+                </section>
             </div>
-            
+            <footer class="incognito-settings-footer incognito-version">${versionLabel}</footer>
         </div>`;
-
-    return dropContent;
 }
 
 document.addEventListener('onMarkAsReadClick', function (e)
@@ -451,8 +731,10 @@ document.addEventListener('onMarkAsReadClick', function (e)
             {
                 Swal.fire({
                     title: "Mark as read?",
-                    text: data.formattedName + " will be able to tell you read the last " + 
-                            (data.unreadCount > 1 ? data.unreadCount + " messages." : " message."),
+                    text: data.unreadCount > 0
+                        ? data.formattedName + " will be able to tell you read the last " +
+                            (data.unreadCount > 1 ? data.unreadCount + " messages." : " message.")
+                        : "This may send a read receipt to " + data.formattedName + ".",
                     input: 'checkbox',
                     inputValue: 0,
                     inputPlaceholder: "Don't show this warning again",
@@ -486,25 +768,8 @@ document.addEventListener('onInterceptionWorking', function (e)
 {
     var data = JSON.parse(e.detail);
     isInterceptionWorking = data.isInterceptionWorking;
-
-    // populate pseudoMsgsIDs
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 1);
-    deletedDBOpenRequest.onsuccess = () => 
-    {
-        var deletedMsgsDB = deletedDBOpenRequest.result;
-        var keys = deletedMsgsDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
-            {
-                pseudoMsgsIDs.add(value.originalID);
-            });
-            document.addEventListener("pseudoMsgs", (e) => 
-            {
-                pseudoMsgsIDs.add(e.detail);
-            });
-        };
-        deletedMsgsDB.close();
-    };
+    if (menu?.quickOptions) updateSettingsAvailability(menu.quickOptions);
+    if (menu?.dialog?.open) updateSettingsAvailability(menu.dialog);
 });
 
 function getTheme() 
@@ -521,261 +786,6 @@ function getTheme()
         else 
             return "\"light\"";
     }
-}
-
-//
-// Drop handlers
-//
-
-function onReadConfirmaionsTick()
-{
-    var readConfirmationsHook = false;
-    var checkbox = document.querySelector("#incognito-option-read-confirmations .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        readConfirmationsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-
-        readConfirmationsHook = false;
-        var redChats = document.getElementsByClassName("icon-meta unread-count incognito");
-        for (var i = 0; i < redChats.length; i++)
-        {
-            redChats[i].className = 'icon-meta unread-count';
-        }
-    }
-    browser.runtime.sendMessage({ name: "setOptions", readConfirmationsHook: readConfirmationsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ readConfirmationsHook: readConfirmationsHook })
-    }));
-}
-
-function onOnlineUpdatesTick()
-{
-    var onlineUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-online-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = true;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionTicked'));
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        onlineUpdatesHook = false;
-        document.dispatchEvent(new CustomEvent('onPresenceOptionUnticked'));
-    }
-    browser.runtime.sendMessage({ name: "setOptions", onlineUpdatesHook: onlineUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ onlineUpdatesHook: onlineUpdatesHook })
-    }));
-}
-
-function onTypingUpdatesTick()
-{
-    var typingUpdatesHook = false;
-    var checkbox = document.querySelector("#incognito-option-typing-status .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        typingUpdatesHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", typingUpdatesHook: typingUpdatesHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ typingUpdatesHook: typingUpdatesHook })
-    }));
-}
-
-function onSaveDeletedMsgsTick()
-{
-    var saveDeletedMsgsHook = false;
-    var checkbox = document.querySelector("#incognito-option-save-deleted-msgs .checkbox-incognito");
-    var checkboxClass = checkbox.getAttribute("class");
-    var checkmark = checkbox.firstElementChild;
-    var chekmarkClass = checkmark.getAttribute("class");
-    if (checkboxClass.indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        saveDeletedMsgsHook = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", saveDeletedMsgs: saveDeletedMsgsHook });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ saveDeletedMsgs: saveDeletedMsgsHook })
-    }));
-}
-
-function onShowDeviceTypesTick()
-{
-    var showDeviceTypes = false;
-    var checkbox = document.querySelector("#incognito-option-show-device-type .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        showDeviceTypes = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        showDeviceTypes = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", showDeviceTypes: showDeviceTypes });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ showDeviceTypes: showDeviceTypes })
-    }));
-}
-
-function onAutoReceiptsTick()
-{
-    var autoReceipts = false;
-    var checkbox = document.querySelector("#incognito-option-auto-receipt .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        autoReceipts = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        autoReceipts = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", autoReceiptOnReplay: autoReceipts });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ autoReceiptOnReplay: autoReceipts })
-    }));
-}
-
-function onStatusDownloadingTick()
-{
-    var allowStatusDownload = false;
-    var checkbox = document.querySelector("#incognito-option-status-downloading .checkbox-incognito");
-    
-    var checkmark = checkbox.firstElementChild;
-    
-    if (checkbox.getAttribute("class").indexOf("unchecked") > -1)
-    {
-        tickCheckbox(checkbox, checkmark);
-        allowStatusDownload = true;
-    }
-    else
-    {
-        untickCheckbox(checkbox, checkmark);
-        
-        allowStatusDownload = false;
-    }
-    browser.runtime.sendMessage({ name: "setOptions", allowStatusDownload: allowStatusDownload });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ allowStatusDownload: allowStatusDownload })
-    }));
-}
-
-function onNextButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX - 100) + "%, 0%)";
-        }
-    });
-}
-
-function onBackButtonClicked()
-{
-    var views = Array.from(document.getElementsByClassName("incognito-options-view-container"));
-    
-    requestAnimationFrame(() => {
-        for (var view of views)
-        {
-            var prevViewX = getTransformXOfView(view);
-            view.style.transform = "translate(" + (prevViewX + 100) + "%, 0%)";
-        }
-    });
-}
-
-function getTransformXOfView(view)
-{
-    if (view.style.transform.includes("translate"))
-        return parseInt(view.style.transform.match(/-?[\d\.]+/g)[0]);
-    else
-        return 0;
-}
-
-//
-//    Safety Delay
-//
-function onSafetyDelayChanged(event)
-{
-    if (isSafetyDelayValid(event.srcElement.value))
-    {
-        var delay = parseInt(event.srcElement.value);
-        document.getElementById("incognito-option-safety-delay").disabled = false;
-        browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-        document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-        {
-            detail: JSON.stringify({ safetyDelay: delay })
-        }));
-    }
-}
-
-function onSafetyDelayDisabled()
-{
-    document.getElementById("incognito-option-safety-delay").disabled = true;
-    document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: 0 });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate',
-    {
-        detail: JSON.stringify({ safetyDelay: 0 })
-    }));
-}
-
-function onSafetyDelayEnabled()
-{
-    var delay = parseInt(document.getElementById("incognito-option-safety-delay").value);
-    if (isNaN(delay)) delay = parseInt(document.getElementById("incognito-option-safety-delay").placeholder)
-    document.getElementById("incognito-option-safety-delay").disabled = false;
-    document.getElementById("incognito-radio-disable-safety-delay").checked = false;
-    browser.runtime.sendMessage({ name: "setOptions", safetyDelay: delay });
-    document.dispatchEvent(new CustomEvent('onOptionsUpdate', {detail: JSON.stringify({ safetyDelay: delay })}));
 }
 
 //
@@ -805,190 +815,353 @@ async function generateSVGElement(svgImagePath, clazz="", title="", size=24, rol
 
 function onNewMessageNodeAdded(messageNode)
 {
-    var data_id = messageNode.getAttribute("data-id");
-    if (!data_id) data_id = messageNode.parentElement.parentElement.parentElement.getAttribute("data-id");
-    if (data_id == null)
-        debugger;
+    if (keepEditedMessages) renderEditHistoryButton(messageNode);
 
-    var msgID = data_id.includes("_") ? data_id.split("_")[2] : data_id;
+    const wrapper = messageNode.closest("[data-id]");
+    const dataID = wrapper?.getAttribute("data-id");
+    const previousID = renderedMessages.get(messageNode);
+    if (!dataID || previousID === dataID) return;
 
-    // check if there are any view-once messages for this message ID
-    // open viewOnce indexedDB
-    restoreViewOnceMessageIfNeeded(messageNode, msgID);
+    const msgID = messageIdFromDataId(dataID);
+    if (!msgID) return;
+    if (previousID)
+        (wrapper.firstElementChild || messageNode).querySelector(":scope > .device-type-image")?.remove();
 
-    restoreDeletedMessageIfNeeded(messageNode, msgID);
-
-    markMessageNodeDeviceIfPossible(messageNode, msgID);
+    renderedMessages.set(messageNode, dataID);
+    restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID);
+    restoreDeletedMessageIfNeeded(messageNode, msgID, dataID);
+    markMessageNodeDeviceIfPossible(messageNode, msgID, dataID);
 }
 
-function restoreViewOnceMessageIfNeeded(messageNode, msgID) 
+function messageIdFromDataId(dataID)
 {
-    var viewOnceDBOpenRequest = window.indexedDB.open("viewOnce", 2);
-    viewOnceDBOpenRequest.onupgradeneeded = function (event) 
-    {
-        const db = event.target.result;
-        var store = db.createObjectStore('msgs', { keyPath: 'id' });
-        console.log('WhatsIncognito: Created viewOnce database.');
-        store.createIndex("id_index", "id");
-    };
+    return dataID?.includes("_") ? dataID.split("_")[2] : dataID;
+}
 
-    viewOnceDBOpenRequest.onsuccess = function () 
+function editHistoryMessageId(node)
+{
+    let id;
+    const receive = event => { if (typeof event.detail === "string") id = event.detail; };
+    document.addEventListener("onEditHistoryMessageId", receive);
+    try
     {
-        var viewOnceDB = viewOnceDBOpenRequest.result;
-        var keys = viewOnceDB.transaction('msgs', "readonly").objectStore("msgs").getAll();
-        keys.onsuccess = () => {
-            keys.result.forEach((value) => 
+        node.dispatchEvent(new CustomEvent("getEditHistoryMessageId", { bubbles: true }));
+    }
+    finally
+    {
+        document.removeEventListener("onEditHistoryMessageId", receive);
+    }
+
+    if (id) return id;
+    const ownId = node.getAttribute("data-id");
+    if (ownId) return ownId;
+    const wrapper = node.closest("[data-id]");
+    return wrapper?.querySelectorAll(messageSelector).length === 1 ? wrapper.getAttribute("data-id") : undefined;
+}
+
+function refreshEditHistoryButtons(id)
+{
+    if (!keepEditedMessages) return;
+    for (const node of messagePanel?.querySelectorAll(messageSelector) ?? [])
+        renderEditHistoryButton(node, id);
+}
+
+async function renderEditHistoryButton(node, requestedId)
+{
+    if (!node.isConnected || node.querySelector(messageSelector)) return;
+    const id = editHistoryMessageId(node);
+    const bubble = node.querySelector('[data-testid="msg-container"]');
+    const existing = node.querySelector(".incognito-edit-history");
+    if (id && bubble && existing?.dataset.messageId === id)
+    {
+        if (existing.parentElement !== bubble) bubble.appendChild(existing);
+        return;
+    }
+    existing?.remove();
+    if (!bubble || (requestedId && id !== requestedId)) return;
+    if (!id || pendingEditHistory.get(node)?.id === id) return;
+
+    const pending = { id };
+    pendingEditHistory.set(node, pending);
+    try
+    {
+        const db = await openMessageArchive("waIncognitoEditedMsgs");
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").getKey(id);
+        request.onsuccess = () =>
+        {
+            if (pendingEditHistory.get(node) !== pending) return;
+            pendingEditHistory.delete(node);
+            if (!request.result || !keepEditedMessages || !node.isConnected || editHistoryMessageId(node) !== id) return;
+
+            const currentBubble = node.querySelector('[data-testid="msg-container"]');
+            if (!currentBubble) return;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = "Edit history";
+            button.setAttribute("aria-haspopup", "dialog");
+            button.className = id.startsWith("true_")
+                ? "incognito-edit-history incognito-edit-history-outgoing" : "incognito-edit-history";
+            button.dataset.messageId = id;
+            button.addEventListener("click", event =>
             {
-                if (value.id == msgID) 
-                {
-                    // we found a view-once message for this message ID
-                    // mark the message node as view-once
-                    // get the place that we want to place the link
-                    // this is a bit hacky, if the viewonce is the most recent message displayed it has to use the second one
-                    var viewOnceExplanation = null;
-                    // find all div elements in the message node
-                    var aElements = messageNode.getElementsByTagName("a");
-                    // loop through
-                    for (var i = 0; i < aElements.length; i++) 
-                    {
-                        // if the innerHtml indicates it's the "Learn more" link
-                        if (aElements[i].innerHTML.includes("Learn more")) 
-                        {
-                            // set the viewOnceExplanation to the parent div
-                            viewOnceExplanation = aElements[i].parentElement;
-                        }
-                    }
-                    // set innerHTML to empty
-                    viewOnceExplanation.innerHTML = "";
-                    // if value.dataURI starts with "data:image"
-                    if (value.dataURI.startsWith("data:image")) 
-                    {
-                        // create an image elemnt
-                        var img = document.createElement("img");
-                        // set the source to the value.dataURI
-                        img.src = value.dataURI;
-                        // set the width to 100%
-                        img.style.cssText = "width: 100%;";
-                        // append the image to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(img);
-                    } 
-                    else if (value.dataURI.startsWith("data:video")) 
-                    {
-                        // create a video element
-                        var video = document.createElement("video");
-                        // set the controls to true
-                        video.controls = true;
-                        video.src = value.dataURI;
-                        // append the video to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(video);
-                    } else if (value.dataURI.startsWith("data:audio")) {
-                        // create an audio element
-                        var audio = document.createElement("audio");
-                        // set the controls to true
-                        audio.controls = true;
-                        audio.src = value.dataURI;
-                        // append the audio to the viewOnceExplanation
-                        viewOnceExplanation.appendChild(audio);
-                    }
-
-                    // check if there is a caption stored and render it
-                    if(value.caption != null){
-                        var textSpan = document.createElement("span");
-                        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
-                        textSpan.style.cssText = textSpanStyle;
-                        textSpan.className = "copyable-text selectable-text";
-                        textSpan.textContent = value.caption;
-                        viewOnceExplanation.appendChild(textSpan);
-                    }
-
-                    // add a learn more link below that opens a sweetalert
-                    var learnMore = document.createElement("a");
-                    // give it the class of incognito-view-once-learn-more so styles can be applied
-                    learnMore.className = "incognito-view-once-learn-more";
-                    learnMore.href = "#";
-                    learnMore.innerHTML = "Sent as view once: Learn more";
-                    learnMore.addEventListener("click", function () {
-                        Swal.fire({
-                            title: "View-once message",
-                            html: 'This message was sent as a view-once. \
-                            <br><br> Note that the recipient\'s device will show this as unopened \
-                            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
-                            icon: "info",
-                            width: 600,
-                            confirmButtonColor: "#000",
-                            confirmButtonText: "Got it",
-                        });
-                    });
-                    viewOnceExplanation.appendChild(learnMore);
-                }
+                event.stopPropagation();
+                if (keepEditedMessages && editHistoryMessageId(node) === id) showEditHistory(id);
             });
+            currentBubble.appendChild(button);
         };
-    };
+        request.onerror = () =>
+        {
+            if (pendingEditHistory.get(node) === pending) pendingEditHistory.delete(node);
+            console.error("WAIncognito: Could not check edit history", request.error);
+        };
+    }
+    catch (error)
+    {
+        if (pendingEditHistory.get(node) === pending) pendingEditHistory.delete(node);
+        console.error("WAIncognito: Could not check edit history", error);
+    }
 }
 
-// This function gets called on every new message node that gets added to the screen,
-// and takes care of "deleted" messages - 
-// attempts to syntethise a message that was deleted from our DB / just mark it in red
-function restoreDeletedMessageIfNeeded(messageNode, msgID) 
+async function showEditHistory(id)
 {
-    document.dispatchEvent(new CustomEvent("getDeletedMessageByID", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeletedMessageReceived", function(e)
+    try
     {
-        var data = JSON.parse(e.detail);
-        var messageID = data.messageID;
-        var messageData = data.messageData;
+        const db = await openMessageArchive("waIncognitoEditedMsgs");
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").get(id);
+        request.onsuccess = () =>
+        {
+            if (!keepEditedMessages || !request.result?.edits.length) return;
+            const list = document.createElement("ol");
+            list.className = "incognito-edit-history-list";
+            let last;
+            for (const edit of request.result.edits)
+            {
+                for (const text of [edit.previous, edit.next])
+                {
+                    if (text === last) continue;
+                    const item = document.createElement("li");
+                    item.textContent = text || "(empty)";
+                    list.appendChild(item);
+                    last = text;
+                }
+            }
+            let dialog = document.getElementById("incognito-edit-history-dialog");
+            if (!dialog)
+            {
+                dialog = document.createElement("dialog");
+                dialog.id = "incognito-edit-history-dialog";
+                dialog.className = "incognito-settings incognito-edit-history-dialog";
+                dialog.setAttribute("aria-labelledby", "incognito-edit-history-title");
+                dialog.innerHTML = `
+                    <div class="incognito-settings-shell">
+                        <header class="incognito-settings-header">
+                            <h1 id="incognito-edit-history-title">Edit history</h1>
+                            <button class="incognito-settings-close" type="button" aria-label="Close edit history" autofocus>×</button>
+                        </header>
+                        <div class="incognito-settings-pane"></div>
+                    </div>`;
+                bindDialogDismissal(dialog);
+                document.body.appendChild(dialog);
+            }
+            dialog.querySelector(".incognito-settings-pane").replaceChildren(list);
+            if (!dialog.open) dialog.showModal();
+        };
+        request.onerror = () => console.error("WAIncognito: Could not load edit history", request.error);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open edit history", error);
+    }
+}
 
-        if (messageID != msgID) return;
+function isCurrentMessageNode(messageNode, dataID)
+{
+    return messageNode.isConnected && messageNode.closest("[data-id]")?.getAttribute("data-id") === dataID;
+}
 
+async function restoreViewOnceMessageIfNeeded(messageNode, msgID, dataID)
+{
+    try
+    {
+        const db = await openMessageArchive("viewOnce");
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
+        const request = db.transaction("msgs", "readonly").objectStore("msgs").get(msgID);
+        request.onsuccess = () =>
+        {
+            if (request.result && isCurrentMessageNode(messageNode, dataID))
+                renderViewOnceMessage(messageNode, request.result);
+        };
+        request.onerror = () => console.error("WAIncognito: Could not read view-once archive", request.error);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open view-once archive", error);
+    }
+}
+
+function renderViewOnceMessage(messageNode, value)
+{
+    var viewOnceExplanation = null;
+    // find all div elements in the message node
+    var aElements = messageNode.getElementsByTagName("a");
+    // loop through
+    for (var i = 0; i < aElements.length; i++)
+    {
+        if (aElements[i].classList?.contains("incognito-view-once-learn-more")) return;
+        // if the innerHtml indicates it's the "Learn more" link
+        if (aElements[i].innerHTML.includes("Learn more"))
+        {
+            // set the viewOnceExplanation to the parent div
+            viewOnceExplanation = aElements[i].parentElement;
+        }
+    }
+    if (!viewOnceExplanation) return;
+    viewOnceExplanation.innerHTML = "";
+    // if value.dataURI starts with "data:image"
+    if (value.dataURI.startsWith("data:image"))
+    {
+        // create an image elemnt
+        var img = document.createElement("img");
+        // set the source to the value.dataURI
+        img.src = value.dataURI;
+        // set the width to 100%
+        img.style.cssText = "width: 100%;";
+        // append the image to the viewOnceExplanation
+        viewOnceExplanation.appendChild(img);
+    }
+    else if (value.dataURI.startsWith("data:video"))
+    {
+        // create a video element
+        var video = document.createElement("video");
+        // set the controls to true
+        video.controls = true;
+        video.src = value.dataURI;
+        // append the video to the viewOnceExplanation
+        viewOnceExplanation.appendChild(video);
+    } else if (value.dataURI.startsWith("data:audio")) {
+        // create an audio element
+        var audio = document.createElement("audio");
+        // set the controls to true
+        audio.controls = true;
+        audio.src = value.dataURI;
+        // append the audio to the viewOnceExplanation
+        viewOnceExplanation.appendChild(audio);
+    }
+
+    // check if there is a caption stored and render it
+    if(value.caption != null){
+        var textSpan = document.createElement("span");
+        var textSpanStyle = "font-style: normal; color: rgba(241, 241, 242, 0.95); margin-top: 10px; margin-bottom: 10px;";
+        textSpan.style.cssText = textSpanStyle;
+        textSpan.className = "copyable-text selectable-text";
+        textSpan.textContent = value.caption;
+        viewOnceExplanation.appendChild(textSpan);
+    }
+
+    // add a learn more link below that opens a sweetalert
+    var learnMore = document.createElement("a");
+    // give it the class of incognito-view-once-learn-more so styles can be applied
+    learnMore.className = "incognito-view-once-learn-more";
+    learnMore.href = "#";
+    learnMore.innerHTML = "Sent as view once: Learn more";
+    learnMore.addEventListener("click", function () {
+        Swal.fire({
+            title: "View-once message",
+            html: 'This message was sent as a view-once. \
+            <br><br> Note that the recipient\'s device will show this as unopened \
+            <br><br> You can view this message multiple times and screenshot, and the recipient will not be notified. ',
+            icon: "info",
+            width: 600,
+            confirmButtonColor: "#000",
+            confirmButtonText: "Got it",
+        });
+    });
+    viewOnceExplanation.appendChild(learnMore);
+}
+
+async function restoreDeletedMessageIfNeeded(messageNode, msgID, dataID)
+{
+    try
+    {
+        const db = await openMessageArchive("deletedMsgs");
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
+
+        const transaction = db.transaction("msgs", "readonly");
+        transaction.onabort = () => console.error("WAIncognito: Could not read deleted-message archive", transaction.error);
+        const store = transaction.objectStore("msgs");
+        const request = store.get(msgID);
+        request.onsuccess = () =>
+        {
+            if (!isCurrentMessageNode(messageNode, dataID)) return;
+            if (request.result)
+            {
+                renderDeletedMessage(messageNode, request.result);
+                return;
+            }
+
+            const original = store.index("originalID_index").get(msgID);
+            original.onsuccess = () =>
+            {
+                if (isCurrentMessageNode(messageNode, dataID))
+                    renderDeletedMessage(messageNode, original.result);
+            };
+        };
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not open deleted-message archive", error);
+    }
+}
+
+function renderDeletedMessage(messageNode, messageData)
+{
+    var didFindInDeletedMessagesDB = messageData != undefined;
+    var shouldTryToSyntehesizeMessage  = messageNode.textContent.includes("message was deleted"); // TODO: other locales?
+
+    if (!didFindInDeletedMessagesDB && !shouldTryToSyntehesizeMessage)
+    {
+        // This is just a regular messsage. move on.
+        return;
+    }
+
+    if (didFindInDeletedMessagesDB)
+    {
+        // This message was deleted and we have the original data.
+        var bubbleElement = messageNode.querySelector(':scope > div, :scope [data-testid] > div');
+        if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
+
+        if (!shouldTryToSyntehesizeMessage)
+        {
+            // doesn't loook like a we need to restore anything becuase deletion was blocked already
+            return;
+        }
+    }
+
+    var messageSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0]; // oh well
+    if (!messageSubElement) return;
+
+    if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
+    {
         var span = document.createElement("span");
         var textSpan = document.createElement("span");
         span.className = UIClassNames.DELETED_MESSAGE_SPAN;
+        messageSubElement.textContent = "";
+        textSpan.textContent = "Failed to restore message";
+        messageSubElement.appendChild(textSpan);
+        messageSubElement.appendChild(span);
+        if (messageNode.parentNode)
+            messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
+        return;
+    }
 
-        var didFindInDeletedMessagesDB = messageData != undefined;
-        var shouldTryToSyntehesizeMessage  = messageNode.textContent.includes("message was deleted"); // TODO: other locales?
+    //
+    // If we reached this point, it means that for some reason we couldn't just block the REVOKE message eariler
+    // This might happen if other stuff were sent in the relevant packet (see onMessageNodeReceived)
+    // So ideally, the following code should be redundant.
+    //
 
-        if (!didFindInDeletedMessagesDB && !shouldTryToSyntehesizeMessage)
-        {
-            // This is just a regular messsage. move on.
-            return;
-        }
-
-        if (didFindInDeletedMessagesDB)
-        {
-            // This message was deleted and we have the original data.
-            var bubbleElement = messageNode.querySelector(':scope [data-testid] > div');
-            if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
-            
-            if (!shouldTryToSyntehesizeMessage)
-            {
-                // doesn't loook like a we need to restore anything becuase deletion was blocked already
-                return;
-            }
-        }
-
-        var messageSubElement = messageNode.getElementsByClassName(UIClassNames.CHAT_MESSAGE_INNER_TEXT_DIV)[0]; // oh well
-        if (!messageSubElement) return;
-
-        if (!didFindInDeletedMessagesDB && shouldTryToSyntehesizeMessage)
-        {
-            messageSubElement.textContent = "";
-            textSpan.textContent = "Failed to restore message";
-            messageSubElement.appendChild(textSpan);
-            messageSubElement.appendChild(span);
-            if (messageNode.parentNode)
-                messageNode.parentNode.setAttribute("deleted-message", "true");     // mark the message in red
-            return;
-        }
-
-        //
-        // If we reached this point, it means that for some reason we couldn't just block the REVOKE message eariler
-        // This might happen if other stuff were sent in the relevant packet (see onMessageNodeReceived)
-        // So ideally, the following code should be redundant.
-        //
-
-        // Now try to synthesize the message from the DB (best effort)
-        tryToSynthesizeMessage(messageSubElement, messageData);
-    });
+    // Now try to synthesize the message from the DB (best effort)
+    tryToSynthesizeMessage(messageSubElement, messageData);
 }
 
 function tryToSynthesizeMessage(messageSubElement, messageData)
@@ -1104,81 +1277,67 @@ function tryToSynthesizeMessage(messageSubElement, messageData)
     messageSubElement.appendChild(textSpan);
 }
 
-function markMessageNodeDeviceIfPossible(messageNode, msgID)
+async function markMessageNodeDeviceIfPossible(messageNode, msgID, dataID)
 {
-    var isOutgoingMessage = messageNode.className.includes("message-out"); // TODO: this class name does not exist anymore, condition will always be true
-    isOutgoingMessage = messageNode.innerHTML.includes("aria-label=\"You:\"");
-    if (isOutgoingMessage)
+    if (messageNode.querySelector('[aria-label="You:"]')) return;
+
+    let deviceType;
+    function receiveDeviceType(event)
     {
-        // we don't want to mark our own messages
-        return;
+        const data = JSON.parse(event.detail);
+        if (data.messageID === msgID) deviceType = data.deviceType;
     }
 
-    document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
-    document.addEventListener("onDeviceTypeReceived", async function(e)
+    // The page replies before dispatchEvent returns.
+    document.addEventListener("onDeviceTypeReceived", receiveDeviceType);
+    try
     {
-        var data = JSON.parse(e.detail);
-        var messageID = data.messageID;
+        document.dispatchEvent(new CustomEvent("getDeviceTypeForMessage", {detail: JSON.stringify({messageID: msgID})}));
+    }
+    finally
+    {
+        document.removeEventListener("onDeviceTypeReceived", receiveDeviceType);
+    }
 
-        var deviceType = data.deviceType;
+    if (deviceType !== "computer" && deviceType !== "phone") return;
+    try
+    {
+        if (!deviceIconTemplates.has(deviceType))
+        {
+            const template = generateSVGElement(chrome.runtime.getURL("images/" + deviceType + ".svg"), "", "This message was sent from a " + deviceType, 19)
+                .catch(error =>
+                {
+                    deviceIconTemplates.delete(deviceType);
+                    throw error;
+                });
+            deviceIconTemplates.set(deviceType, template);
+        }
+        const template = await deviceIconTemplates.get(deviceType);
+        if (!isCurrentMessageNode(messageNode, dataID)) return;
 
-        if (messageID != msgID) return;
-
-        var possibleNodes = document.querySelectorAll('[data-id*="' + messageID +'"]');
-        if (possibleNodes.length > 0 )
-            messageNode = possibleNodes[0].childNodes[0];
-
-        if (messageNode.getElementsByClassName("device-type-image").length > 0) return;
-        
-        var imageURL = "";
-        if (deviceType == "computer")
-            imageURL = chrome.runtime.getURL("images/computer.svg");
-        else if (deviceType == "phone")
-            imageURL = chrome.runtime.getURL("images/phone.svg");
-        else
-            return;
-
-        var imageElement = await generateSVGElement(imageURL, "", "This message was sent from a " + deviceType, 19);
+        const target = messageNode.closest("[data-id]").firstElementChild || messageNode;
+        if (target.querySelector(".device-type-image")) return;
+        const imageElement = template.cloneNode(true);
         imageElement.className = "device-type-image";
 
-        var topMessageNode = messageNode.parentNode.parentNode.parentNode;
-        var previousNode = topMessageNode.previousElementSibling;
-        var possibleAvatarElement = previousNode ? previousNode : topMessageNode;
-
-        if (possibleAvatarElement.innerHTML.includes("chat-profile-picture") || possibleAvatarElement.innerHTML.includes("Open chat details"))
-        {
+        const topMessageNode = target.parentElement?.parentElement?.parentElement;
+        const avatar = topMessageNode?.previousElementSibling || topMessageNode;
+        if (avatar?.querySelector('.chat-profile-picture, [data-testid="chat-profile-picture"], [aria-label="Open chat details"], [title="Open chat details"]'))
             imageElement.className += " below-profile-picture";
-        }
 
-        messageNode.insertBefore(imageElement, messageNode.firstChild);
-    });
-}
-
-function tickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("unchecked", "checked") + " incognito-checked");
-    checkmark.classList.add("incognito-marked");
-}
-
-function untickCheckbox(checkbox, checkmark)
-{
-    var checkboxClass = checkbox.getAttribute("class");
-    var chekmarkClass = checkmark.getAttribute("class");
-    checkbox.setAttribute("class", checkboxClass.replace("checked", "unchecked").split("incognito-checked").join(" "));
-    checkmark.setAttribute("class", chekmarkClass.replace("incognito-marked", ""));
-}
-
-function isSafetyDelayValid(string)
-{
-    var number = Math.floor(Number(string));
-    return (String(number) === string && number >= 1 && number <= 30) || string == ""
+        target.insertBefore(imageElement, target.firstChild);
+    }
+    catch (error)
+    {
+        console.error("WAIncognito: Could not display message device", error);
+    }
 }
 
 function checkInterception()
 {
     if (!isInterceptionWorking)
     {
+        if (menu?.dialog?.open || menu?.quickOptions?.matches(":popover-open")) return false;
         Swal.fire({
             title: "Oops...",
             html: "WhatsApp Web Incognito has detected that interception is not working. \
@@ -1207,13 +1366,10 @@ function updateUIClassNamesIfNeeded()
         UIClassNames.MENU_ITEM_INNER_CLASS = "xjb2p0i xk390pu x1heor9g x1ypdohk xjbqb8w x972fbf x10w94by x1qhh985 x14e42zd xtnn1bt x9v5kkp xmw7ebm xrdum7p xt8t1vi x1xc408v x129tdwq x15urzxu xh8yej3 x1iorvi4 x11lfxj5 xjkvuk6 x135b78x"; // inner button
         UIClassNames.MENU_ITEM_HIGHLIGHTED_CLASS = " xhslqc4 x14ug900 xzs022t"; // you need to find the differences between the classes groups
         
-        UIClassNames.OUTER_DROPDOWN_CLASS = "_ak4w _ap4- _ap4_"; // outside class of dropdown with "mark as unread"
-        UIClassNames.DROPDOWN_CLASS = "_ap4_";
-        UIClassNames.DROPDOWN_ENTRY_CLASS = "_aj-r _aj-q _aj-_ _asi6 _ap51";
         
         UIClassNames.UNREAD_COUNTER_CLASS = "xyp3urf"; // the span class that sets background-color to var(--unread-marker-background)
         
-        UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class (was used in the past for safety delay feature)
+        UIClassNames.CHAT_PANEL_CLASS = "x14yy4lh"; // the outermost chat panel class
         UIClassNames.INNER_CHAT_PANEL_CLASS = "x3psx0u"; // the innermost chat panel class ('conversation-panel-messages')
         
         UIClassNames.CHAT_ENTRY_CLASS = "x10l6tqk xh8yej3 x1g42fcv "; // the chat entry in the chats list

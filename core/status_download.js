@@ -1,180 +1,223 @@
-//
-// When a photo/video status is being viewed, create a button to download it that appears, and then handle downloading it
-//
+// A body observer discovers the viewer. Only the viewer needs media and src observation.
+const statusImageViewer = "[data-animate-status-viewer]";
+const statusVideoViewer = '[data-testid="status-video"]';
+const statusViewerSelector = statusImageViewer + ", " + statusVideoViewer;
+const statusFileExtensions = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/heif": "heif",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "video/3gpp": "3gp",
+};
+let statusViewers = [];
+let statusControl;
+let statusSource;
+let statusDeletionBadge;
+let allowStatusDownload = true;
+let markDeletedStatuses = false;
 
-var allowStatusDownload = true;
+const statusMediaObserver = new MutationObserver(updateStatusDownload);
+const statusViewerObserver = new MutationObserver(findStatusViewer);
 
-function determineIfNodeIsStatus(node) 
+function stopWatchingStatusMedia()
 {
-    var isNodeStatus = false;
-    // is node a picture
-    if (node.nodeName == "IMG")
+    statusMediaObserver.disconnect();
+    for (const viewer of statusViewers)
     {
-        // get the element 12 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement;
-        if (parent?.getAttribute("data-animate-status-viewer") != null)
-        {
-            isNodeStatus = true;
-        }
-    }
-    else if (node.nodeName == "VIDEO")
-    {
-        // get the element 8 levels up
-        var parent = node.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement?.parentElement.parentElement;
-        if (parent?.getAttribute("data-testid") == "status-video")
-        {
-            isNodeStatus = true;
-        }
-    }
-
-    return isNodeStatus;
-}
-
-function destroyOldButton(src) 
-{
-    var buttons = document.getElementsByClassName("download-button-incognito");
-    // loop through buttons
-    for (var i = 0; i < buttons.length; i++) 
-    {
-        // if the button's src matches the src of the img
-        if (buttons[i].id == src) 
-        {
-            // remove the button
-            buttons[i].remove();
-        }
-        // special case: stream url's are handled wierdly, if the input contains "stream" destroy all buttons with 
-        // "" as their src
-        if (src.includes("stream"))
-        {
-            if(buttons[i].id == "status-download-fail-button")
-            {
-                buttons[i].remove();
-            }
-        }
+        viewer.removeEventListener("load", updateStatusDownload, true);
+        viewer.removeEventListener("loadedmetadata", updateStatusDownload, true);
     }
 }
 
-function createFailNotice(src)
+function findStatusViewer(mutations)
 {
-    var a = document.createElement("div");
-    a.innerHTML = "Please re-open the status to download.";
-    a.className = "download-button-incognito";
-    a.id = "status-download-fail-button";
-    a.download = "failstatus";
-    document.body.appendChild(a);    
-}
-    
-function createDownloadButton(src) 
-{
-    var a = document.createElement("a");
-    a.innerHTML =
-        "<img src='" + chrome.runtime.getURL("images/download.svg") + "' >";
-    a.className = "download-button-incognito";
-    a.href = src;
-    a.id = src;
-    a.title = "Download this status!";
-    a.download = "status";
-    document.body.appendChild(a);
-}
+    if (mutations && statusViewers.length && statusViewers.every(viewer => viewer.isConnected && viewer.matches(statusViewerSelector))
+        && !mutations.some(record => record.type === "attributes"
+            ? record.target.matches(statusViewerSelector)
+            : Array.from(record.addedNodes).some(node => node.nodeType === 1
+                && (node.matches(statusViewerSelector) || node.querySelector(statusViewerSelector)))))
+        return;
 
-function handleSRCAdd(src, node)
-{
-    if (!allowStatusDownload) return;
-
-    if (determineIfNodeIsStatus(node))
+    const viewers = Array.from(document.querySelectorAll(statusViewerSelector))
+        .filter(viewer => !viewer.parentElement?.closest(statusViewerSelector));
+    if (viewers.length === statusViewers.length && viewers.every((viewer, index) => viewer === statusViewers[index]))
+        return;
+    stopWatchingStatusMedia();
+    statusViewers = viewers;
+    for (const viewer of statusViewers)
     {
-        if (src.startsWith("blob:")) 
-        {
-            createDownloadButton(src)
-        }
-        else if(src.startsWith("https://web.whatsapp.com/stream/video"))
-        {
-            // it's a video in the format we can't download
-            // ask the user to reopen
-            createFailNotice(src)
-        }
+        statusMediaObserver.observe(viewer, { childList: true, characterData: true, subtree: true, attributeFilter: ["src", "data-testid", "data-animate-status-viewer"] });
+        viewer.addEventListener("load", updateStatusDownload, true);
+        viewer.addEventListener("loadedmetadata", updateStatusDownload, true);
+    }
+    updateStatusDownload();
+}
+
+function readStatusViewerInfo(node)
+{
+    if (!node) return null;
+    let info = null;
+    const receive = event =>
+    {
+        try { info = JSON.parse(event.detail); }
+        catch { info = null; }
+    };
+    document.addEventListener("onStatusViewerInfo", receive);
+    try
+    {
+        node.dispatchEvent(new CustomEvent("getStatusViewerInfo", { bubbles: true }));
+    }
+    finally
+    {
+        document.removeEventListener("onStatusViewerInfo", receive);
+    }
+    return info;
+}
+
+function statusFilename(info, viewer, media)
+{
+    const scope = viewer.closest('[role="dialog"]') ?? viewer.parentElement ?? viewer;
+    const header = scope.querySelector('[data-testid*="contact-name"]') ?? scope.querySelector("header span[title], header div[title]");
+    const name = (typeof info?.name === "string" && info.name.trim()) || header?.getAttribute("title") || header?.textContent || "";
+    const safeName = name.trim().replace(/[\s<>:"/\\|?*\[\]\u0000-\u001f\u007f]+/g, "_").slice(0, 80).replace(/^[._]+|[._]+$/g, "");
+    let filename = safeName || "status";
+    const date = Number.isFinite(info?.timestamp) && info.timestamp > 0 ? new Date(info.timestamp * 1000) : null;
+    if (date && Number.isFinite(date.getTime()))
+    {
+        const pad = value => String(value).padStart(2, "0");
+        // Colons are reserved in Windows filenames.
+        const day = date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
+        const time = [date.getHours(), date.getMinutes(), date.getSeconds()].map(pad).join("-");
+        filename += "_" + day + "-" + time;
+    }
+
+    const mimeType = typeof info?.mimeType === "string" ? info.mimeType : media?.querySelector("source[type]")?.type;
+    const format = mimeType?.split(";")[0].trim().toLowerCase();
+    return Object.hasOwn(statusFileExtensions, format) ? filename + "." + statusFileExtensions[format] : filename;
+}
+
+function showStatusDeletionBadge(deleted)
+{
+    if (deleted && !statusDeletionBadge)
+    {
+        statusDeletionBadge = document.createElement("div");
+        statusDeletionBadge.className = "status-deletion-incognito";
+        statusDeletionBadge.setAttribute("role", "status");
+        statusDeletionBadge.textContent = "Deleted by the uploader · kept by WAIncognito";
+        document.body.appendChild(statusDeletionBadge);
+    }
+    else if (!deleted && statusDeletionBadge)
+    {
+        statusDeletionBadge.remove();
+        statusDeletionBadge = null;
     }
 }
 
-function handleSRCRemove(src, node) 
+function updateStatusDownload()
 {
-    if (src != null)
-        destroyOldButton(src)
-}
+    let source;
+    let selectedViewer = statusViewers.find(viewer => viewer.isConnected);
+    let selectedMedia;
+    let largest = 0;
+    for (const viewer of statusViewers)
+    {
+        if (!viewer.isConnected) continue;
+        const mediaNodes = viewer.matches("video") ? [viewer] : viewer.querySelectorAll("img[src], video");
+        for (const media of mediaNodes)
+        {
+            const isImage = media.tagName === "IMG";
+            if (isImage && !media.closest(statusImageViewer)) continue;
+            const url = media.src || media.currentSrc || media.querySelector("source[src]")?.src;
+            if (!url) continue;
 
-function checkNodeAndChildrenForSRC(node, functionToCall)
-{
-    // if the node is an img or video
-    if (node.nodeName == "IMG" ||
-        node.nodeName == "VIDEO") 
-    {
-        // pass the element's src to the handler
-        functionToCall(node.src, node)
-    }
-    // then check if the node has any children and check them, recursively
-    if (node.children !== undefined)
-    {
-        if (node.children.length > 0) 
-        {
-            for (var j = 0; j < node.children.length; j++) 
-            {
-                checkNodeAndChildrenForSRC(node.children[j], functionToCall)
-            }
-        }
-    } 
-}
-
-// create a mutation observer that looks for any img or video tags being added to the page, any of their src attributes changing, or any of them being removed
-var observer = new MutationObserver(function (mutations) 
-{
-    mutations.forEach(function (mutation) 
-    {
-        if (mutation.type == "childList") 
-        {
-            // if a child is added, loop through the added nodes
-            for (var i = 0; i < mutation.addedNodes.length; i++) 
-            {
-                checkNodeAndChildrenForSRC(mutation.addedNodes[i], handleSRCAdd)             
-            }
-            // if a child is removed, loop through the removed nodes
-            for(var i = 0; i < mutation.removedNodes.length; i++)
-            {
-                checkNodeAndChildrenForSRC(mutation.removedNodes[i], handleSRCRemove)
-            }
-        } 
-        else if (mutation.type == "attributes") 
-        {
-            // if an attribute is changed, and it's the src attribute
-            if (mutation.attributeName == "src") 
-            {
-                // check that the oldValue is different from the new value
-                if (mutation.oldValue == mutation.target.src) 
-                {
-                    // if it's not, then the mutation is not a change in src
-                    return;
-                }
-                // pass the element's old src to the handler
-                handleSRCRemove(mutation.oldValue)
-                // pass the element's new src to the handler
-                handleSRCAdd(mutation.target.src, mutation.target)
-            }
+            // shortcut: use rendered size to exclude avatars until WhatsApp exposes a stable status image selector.
+            if (isImage && Math.max(media.clientWidth, media.clientHeight) < 128) continue;
+            const area = Math.max(1, media.clientWidth * media.clientHeight);
+            if (area < largest) continue;
+            largest = area;
+            source = url;
+            selectedViewer = viewer;
+            selectedMedia = media;
         }
     }
-);
+
+    const activeNode = selectedMedia ?? selectedViewer;
+    const info = markDeletedStatuses ? readStatusViewerInfo(activeNode) : null;
+    showStatusDeletionBadge(info?.deleted === true);
+
+    if (!allowStatusDownload || (!source?.startsWith("blob:") && !source?.startsWith("https://web.whatsapp.com/stream/video")))
+        source = undefined;
+
+    if (source === statusSource && statusControl?.isConnected) return;
+    statusControl?.remove();
+    statusControl = null;
+    statusSource = source;
+    if (!source) return;
+
+    if (source.startsWith("blob:"))
+    {
+        statusControl = document.createElement("a");
+        statusControl.href = source;
+        statusControl.title = "Download this status!";
+        statusControl.download = statusFilename(info ?? readStatusViewerInfo(activeNode), selectedViewer, selectedMedia);
+        statusControl.addEventListener("click", function ()
+        {
+            this.download = statusFilename(readStatusViewerInfo(activeNode), selectedViewer, selectedMedia);
+        });
+        statusControl.setAttribute("aria-label", statusControl.title);
+        const icon = document.createElement("img");
+        icon.src = chrome.runtime.getURL("images/download.svg");
+        icon.alt = "";
+        statusControl.appendChild(icon);
+    }
+    else
+    {
+        statusControl = document.createElement("div");
+        statusControl.id = "status-download-fail-button";
+        statusControl.textContent = "Please re-open the status to download.";
+    }
+    statusControl.className = "download-button-incognito";
+    document.body.appendChild(statusControl);
+}
+
+function startStatusDownload()
+{
+    statusViewerObserver.observe(document.body, { childList: true, subtree: true, attributeFilter: ["data-testid", "data-animate-status-viewer"] });
+    findStatusViewer();
+}
+
+startStatusDownload();
+document.addEventListener("onStatusDeletionBlocked", function ()
+{
+    if (markDeletedStatuses && statusViewers.length) updateStatusDownload();
 });
 
-// start observing the body for changes
-observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeOldValue: true,
-});
-
-document.addEventListener('onOptionsUpdate', function (e)
+document.addEventListener("onOptionsUpdate", function (event)
 {
-    // update enforcing globals
-    // TODO: move outside injected_ui.js
-    var options = JSON.parse(e.detail);
-    if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    const options = JSON.parse(event.detail);
+    const download = options?.allowStatusDownload ?? allowStatusDownload;
+    const markDeleted = options?.saveDeletedMsgs ?? markDeletedStatuses;
+    if (download === allowStatusDownload && markDeleted === markDeletedStatuses) return;
+
+    const wasWatching = allowStatusDownload || markDeletedStatuses;
+    allowStatusDownload = download === true;
+    markDeletedStatuses = markDeleted === true;
+    if (!wasWatching && (allowStatusDownload || markDeletedStatuses))
+    {
+        startStatusDownload();
+        return;
+    }
+    if (!allowStatusDownload && !markDeletedStatuses)
+    {
+        statusViewerObserver.disconnect();
+        stopWatchingStatusMedia();
+        statusViewers = [];
+    }
+    updateStatusDownload();
 });

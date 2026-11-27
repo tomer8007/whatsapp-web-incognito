@@ -1,10 +1,42 @@
 
+const contactPrivacyPrefix = "contactPrivacy:";
+const savedContactPrivacy = new Map();
+let changedContactPrivacy = new Set();
+chrome.storage.onChanged.addListener((changes, area) =>
+{
+	if (area !== "local") return;
+	let changed = false;
+	for (const [key, { newValue }] of Object.entries(changes))
+	{
+		if (!key.startsWith(contactPrivacyPrefix)) continue;
+		changedContactPrivacy?.add(key);
+		if (newValue) savedContactPrivacy.set(key, newValue);
+		else savedContactPrivacy.delete(key);
+		changed = true;
+	}
+	if (changed) publishContactPrivacy();
+});
+const contactPrivacyReady = chrome.storage.local.get(null).then(storage =>
+{
+	for (const [key, rule] of Object.entries(storage))
+		if (key.startsWith(contactPrivacyPrefix) && !changedContactPrivacy.has(key))
+			savedContactPrivacy.set(key, rule);
+}).catch(error => console.error("WAIncognito: Could not load contact privacy", error))
+	.finally(() => { changedContactPrivacy = null; });
+
+function publishContactPrivacy()
+{
+	const rules = Array.from(savedContactPrivacy.values())
+		.filter(rule => rule && rule.enabled !== false)
+		.map(({ jids, readConfirmationsHook, typingUpdatesHook }) => ({ jids, readConfirmationsHook, typingUpdatesHook }));
+	document.dispatchEvent(new CustomEvent("onContactPrivacyUpdate", { detail: JSON.stringify(rules) }));
+}
+
 injectScripts();
 
 async function injectScripts() 
 {
 	await injectScript('core/ws_hook.js'); // important to inject as early as possible
-	await injectScript('core/comms_worker_fix.js');
 	await injectScript('lib/pbf.3.0.5.min.js');
 	await injectScript('lib/libsignal-protocol-ee5b8ba.min.js');
 	await injectScript('lib/pako.js');
@@ -22,6 +54,8 @@ async function injectScripts()
 	
 	await injectScript('core/multi_device.js');
 	await injectScript('core/node_handler.js');
+	await contactPrivacyReady;
+	publishContactPrivacy();
 	await injectScript('core/interception.js');
 
 	setTimeout(

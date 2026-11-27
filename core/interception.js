@@ -9,14 +9,11 @@ var typingUpdatesHookEnabled = false;
 var saveDeletedMsgsHookEnabled = false;
 var showDeviceTypesEnabled = true;
 var autoReceiptOnReplay = true;
-var safetyDelay = 0;
 
 var isInitializing = true;
-var exceptionsList = [];
-var blinkingChats = {};
-var chats = {};
-var blockedChats = {};
-var deviceTypesPerMessage = {};
+var readReceiptExceptions = new Map();
+var blockedChats = new Map();
+var deviceTypesPerMessage = new Map();
 
 // debugging flags
 var WAdebugMode = false;
@@ -152,7 +149,12 @@ wsHook.after = function (messageEvent, url)
         }
 
         var packet = await MultiDevice.encryptAndPackNodesForSending(decryptedFrames, true);
-        if (didBlockNode) messageEvent.data = packet;
+        if (didBlockNode)
+        {
+            messageEvent.data = packet;
+            if (Date.now() < statusDeletionTraceUntil)
+                console.info("WAIncognito status trace: replacement frame ready");
+        }
 
         // TODO: compare the original `data` with `packet`
 
@@ -202,10 +204,6 @@ function onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageI
                 if (bubbleElement) bubbleElement.setAttribute("deleted-message", "true");     // mark the message in red
             }
 
-            document.dispatchEvent(new CustomEvent("pseudoMsgs", {
-                detail: deletedMessageId
-            }));
-
             // Now, save the deleted message in the DB after a short wait
             var waitTime = window.WhatsAppAPI != undefined ? 100 : 5000;
             setTimeout(async function() 
@@ -242,7 +240,7 @@ async function findDeletedMessageAndSaveContents(message, remoteJid, messageId, 
         {
             if (msgs[i].id.id == deletedMessageId)
             {
-                saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
+                await saveDeletedMessage(msgs[i], message.protocolMessage.key, messageId);
                 foundOriginalMessage = true;
                 break;
             }
@@ -329,24 +327,24 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
 
     if ("id" in deletedMsgRecord)
     {
-        const transcation = window.deletedMessagesDB.transaction('msgs', "readwrite");
-        let request = transcation.objectStore("msgs").add(deletedMsgRecord);
-        request.onerror = (e) =>
+        try
         {
-            if (request.error.name == "ConstraintError")
+            const db = await openMessageArchive("deletedMsgs");
+            const transaction = db.transaction("msgs", "readwrite");
+            const request = transaction.objectStore("msgs").add(deletedMsgRecord);
+            transaction.onabort = () =>
             {
-                // ConstraintError occurs when an object with the same id already exists
-                // This will happen when we get the revoke message again from the server
-                console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-            } 
-            else
+                if (request.error?.name !== "ConstraintError")
+                    console.error("WAIncognito: Could not save deleted message", transaction.error);
+            };
+            transaction.oncomplete = () =>
             {
-                console.log("WhatsIncognito: Unexpected error saving deleted message");
-            }
-        };
-        request.onsuccess = (e) =>
+                console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
+            };
+        }
+        catch (error)
         {
-            console.log("WhatsIncognito: Saved deleted message with original ID " + deletedMsgRecord.id + " from " + deletedMsgRecord.from + " successfully.");
+            console.error("WAIncognito: Could not save deleted message", error);
         }
     }
     else
@@ -359,94 +357,85 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
 // View once feature
 //
 
-async function interceptViewOnceMessages(e2eMessage, messageId) 
+const pendingViewOnceMedia = new Set();
+let viewOnceMediaQueue = Promise.resolve();
+
+function interceptViewOnceMessages(e2eMessage, messageId)
 {
-    if (e2eMessage.viewOnceMessageV2 !== null || e2eMessage.viewOnceMessageV2Extension !== null) 
+    if (!messageId || pendingViewOnceMedia.has(messageId)) return;
+    const wrapped = e2eMessage.viewOnceMessageV2?.message;
+    const media = wrapped?.imageMessage ?? wrapped?.videoMessage ?? e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage;
+    if (!media?.directPath || !media.mimetype || !media.fileEncSha256 || !media.fileSha256 || !media.mediaKey) return;
+    const { directPath, mimetype, fileEncSha256, fileSha256, mediaKey, caption } = media;
+    const type = wrapped?.imageMessage ? "image" : wrapped?.videoMessage ? "video" : "audio";
+
+    // Serialize media downloads separately so frames keep flowing without accumulating downloaded files.
+    pendingViewOnceMedia.add(messageId);
+    viewOnceMediaQueue = viewOnceMediaQueue
+        .then(() => saveViewOnceMedia({ directPath, mimetype, fileEncSha256, fileSha256, mediaKey, caption, type }, messageId))
+        .catch(error => console.warn("WAIncognito: Could not save view-once media", error))
+        .finally(() => pendingViewOnceMedia.delete(messageId));
+}
+
+async function saveViewOnceMedia(media, messageId)
+{
+    const controller = new AbortController();
+    const { signal } = controller;
+    let timeout;
+    const deadline = new Promise((resolve, reject) =>
     {
-        var retrievedMsg = {};
-        var type = "";
-        if (e2eMessage.viewOnceMessageV2 !== null)
+        timeout = setTimeout(() =>
         {
-            if (e2eMessage.viewOnceMessageV2.message.imageMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.imageMessage;
-                type = "image";
-            }
-            else if (e2eMessage.viewOnceMessageV2.message.videoMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.videoMessage;
-                type = "video";
-            }
-            else
-            {
-                throw new Error("Unknown viewOnceMessageV2 type");
-            }
-        }
-        else if (e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage !== null) 
-        {
-            retrievedMsg = e2eMessage.viewOnceMessageV2Extension.message.audioMessage;
-            type = "audio";
-        }
-        else 
-        {
-            throw new Error("Unknown viewOnceMessageV2 or viewOnceMessageV2Extension type");
-        }
-        const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
-        const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
-        const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
-        
-        if (window.WhatsAppAPI !== undefined)
-        {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
-                directPath: retrievedMsg.directPath,
-                encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
-                type: type, signal: (new AbortController).signal
-            });
-
-            body = arrayBufferToBase64(decryptedData);
-            dataURI = "data:" + retrievedMsg.mimetype + ";base64," + body;
-            var caption = retrievedMsg.caption;
-            // store in indexedDB called "view-once" messageID and dataURI 
-            var viewOnceDBOpenRequest = indexedDB.open("viewOnce", 2);
-            viewOnceDBOpenRequest.onupgradeneeded = function (event) {
-                const db = event.target.result;
-                var store = db.createObjectStore('msgs', { keyPath: 'id' });
-                if (WAdebugMode) {
-                    console.log('WhatsIncognito: Deleted messages database generated');
-                }
-                store.createIndex("id_index", "id");
-            };
-            viewOnceDBOpenRequest.onerror = function (e) {
-                console.error("WhatsIncognito: Error opening database");
-                console.error("Error", viewOnceDBOpenRequest);
-                console.error(e);
-            };
-            viewOnceDBOpenRequest.onsuccess = () => {
-                var viewOnceDB = viewOnceDBOpenRequest.result;
-                var viewOnceTranscation = viewOnceDB.transaction('msgs', "readwrite");
-                var viewOnceRequest = viewOnceTranscation.objectStore("msgs").add({ id: messageId, dataURI: dataURI, caption});
-                viewOnceRequest.onerror = (e) => {
-                    if (viewOnceRequest.error.name == "ConstraintError") {
-                        if (WAdebugMode) {
-                            console.log("WhatsIncognito: Not saving message becuase the message ID already exists");
-                        }
-                    }
-
-                    else {
-                        console.warn("WhatsIncognito: Unexpected error saving deleted message");
-                    }
-                };
-            };
-        }
-        else
-        {
-            // retry in 5 seconds
-            // don't know why it's 5 seconds, but that's what is done for decrypting deleted messages 
-            setTimeout(function(){
-                interceptViewOnceMessages(e2eMessage, messageId)
-            }, 5000);
-        }
+            const error = new Error("View-once media save timed out");
+            reject(error);
+            controller.abort(error);
+        }, 60000);
+    });
+    try
+    {
+        await Promise.race([deadline, archiveViewOnceMedia(media, messageId, signal)]);
     }
+    finally
+    {
+        clearTimeout(timeout);
+    }
+}
+
+async function archiveViewOnceMedia(media, messageId, signal)
+{
+    const db = await openMessageArchive("viewOnce");
+    signal.throwIfAborted();
+    while (!window.WhatsAppAPI?.downloadManager?.downloadAndMaybeDecrypt)
+    {
+        await sleep(5000);
+        signal.throwIfAborted();
+    }
+    const decryptedData = await window.WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
+        directPath: media.directPath,
+        encFilehash: btoa(String.fromCharCode(...media.fileEncSha256)),
+        filehash: btoa(String.fromCharCode(...media.fileSha256)),
+        mediaKey: btoa(String.fromCharCode(...media.mediaKey)),
+        type: media.type,
+        signal
+    });
+    signal.throwIfAborted();
+
+    const dataURI = "data:" + media.mimetype + ";base64," + arrayBufferToBase64(decryptedData);
+    await new Promise((resolve, reject) =>
+    {
+        const transaction = db.transaction("msgs", "readwrite");
+        const request = transaction.objectStore("msgs").add({ id: messageId, dataURI, caption: media.caption });
+        transaction.oncomplete = () =>
+        {
+            document.dispatchEvent(new CustomEvent("onViewOnceMediaSaved", { detail: messageId }));
+            resolve();
+        };
+        transaction.onabort = () =>
+        {
+            if (request.error?.name === "ConstraintError") resolve();
+            else reject(transaction.error);
+        };
+    });
 }
 
 
@@ -460,7 +449,7 @@ async function decryptE2EMessagesFromNode(node)
     // decrypt the signal message
     try
     {
-        return MultiDevice.decryptE2EMessagesFromMessageNode(node);
+        return (await MultiDevice.decryptE2EMessagesFromMessageNode(node)).map(entry => entry.message);
     }
     catch (exception)
     {
@@ -521,7 +510,6 @@ function initialize()
 {
     if (WALogs)
         hookLogs();
-    initializeDeletedMessagesDB();
 }
 
 function hookLogs()
@@ -633,55 +621,6 @@ function hookLogs()
         };
     }
 }
-
-function initializeDeletedMessagesDB()
-{
-    var deletedDBOpenRequest = indexedDB.open("deletedMsgs", 2);
-
-    deletedDBOpenRequest.onupgradeneeded = function (event)
-    {
-        // triggers if the client had no database
-        // ...perform initialization...
-        debugger;
-
-        // Get a reference to the request related to this event
-        // @type IDBOpenRequest (a specialized type of IDBRequest)
-        var request = event.target;
-
-        // Get a reference to the IDBDatabase object for this request
-        // @type IDBDatabase
-        var db = request.result;
-
-        // Get a reference to the implicit transaction for this request
-        // @type IDBTransaction
-        var txn = request.transaction;
-
-        switch (event.oldVersion)
-        {
-            case 0:
-                var store = db.createObjectStore('msgs', { keyPath: 'id' });
-                console.log('WhatsIncognito: Deleted messages database generated');
-                store.createIndex("originalID_index", "originalID");
-                break;
-            case 1:
-                var store = txn.objectStore("msgs");
-                
-                store.createIndex("originalID_index", "originalID");
-                break;
-        }
-    };
-    deletedDBOpenRequest.onerror = function (e)
-    {
-        console.error("WhatsIncognito: Error opening database");
-        console.error("Error", deletedDBOpenRequest);
-        console.error(e);
-    };
-    deletedDBOpenRequest.onsuccess = () =>
-    {
-        window.deletedMessagesDB = deletedDBOpenRequest.result;
-    }
-}
-
 
 async function checkNodeEncoderSanity(originalFrame, isIncoming=false)
 {

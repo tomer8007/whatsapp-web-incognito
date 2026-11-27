@@ -2,8 +2,188 @@
 // UI Event handlers
 // ---------------------
 
+const EXTENDED_DELETE_WINDOW = 10 * 365 * 24 * 60 * 60;
+let extendDeleteForEveryone = false;
+let restoreSenderRevokeCheck;
+let keepEditedMessages = false;
+let editMessageStore;
+
+function updateEditHistoryListener()
+{
+    if (!keepEditedMessages)
+    {
+        editMessageStore?.off("change:body", recordMessageBodyEdit);
+        editMessageStore?.off("change:caption", recordMessageCaptionEdit);
+        editMessageStore = undefined;
+        return;
+    }
+    if (editMessageStore || typeof window.require !== "function") return;
+    try
+    {
+        const store = window.require("WAWebCollections").Msg;
+        if (typeof store?.on !== "function" || typeof store.off !== "function") return;
+        store.on("change:body", recordMessageBodyEdit);
+        store.on("change:caption", recordMessageCaptionEdit);
+        editMessageStore = store;
+    }
+    catch (error)
+    {
+        console.warn("WAIncognito: Edit history listener is unavailable", error);
+    }
+}
+
+function serializedEditMessageId(key)
+{
+    const id = typeof key === "string" ? key : key?._serialized ?? key?.$1;
+    return typeof id === "string" && id.length > 0 && id.length <= 512 ? id : undefined;
+}
+
+function recordMessageBodyEdit(message, next, previous)
+{
+    if (message.type === "chat") recordMessageEdit(message, "body", next, previous);
+}
+
+function recordMessageCaptionEdit(message, next, previous)
+{
+    recordMessageEdit(message, "caption", next ?? "", previous ?? "");
+}
+
+function recordMessageEdit(message, field, next, previous)
+{
+    if (!keepEditedMessages || message.type === "revoked" || message.type === "ciphertext") return;
+    const id = serializedEditMessageId(message.id);
+    if (!id || typeof previous !== "string" || typeof next !== "string" || previous === next) return;
+    const keyAtChange = message.latestEditMsgKey;
+    const timestampAtChange = message.latestEditSenderTimestampMs;
+
+    // The model can update the edit metadata after emitting the text change.
+    queueMicrotask(async () =>
+    {
+        if (!keepEditedMessages || message.type === "revoked") return;
+        const isCurrentChange = (message[field] ?? "") === next;
+        if (!keyAtChange && !timestampAtChange && !isCurrentChange) return;
+        const key = isCurrentChange ? message.latestEditMsgKey ?? keyAtChange : keyAtChange;
+        const editId = serializedEditMessageId(key) ?? serializedEditMessageId(key?.id);
+        const timestamp = isCurrentChange ? message.latestEditSenderTimestampMs || timestampAtChange : timestampAtChange;
+        if (typeof editId !== "string" && !(Number.isFinite(timestamp) && timestamp > 0)) return;
+        try
+        {
+            const db = await openMessageArchive("waIncognitoEditedMsgs");
+            if (!keepEditedMessages) return;
+            const transaction = db.transaction("msgs", "readwrite");
+            const store = transaction.objectStore("msgs");
+            const request = store.get(id);
+            transaction.onabort = () => console.error("WAIncognito: Could not save edit history", transaction.error);
+            request.onsuccess = () =>
+            {
+                if (!keepEditedMessages) return;
+                const edits = request.result?.edits ?? [];
+                if (edits.some(edit => editId ? edit.editId === editId
+                    : edit.timestamp === timestamp && edit.previous === previous && edit.next === next))
+                    return;
+
+                edits.push({ editId, timestamp, previous, next });
+                if (edits.every(edit => Number.isFinite(edit.timestamp)))
+                    edits.sort((a, b) => a.timestamp - b.timestamp);
+                store.put({ id, edits });
+                transaction.oncomplete = () => document.dispatchEvent(new CustomEvent("onEditHistorySaved", { detail: id }));
+            };
+        }
+        catch (error)
+        {
+            console.error("WAIncognito: Could not open edit history", error);
+        }
+    });
+}
+
+document.addEventListener("onEditHistoryPreference", function (event)
+{
+    keepEditedMessages = event.detail === true;
+    updateEditHistoryListener();
+});
+document.dispatchEvent(new CustomEvent("onEditHistoryPreferenceRequested"));
+
+document.addEventListener("getEditHistoryMessageId", function (event)
+{
+    const node = event.target;
+    if (!node.matches?.('[data-testid^="conv-msg"]')) return;
+    const fiberKey = Object.keys(node).find(key => key.startsWith("__reactFiber$"));
+    let fiber = node[fiberKey];
+    // shortcut: resolve nearby message props, use a stable bubble ID when WhatsApp exposes one.
+    for (let depth = 0; fiber && depth < 12; depth++, fiber = fiber.return)
+    {
+        const props = fiber.memoizedProps;
+        const message = props?.msg ?? props?.message;
+        const id = serializedEditMessageId(message?.id ?? message?.__x_id) ?? serializedEditMessageId(props?.msgKey);
+        if (!id) continue;
+        document.dispatchEvent(new CustomEvent("onEditHistoryMessageId", { detail: id }));
+        return;
+    }
+});
+
+function updateExtendedDelete()
+{
+    if (!extendDeleteForEveryone)
+    {
+        restoreSenderRevokeCheck?.();
+        restoreSenderRevokeCheck = undefined;
+        return;
+    }
+    if (restoreSenderRevokeCheck || typeof window.require !== "function") return;
+
+    try
+    {
+        const capability = window.require("WAWebMsgActionCapability");
+        const limits = window.require("WAWebRevokeMsgConstants");
+        const canSenderRevoke = capability.canSenderRevokeMsg;
+        const source = String(canSenderRevoke);
+        if (!source.includes(".REVOKE_WINDOW") || !source.includes("WAWebRevokeMsgConstants")
+            || !Object.getOwnPropertyDescriptor(limits, "REVOKE_WINDOW")?.writable)
+            return;
+
+        function extendedSenderRevokeCheck(...args)
+        {
+            const nativeWindow = limits.REVOKE_WINDOW;
+            if (!extendDeleteForEveryone || !Number.isFinite(nativeWindow) || nativeWindow >= EXTENDED_DELETE_WINDOW)
+                return canSenderRevoke.apply(this, args);
+
+            // Change the sender check's time limit for this call only.
+            limits.REVOKE_WINDOW = EXTENDED_DELETE_WINDOW;
+            try
+            {
+                return canSenderRevoke.apply(this, args);
+            }
+            finally
+            {
+                limits.REVOKE_WINDOW = nativeWindow;
+            }
+        }
+
+        capability.canSenderRevokeMsg = extendedSenderRevokeCheck;
+        if (capability.canSenderRevokeMsg !== extendedSenderRevokeCheck) return;
+        restoreSenderRevokeCheck = () =>
+        {
+            if (capability.canSenderRevokeMsg === extendedSenderRevokeCheck)
+                capability.canSenderRevokeMsg = canSenderRevoke;
+        };
+    }
+    catch (error)
+    {
+        console.warn("WAIncognito: Extended Delete for everyone is unavailable", error);
+    }
+}
+
+document.addEventListener("onExtendedDeletePreference", function (event)
+{
+    extendDeleteForEveryone = event.detail === true;
+    updateExtendedDelete();
+});
+document.dispatchEvent(new CustomEvent("onExtendedDeletePreferenceRequested"));
+
 document.addEventListener('onMainUIReady', function (e)
 {
+    updateExtendedDelete();
+    updateEditHistoryListener();
     setTimeout(exposeWhatsAppAPI, 100);
 });
 
@@ -18,52 +198,6 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
 });
 
 
-document.addEventListener('onIncognitoOptionsOpened', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    /*
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    if (!readConfirmationsHookEnabled)
-    {
-        safetyDelayPanel.style.opacity = 0;
-        safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px";
-    }
-    */
-});
-
-document.addEventListener('onIncognitoOptionsClosed', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
-    // validateSafetyDelay();
-});
-
-function validateSafetyDelay()
-{
-    var string = document.getElementById("incognito-option-safety-delay").value;
-    var isValid = false;
-    var number = Math.floor(Number(string));
-    if ((String(number) === string && number >= 1 && number <= 30) || string == "") isValid = true;
-    if (!isValid)
-    {
-        document.getElementById("incognito-option-safety-delay").disabled = true;
-        document.getElementById("incognito-option-safety-delay").value = "";
-        document.getElementById("incognito-radio-disable-safety-delay").checked = true;
-        document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-
-        showToast("The safety delay must be an integer number in range 1-30 !");
-    }
-}
-
 document.addEventListener('onOptionsUpdate', function (e)
 {
     // update enforcing globals
@@ -72,345 +206,306 @@ document.addEventListener('onOptionsUpdate', function (e)
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
-    if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if (typeof options.keepEditedMessages === "boolean")
+    {
+        keepEditedMessages = options.keepEditedMessages;
+        updateEditHistoryListener();
+    }
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
+    if (typeof options.extendDeleteForEveryone === "boolean")
+    {
+        extendDeleteForEveryone = options.extendDeleteForEveryone;
+        updateExtendedDelete();
+    }
 
     // update graphics
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    var safetyDelayPanelExpectedHeight = 42; // be careful with this
     if (readConfirmationsHookEnabled)
     {
         // set unread counters to transperent
         setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 0.3)');
-        if (safetyDelayPanel != null)
-        {
-            Velocity(safetyDelayPanel, { height: safetyDelayPanelExpectedHeight, opacity: 0.8, marginTop: 0 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-        }
     }
     else
     {
         // set unread counters to solid
         setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
-        if (safetyDelayPanel != null)
-        {
-            Velocity(safetyDelayPanel, { height: 0, opacity: 0, marginTop: -10 }, { defaultDuration: 200, easing: [.1, .82, .25, 1] });
-        }
         var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
             document.getElementsByClassName("incognito-message")[0] : null;
-        if (warningMessage != null)
+        if (warningMessage != null && !getContactPrivacy(warningMessage.dataset?.jid)?.readConfirmationsHook)
         {
             Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
-            setTimeout(function () { warningMessage.parentNode.removeChild(warningMessage); }, 300);
+            setTimeout(function () { warningMessage.remove(); }, 300);
         }
     }
 
     var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
     for (var i = 0; i < unreadCounters.length; i++)
     {
-        unreadCounters[i].classList.remove("blocked-color");
+        if (!getContactPrivacy(unreadCounters[i].dataset?.incognitoBlockedJid)?.readConfirmationsHook)
+            unreadCounters[i].classList.remove("blocked-color");
     }
+});
+
+document.addEventListener("onContactPrivacyUpdate", function (event)
+{
+    let rules;
+    try { rules = JSON.parse(event.detail); }
+    catch { return; }
+    if (!Array.isArray(rules)) return;
+    contactPrivacyByJid.clear();
+    for (const rule of rules)
+    {
+        if (!Array.isArray(rule?.jids) || typeof rule.readConfirmationsHook !== "boolean"
+            || typeof rule.typingUpdatesHook !== "boolean") continue;
+        for (const value of rule.jids)
+        {
+            const jid = contactPrivacyJid(value);
+            if (jid) contactPrivacyByJid.set(jid, rule);
+        }
+    }
+    const warning = document.getElementsByClassName("incognito-message")[0];
+    if (warning?.dataset?.jid)
+    {
+        if (!blocksReadReceipts(warning.dataset.jid)) warning.remove();
+        else warning.lastChild.hidden = getContactPrivacy(warning.dataset.jid)?.readConfirmationsHook === true;
+    }
+    for (const counter of Array.from(document.getElementsByClassName("blocked-color")))
+        if (counter.dataset.incognitoBlockedJid && !blocksReadReceipts(counter.dataset.incognitoBlockedJid))
+            counter.classList.remove("blocked-color");
+});
+
+document.addEventListener("getActiveContactPrivacyTarget", function (event)
+{
+    const row = event.target;
+    const fiberKey = Object.keys(row).find(key => key.startsWith("__reactFiber$"));
+    let chat;
+    // shortcut: use the mute row's React props, fall back to the active chat if the drawer has no model.
+    for (let fiber = row[fiberKey], depth = 0; fiber && depth < 12; fiber = fiber.return, depth++)
+    {
+        const props = fiber.memoizedProps;
+        chat = props?.chat ?? props?.contact;
+        if (chat?.id) break;
+    }
+    if (!chat?.id) chat = getCurrentChat();
+    if (!chat?.id || chat.isGroup) return;
+    const jids = contactPrivacyJids(chat);
+    if (!jids.length) return;
+    const name = chat.contact?.name || chat.name || jids[0];
+    document.dispatchEvent(new CustomEvent("onActiveContactPrivacyTarget", { detail: JSON.stringify({ jids, name }) }));
 });
 
 document.addEventListener('onReadConfirmationBlocked', async function (e)
 {
-    var blockedJid = e.detail;
+    if (typeof e.detail !== "string") return;
+    var blockedJid = normalizeJID(e.detail);
     var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
+    if (!chat)
+    {
+        const activeChat = getCurrentChat();
+        if (activeChat && contactPrivacyJids(activeChat).includes(blockedJid)) chat = activeChat;
+    }
     if (!chat) 
     {
         console.warn("WAIncognito: Did not find chat for JID " + blockedJid);
         return;
     }
+    if (!blocksReadReceipts(blockedJid)) return;
 
-    if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
-    {
-        markChatAsPendingReciptsSending(chat);
-    }
-    else if (readConfirmationsHookEnabled && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
+    if (chat.id.user == blockedUser || getJidOfChat(chat) === blockedJid || contactPrivacyJids(chat).includes(blockedJid))
     {
         markChatAsBlocked(chat);
     }
     else
     {
         console.warn("WAIncognito: Could not find chat for JID " + blockedJid);
+        return;
     }
 
-    if (!(chat.id in blockedChats))
-    {
-        // window.WhatsAppAPI.UI.scrollChatToBottom(chat);
-    }
-
-    blockedChats[chat.id] = chat;
-
+    const aliases = new Set([normalizeJID(chat.id.toString()), getJidOfChat(chat), blockedJid]);
+    const previousAliases = blockedChats.get(getJidOfChat(chat));
+    if (previousAliases)
+        for (const alias of previousAliases) aliases.add(alias);
+    for (const alias of aliases) blockedChats.set(alias, aliases);
 });
 
-document.addEventListener('onPaneChatOpened', function (e)
+document.addEventListener('onPaneChatOpened', function ()
 {
-    var chat = getCurrentChat();
-    chats[chat.id] = chat;
-    if (chat && chat.id in blockedChats)
+    const chat = getCurrentChat();
+    if (chat && isChatBlocked(getJidOfChat(chat)))
     {
-        setTimeout(function () { markChatAsBlocked(chat); }, 200);
+        setTimeout(function ()
+        {
+            if (blocksReadReceipts(getJidOfChat(chat)) && getCurrentChat() === chat && isChatBlocked(getJidOfChat(chat)))
+                markChatAsBlocked(chat);
+        }, 200);
     }
 });
 
-document.addEventListener('onDropdownOpened', function (e)
+function requestMarkAsRead(chat)
 {
-    // the user has opened a dropdown. Make sure clicking "Mark as read" triggers our code
-
-    var dropdown = document.getElementsByClassName(UIClassNames.DROPDOWN_CLASS)[0];
-    if (dropdown == undefined) return;
-
-    var menuItems = dropdown.getElementsByClassName(UIClassNames.DROPDOWN_ENTRY_CLASS);
-    var reactResult = FindReact(document.getElementsByClassName(UIClassNames.OUTER_DROPDOWN_CLASS)[0]);
-    if (reactResult == null) return;
-    if (reactResult.props.children.length == 0) return;
-
-    var reactMenuItems = reactResult.props.children[0].props.children;
-    if (reactMenuItems.props == undefined) return;
-    
-    reactMenuItems = reactMenuItems.props.children;
-
-    var markAsReadButton = null;
-    var props = null;
-    for (var i = 0; i < reactMenuItems.length; i++)
-    {
-        if (reactMenuItems[i] == null) continue;
-
-        if (reactMenuItems[i].key == "mark_unread")
-        {
-            markAsReadButton = menuItems[i];
-            props = reactMenuItems[i].props;
-            break;
-        }
-    }
-
-    if (props != null)
-    {
-        var name = props.chat.name;
-        var formattedName = props.chat.contact.name;
-        var jid = getJidOfChat(chat);
-        var lastMessageIndex = props.chat.lastReceivedKey.id;
-        var unreadCount = props.chat.unreadCount;
-        var isGroup = props.chat.isGroup;
-        var fromMe = props.chat.lastReceivedKey.fromMe;
-        if (unreadCount > 0)
-        {
-            // this is mark-as-read button, not mark-as-unread
-            markAsReadButton.addEventListener("mousedown", function (e)
-            {
-                var data = { name: name, formattedName: formattedName, jid: jid, lastMessageIndex: lastMessageIndex, 
-                            fromMe: fromMe, unreadCount: unreadCount, isGroup: isGroup };
-
-                document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
-            });
-        }
-    }
-});
+    if (getChatContactPrivacy(chat)?.readConfirmationsHook) return;
+    const data = {
+        jid: chat.id.toString(),
+        unreadCount: chat.unreadCount,
+        formattedName: chat.contact?.name || chat.name || "This contact"
+    };
+    document.dispatchEvent(new CustomEvent("onMarkAsReadClick", { detail: JSON.stringify(data) }));
+}
 
 document.addEventListener('sendReadConfirmation', async function (e)
 {
-    var data = JSON.parse(e.detail);
-    var messageIndex = data.index != undefined ? data.index : data.lastMessageIndex;
-    var messageID = data.jid + messageIndex;
-
-    var chat = await getChatByJID(data.jid);
-    var chatContainer = {chat: chat};
-
-    // add an exception and remove it after a short time at any case
-    exceptionsList.push(normalizeJID(data.jid));
-    setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
-    
-    WhatsAppAPI.Seen.sendSeen(chatContainer).then(result =>
+    const data = JSON.parse(e.detail);
+    if (typeof data?.jid !== "string" || !data.jid.includes("@")) return;
+    const jid = normalizeJID(data.jid);
+    if (getContactPrivacy(jid)?.readConfirmationsHook) return;
+    const chat = await getChatByJID(jid);
+    if (!chat)
     {
-        // TODO: remove the old blinking chats code
-        if (data.jid in blinkingChats)
-        {
-            clearInterval(blinkingChats[data.jid]["timerID"]);
-            delete blinkingChats[data.jid];
-        }
-        if (data.jid in blockedChats)
-        {
-            delete blockedChats[data.jid];
-        }
-    });
+        console.warn("WAIncognito: Could not find the chat for Mark as read");
+        return;
+    }
+    if (getChatContactPrivacy(chat)?.readConfirmationsHook) return;
+    const chatJid = getJidOfChat(chat);
 
-    chat.unreadCount -= data.unreadCount;
+    const aliases = blockedChats.get(jid) ?? blockedChats.get(chatJid);
+    const receiptJids = new Set([jid, chatJid, normalizeJID(chat.id.toString()), ...(aliases ?? [])]);
+    const exception = { expiresAt: Date.now() + 2000 };
+    function expireException()
+    {
+        for (const receiptJid of receiptJids)
+            if (readReceiptExceptions.get(receiptJid) === exception) readReceiptExceptions.delete(receiptJid);
+    }
+    const expiryTimer = setTimeout(expireException, 2000);
+    for (const receiptJid of receiptJids) readReceiptExceptions.set(receiptJid, exception);
+    const unreadCount = chat.unreadCount;
+    try
+    {
+        const marked = await window.WhatsAppAPI.Seen.sendSeen({ chat, afterAvailable: false });
+        if (marked === false || (unreadCount > 0 && chat.unreadCount >= unreadCount))
+            throw new Error("WhatsApp did not update the unread count");
+    }
+    catch (error)
+    {
+        clearTimeout(expiryTimer);
+        expireException();
+        console.warn("WAIncognito: Could not send read receipt", error);
+        return;
+    }
 
-    // animate out the incognito message
-    var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-    if (warningMessage != null && warningMessage.messageID.startsWith(data.jid))
+    if (aliases)
+        for (const alias of aliases)
+            if (blockedChats.get(alias) === aliases) blockedChats.delete(alias);
+    const warningMessage = document.getElementsByClassName("incognito-message")[0];
+    if (warningMessage?.messageID?.startsWith(chatJid))
     {
         Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
         setTimeout(function() {warningMessage.remove();}, 300);
     }
 
-    //var node = ["action",{"type":"set","epoch":"30"},[["read",{"jid":data.jid,"index":data.index,"owner":"false","count":data.unreadCount.toString()},null]]];
-    //WACrypto.sendNode(node);
 });
 
-document.addEventListener("getDeletedMessageByID", async function(e) 
+document.addEventListener("getDeviceTypeForMessage", function(e)
 {
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
+    var deviceType = typeof deviceTypesPerMessage !== "undefined" && showDeviceTypesEnabled
+        ? deviceTypesPerMessage.get(msgID) ?? null
+        : null;
 
-    if (window.deletedMessagesDB == null) return;
-
-    var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
-    var msgsStore = transcation.objectStore("msgs");
-
-    // search the message ID in both the original message ID and the revoked message ID
-    let requestByID = msgsStore.get(msgID);
-    
-    requestByID.onsuccess = (e) =>
-    {
-        var messageData = requestByID.result;
-        if (messageData)
-        {
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
-            return;
-        }
-
-        // Did not find the message data by revoked message ID. try by original message ID
-        var originalIDIndex = msgsStore.index('originalID_index');
-        var requestByOriginalID = originalIDIndex.get(msgID);
-        requestByOriginalID.onsuccess = (e) =>
-        {
-            var messageData = requestByOriginalID.result;
-
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
-        }
-    }
-    
+    document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
 });
 
-document.addEventListener("getDeviceTypeForMessage", async function(e) 
+const blockedStatusDeletions = new Set();
+
+function recordBlockedStatusDeletion(id)
 {
-    var data = JSON.parse(e.detail);
-    var msgID = data.messageID;
-    var deviceType = null;
-
-    if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
-        deviceType = deviceTypesPerMessage[msgID];
-
-    setTimeout(function()
-    {
-        document.dispatchEvent(new CustomEvent("onDeviceTypeReceived", {detail: JSON.stringify({deviceType: deviceType, messageID: msgID})}));
-    }, 20);
-});
-
-function markChatAsPendingReciptsSending(chat)
-{
-    if (chat.pendingSeenCount != 0) chat.pendingSeenCount = 0;
-
-    if (chat.unreadCount == 0)
-    {
-        return;
-    }
-
-    var currentChat = getCurrentChat();
-    if (currentChat.id.user != chat.id.user) 
-    {
-        return;
-    }
-
-    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
-    var previousMessage = document.getElementsByClassName("incognito-message").length > 0 ? 
-                            document.getElementsByClassName("incognito-message")[0] : null;
-    var seconds = safetyDelay;
-
-    var chatWindow = getCurrentChatPanel();
-
-    if (chatWindow != null && chat.unreadCount > 0 && (previousMessage == null || previousMessage.messageID != messageID))
-    {
-        if (chat.id in blinkingChats)
-        {
-            seconds = blinkingChats[chat.id]["time"];
-            clearInterval(blinkingChats[chat.id]["timerID"]);
-        }
-
-        // make a warning message at the chat panel
-        var warningMessage = document.createElement('div');
-        warningMessage.setAttribute('class', 'incognito-message middle');
-        warningMessage.innerHTML = "Sending read receipts in " + seconds + " seconds...";
-        warningMessage.messageID = messageID;
-
-        var cancelButton = document.createElement('div');
-        cancelButton.setAttribute('class', 'incognito-cancel-button');
-        cancelButton.innerHTML = "Cancel";
-        warningMessage.appendChild(cancelButton);
-
-        // insert it under the unread counter, or at the end of the chat panel
-        var parent = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
-        if (previousMessage != null)
-            parent.removeChild(previousMessage);
-        var unreadMarker = getUnreadMarkerElement(parent);
-        if (unreadMarker != null)
-            unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
-        else
-        {
-            warningMessage.setAttribute('class', 'incognito-message');
-            parent.appendChild(warningMessage);
-        }
-        Velocity(warningMessage, { height: warningMessage.clientHeight, opacity: 1, marginTop: [12, 0], marginBottom: [12, 0] },
-            { defaultDuration: 400, easing: [.1, .82, .25, 1] });
-
-        var blockedChatElem = findChatEntryElementForJID(chat.id);
-
-        function makeUnreadCounterBlink()
-        {
-            chat.pendingSeenCount = 0;
-    
-            if (blockedChatElem != null)
-            {
-                var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-                if (unreadCounter != null)
-                {
-                    unreadCounter.classList.add("blinking");
-                }
-            }
-        }
-    
-        makeUnreadCounterBlink();
-        setTimeout(makeUnreadCounterBlink, 200); // for multi-device pendingSeenCount
-
-        var id = setInterval(function ()
-        {
-            chat.pendingSeenCount = 0;
-
-            seconds--;
-            if (seconds > 0)
-            {
-                warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
-                blinkingChats[chat.id] = { timerID: id, time: seconds, chat: chat };
-            }
-            else
-            {
-                // time's up, sending receipt
-                clearInterval(id);
-                var data = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
-                document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(data) }));
-
-                var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-                unreadCounter.className = unreadCounter.className.replace("blocked-color", "").replace("blinking", "");
-            }
-        }, 1000);
-
-        blinkingChats[chat.id] = { timerID: id, time: seconds, chat: chat };
-
-        cancelButton.onclick = function ()
-        {
-            clearInterval(id);
-            delete blinkingChats[chat.id];
-
-            markChatAsBlocked(chat);
-        };
-    }
+    if (blockedStatusDeletions.has(id)) return;
+    blockedStatusDeletions.add(id);
+    // shortcut: keep 1,000 revokes in the current tab, use an archive if reload persistence is needed.
+    if (blockedStatusDeletions.size > 1000)
+        blockedStatusDeletions.delete(blockedStatusDeletions.values().next().value);
+    document.dispatchEvent(new CustomEvent("onStatusDeletionBlocked"));
 }
+
+function statusMessageId(key)
+{
+    if (typeof key === "string")
+        return /^(?:true|false)_status@broadcast_(.+?)(?:_[^_]+@[^_]+)?$/.exec(key)?.[1];
+    if (key?.remote?.toString() === "status@broadcast" && typeof key.id === "string")
+        return key.id;
+}
+
+function statusMessageFromProps(props)
+{
+    return props?.msg ?? props?.message ?? props?.statusMessage ?? props?.currentMsg;
+}
+
+document.addEventListener("getStatusViewerInfo", function (event)
+{
+    const node = event.target;
+    const viewer = node.closest?.('[data-animate-status-viewer], [data-testid="status-video"]');
+    if (!viewer) return;
+
+    let id = statusMessageId(node.closest("[data-id]")?.getAttribute("data-id"));
+    let name;
+    let timestamp;
+    let mimeType;
+    for (const element of node === viewer ? [node] : [node, viewer])
+    {
+        const fiberKey = Object.keys(element).find(key => key.startsWith("__reactFiber$"));
+        let fiber = element[fiberKey];
+        // shortcut: check nearby React props, use a stable viewer API if WhatsApp exposes one.
+        for (let depth = 0; fiber && depth < 16 && (!id || !name || !timestamp || !mimeType); depth++, fiber = fiber.return)
+        {
+            const props = fiber.memoizedProps;
+            const message = statusMessageFromProps(props);
+            const messageId = statusMessageId(message?.id ?? message?.__x_id);
+            id ??= messageId ?? statusMessageId(props?.msgKey) ?? statusMessageId(props?.msgId);
+            if (messageId && messageId === id)
+            {
+                const sentAt = message.t ?? message.__x_t;
+                if (Number.isFinite(sentAt) && sentAt > 0) timestamp ??= sentAt;
+                const format = message.mimetype ?? message.__x_mimetype ?? message.mediaData?.mimetype;
+                if (typeof format === "string" && format) mimeType ??= format;
+            }
+            const contact = props?.contact ?? props?.status?.contact ?? props?.initialStatus?.contact;
+            const displayName = contact?.formattedName ?? contact?.name ?? contact?.pushname;
+            if (!name && typeof displayName === "string") name = displayName;
+        }
+    }
+
+    if (!id && node === viewer && blockedStatusDeletions.size)
+    {
+        // shortcut: text statuses have no media element, inspect the viewer's first 200 fibers until it exposes the active ID.
+        const fiberKey = Object.keys(viewer).find(key => key.startsWith("__reactFiber$"));
+        const child = viewer[fiberKey]?.child;
+        const pending = child ? [child] : [];
+        for (let count = 0; pending.length && count < 200; count++)
+        {
+            const fiber = pending.pop();
+            const props = fiber.memoizedProps;
+            const message = statusMessageFromProps(props);
+            const candidate = statusMessageId(message?.id ?? message?.__x_id) ?? statusMessageId(props?.msgKey) ?? statusMessageId(props?.msgId);
+            if (candidate && id && candidate !== id)
+            {
+                id = undefined;
+                break;
+            }
+            id ??= candidate;
+            if (fiber.sibling) pending.push(fiber.sibling);
+            if (fiber.child) pending.push(fiber.child);
+        }
+        if (pending.length) id = undefined;
+    }
+
+    document.dispatchEvent(new CustomEvent("onStatusViewerInfo", {
+        detail: JSON.stringify({ name, timestamp, mimeType, deleted: Boolean(id && blockedStatusDeletions.has(id)) })
+    }));
+});
 
 function markChatAsBlocked(chat)
 {
@@ -420,9 +515,9 @@ function markChatAsBlocked(chat)
     }
 
     var currentChat = getCurrentChat();
-    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
+    var messageID = getJidOfChat(chat) + (chat.lastReceivedKey?.id ?? "");
 
-    if (currentChat.id.user == chat.id.user)
+    if (currentChat?.id && getJidOfChat(currentChat) === getJidOfChat(chat))
     {
         //
         // Create a "receipts blocked" warning if needed
@@ -451,23 +546,20 @@ function markChatAsBlocked(chat)
         var sendButton = warningMessage.lastChild;
         sendButton.setAttribute('class', 'incognito-send-button');
         sendButton.innerHTML = "Mark as read";
-        sendButton.onclick = function ()
-        {
-            var data = {
-                name: chat.name, jid: getJidOfChat(chat), lastMessageIndex: chat.lastReceivedKey.id,
-                fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount, isGroup: chat.isGroup,
-                formattedName: chat.contact.name
-            };
-            document.dispatchEvent(new CustomEvent('onMarkAsReadClick', { detail: JSON.stringify(data) }));
-        };
+        sendButton.onclick = () => requestMarkAsRead(chat);
+        sendButton.hidden = getChatContactPrivacy(chat)?.readConfirmationsHook === true;
 
         warningMessage.messageID = messageID;
+        warningMessage.dataset.jid = getJidOfChat(chat);
 
         //
         // Put that warning in the chat panel, under the unread counter or at the bottom
         //
 
-        var innerChatPanel = document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0];
+        var innerChatPanel = document.querySelector('[data-testid="conversation-panel-messages"]')
+            || document.getElementsByClassName(UIClassNames.INNER_CHAT_PANEL_CLASS)[0]
+            || document.getElementById("main");
+        if (!innerChatPanel) return;
         var unreadMarker = getUnreadMarkerElement(innerChatPanel);
         if (unreadMarker != null)
             unreadMarker.parentNode.insertBefore(warningMessage, unreadMarker.nextSibling);
@@ -496,8 +588,11 @@ function markChatAsBlocked(chat)
         if (blockedChatElem != null)
         {
             var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
+            if (unreadCounter)
+            {
+                unreadCounter.dataset.incognitoBlockedJid = getJidOfChat(chat);
                 unreadCounter.classList.add("blocked-color");
+            }
         }
     }
 
@@ -506,7 +601,7 @@ function markChatAsBlocked(chat)
     
 
     // if it didn't exist previously, animate it in
-    if (blockedChats[chat.id] == undefined || warningWasEmpty)
+    if (warningMessage && (!isChatBlocked(getJidOfChat(chat)) || warningWasEmpty))
         Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
     if (warningMessage)
