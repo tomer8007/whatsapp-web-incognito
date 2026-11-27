@@ -71,5 +71,5 @@ test("the notice exists and the UI no longer calls chrome.runtime / chrome.stora
         assert.ok(!/chrome\.runtime\.(sendMessage|getURL)|browser\.runtime\.sendMessage|chrome\.storage\.local\.(get|set)/.test(code), file);
     }
     const manifest = JSON.parse(fs.readFileSync(path.join(require("./helpers/sandbox").ROOT, "manifest.json"), "utf8"));
-    assert.strictEqual(manifest.content_scripts[1].js[0], "core/extension_guard.js");
+    assert.strictEqual(manifest.content_scripts.find((c) => c.js.includes("core/ui.js")).js[0], "core/extension_guard.js");
 });

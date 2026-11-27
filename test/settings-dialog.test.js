@@ -66,7 +66,7 @@ test("only the Mark as read confirmation uses SweetAlert (as on master), nothing
         assert.ok(!/new Drop\(/.test(code), file + " uses Drop");
     }
     const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8"));
-    const scripts = manifest.content_scripts[1].js;
+    const scripts = manifest.content_scripts.find((c) => c.js.includes("core/ui.js")).js;
     assert.ok(scripts.indexOf("core/modal.js") > -1 && scripts.indexOf("core/modal.js") < scripts.indexOf("core/settings_dialog.js"));
     assert.ok(scripts.indexOf("core/settings_dialog.js") < scripts.indexOf("core/ui.js"));
     assert.deepStrictEqual([...manifest.permissions], ["storage"]);
@@ -167,7 +167,7 @@ test("the header button text says what it does", () => {
 
 test("the incognito icon opens the small popup with quick switches, which ends with a More button for the full settings", () => {
     const ui = fs.readFileSync(path.join(ROOT, "core/ui.js"), "utf8");
-    assert.ok(/menuItemElem\.addEventListener\("click", function\(\) \{ openQuickSettings\(menuItemElem\); \}\)/.test(ui), "the icon opens the small popup");
+    assert.ok(/menuItemElem\.addEventListener\("click", function\(\) \{ hideTooltip\(\); openQuickSettings\(menuItemElem\); \}\)/.test(ui), "the icon opens the small popup");
     assert.ok(!/menuItemElem\.addEventListener\("click", function\(\) \{ openSettingsDialog\(\)/.test(ui));
     assert.ok(/QUICK_SETTINGS_KEYS = \["readConfirmationsHook", "onlineUpdatesHook", "typingUpdatesHook", "saveDeletedMsgs"\]/.test(ui));
     assert.ok(/more\.addEventListener\("click", function\(\) \{ close\(\); openSettingsDialog\(\); \}\)/.test(ui));

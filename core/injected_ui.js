@@ -133,6 +133,10 @@ document.addEventListener('onPaneChatOpened', function (e)
 {
     var chat = getCurrentChat();
     chats[chat.id] = chat;
+    if (chat && chat.id in blockedChats)
+    {
+        setTimeout(function () { markChatAsBlocked(chat); }, 200);
+    }
 });
 
 document.addEventListener('onDropdownOpened', function (e)

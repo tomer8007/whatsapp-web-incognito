@@ -4,7 +4,7 @@
   "default_locale": "en",
   "short_name": "WAIncognito",
   "description": "__MSG_extDescription__",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "permissions": ["storage"],
    "icons":  { "128": "images/icon_128_blue.png" },
    "action": {
@@ -18,6 +18,12 @@
    "host_permissions": ["https://web.whatsapp.com/*"],
    "content_scripts": 
    [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["core/comms_worker_fix.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
   	{
       "matches": ["https://web.whatsapp.com/*"],
   	  "js": ["core_injection.js"],

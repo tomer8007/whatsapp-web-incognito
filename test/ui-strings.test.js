@@ -74,7 +74,7 @@ const ALLOWED_COLORS = new Set([
     "rgba(241, 92, 109, 0.12)", "rgba(241, 92, 109, 0.14)", "rgba(241, 92, 109, 0.2)",
     "rgba(33, 192, 99, 0.18)", "rgba(33, 192, 99, 0.2)",
     "rgba(255,0,0,0.3)", "rgba(9, 210, 97, 0.3)", "rgba(9, 210, 97, 1.0)", // unread counter blink // Mark as read buttons (master colors)
-    "rgba(0,255,0,0.3)", "rgba(0,255,0,0.6)",
+    "rgba(0,255,0,0.3)", "rgba(0,255,0,0.6)", "rgba(11, 20, 26, .16)", // tooltip shadow of the Incognito icon (master)
     "rgba(255,255,255,0.3)", "rgba(255,255,255,0.5)", "rgba(200, 40, 40, 0.9)", // status viewer overlay buttons
 ]);
 

@@ -18,6 +18,35 @@
 /* the left-nav icon uses the same strong icon color as WhatsApp's header icons */
 .menu-item-incognito.menu-item-incognito, .menu-item-incognito svg { color: var(--WDS-content-default, var(--primary-strong, currentColor)); }
 
+.incognito-menu-tooltip
+{
+    position: fixed;
+    transform: translateY(-50%);
+    z-index: 1200;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--tooltip-background, #242728);
+    color: var(--tooltip-text, #fff);
+    box-shadow: 0 1px 4px rgba(11, 20, 26, .16);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 16px;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: incognito-tooltip-appear .12s ease-out .12s both;
+}
+
+@keyframes incognito-tooltip-appear
+{
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce)
+{
+    .incognito-menu-tooltip { animation: none; }
+}
+
 .icon-incognito
 {
     background-image: url(chrome-extension://__MSG_@@extension_id__/images/incognito_gray.svg) !important;
