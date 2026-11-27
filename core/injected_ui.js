@@ -2,9 +2,24 @@
 // UI Event handlers
 // ---------------------
 
+window.WAIncognitoOptions = window.WAIncognitoOptions || defaultOptions();
+
+// Tell the isolated world (ui.js) that this listener side is ready, so it sends the options and contact rules again
+// (the first push may have happened before our listeners existed).
+setTimeout(function() { try { document.dispatchEvent(new CustomEvent('waIncognitoPageReady')); } catch (e) { /* best effort */ } }, 0);
+
 document.addEventListener('onMainUIReady', function (e)
 {
     setTimeout(exposeWhatsAppAPI, 100);
+});
+
+// the isolated world (ui.js) asks for the page-world half of the diagnostics
+document.addEventListener('waIncognitoDiagnosticsRequest', function (e)
+{
+    var data = JSON.parse(e.detail);
+    var results = [];
+    try { results = Diagnostics.run(); } catch (exception) { console.error(exception); }
+    document.dispatchEvent(new CustomEvent('waIncognitoDiagnosticsResult', { detail: JSON.stringify({messageID: data.messageID, results: results}) }));
 });
 
 document.addEventListener('onPresenceOptionTicked', function (e)
@@ -18,62 +33,28 @@ document.addEventListener('onPresenceOptionUnticked', function (e)
 });
 
 
-document.addEventListener('onIncognitoOptionsOpened', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [1, 0], opacity: [1, 0] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    /*
-    var safetyDelayPanel = document.getElementById("incognito-safety-delay-option-panel");
-    if (!readConfirmationsHookEnabled)
-    {
-        safetyDelayPanel.style.opacity = 0;
-        safetyDelayPanel.style.height = 0;
-        safetyDelayPanel.style.marginTop = "-10px";
-    }
-    */
-});
-
-document.addEventListener('onIncognitoOptionsClosed', function (e)
-{
-    var drop = document.getElementsByClassName("drop")[0];
-    fixCSSPositionIfNeeded(drop);
-    Velocity(drop, { scale: [0, 1], opacity: [0, 1] }, { defaultDuration: 100, easing: [.1, .82, .25, 1] });
-
-
-    // if (!document.getElementById("incognito-radio-enable-safety-delay").checked) return;
-    // validateSafetyDelay();
-});
-
-function validateSafetyDelay()
-{
-    var string = document.getElementById("incognito-option-safety-delay").value;
-    var isValid = false;
-    var number = Math.floor(Number(string));
-    if ((String(number) === string && number >= 1 && number <= 30) || string == "") isValid = true;
-    if (!isValid)
-    {
-        document.getElementById("incognito-option-safety-delay").disabled = true;
-        document.getElementById("incognito-option-safety-delay").value = "";
-        document.getElementById("incognito-radio-disable-safety-delay").checked = true;
-        document.getElementById("incognito-radio-enable-safety-delay").checked = false;
-
-        showToast("The safety delay must be an integer number in range 1-30 !");
-    }
-}
-
 document.addEventListener('onOptionsUpdate', function (e)
 {
     // update enforcing globals
     // TODO: move outside injected_ui.js
     var options = JSON.parse(e.detail);
+
+    // the full options object (some updates only carry the changed keys, so merge)
+    window.WAIncognitoOptions = Object.assign(window.WAIncognitoOptions || defaultOptions(), options);
+
+    if ('sendLaterEnabled' in options && !options.sendLaterEnabled)
+    {
+        // turned off while a "receipts blocked" bar is on screen
+        var staleButtons = document.getElementsByClassName("incognito-schedule-button");
+        while (staleButtons.length > 0) staleButtons[0].remove();
+    }
+
     if ('readConfirmationsHook' in options) readConfirmationsHookEnabled = options.readConfirmationsHook;
     if ('onlineUpdatesHook' in options) onlineUpdatesHookEnabled = options.onlineUpdatesHook;
     if ('typingUpdatesHook' in options) typingUpdatesHookEnabled = options.typingUpdatesHook;
     if ('safetyDelay' in options) safetyDelay = options.safetyDelay;
     if ('saveDeletedMsgs' in options) saveDeletedMsgsHookEnabled = options.saveDeletedMsgs;
+    if ('saveDeletedMsgs' in options && optionsReceivedAt == null) optionsReceivedAt = Date.now(); // a full options object, not a partial update
     if ('showDeviceTypes' in options) showDeviceTypesEnabled = options.showDeviceTypes;
     if ('autoReceiptOnReplay' in options) autoReceiptOnReplay = options.autoReceiptOnReplay;
     if ('allowStatusDownload' in options) allowStatusDownload = options.allowStatusDownload;
@@ -126,11 +107,11 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
         return;
     }
 
-    if (readConfirmationsHookEnabled && safetyDelay > 0 && chat.id.user == blockedUser)
+    if (readConfirmationsHookEnabled && safetyDelay > 0 && chatMatchesJid(chat, blockedJid))
     {
         markChatAsPendingReciptsSending(chat);
     }
-    else if (readConfirmationsHookEnabled && (chat.id.user == blockedUser || chat.accountLid.toString() == blockedJid))
+    else if ((readConfirmationsHookEnabled || NodeHandler.isBlockedForContact(blockedJid, "readReceipts", false)) && chatMatchesJid(chat, blockedJid))
     {
         markChatAsBlocked(chat);
     }
@@ -225,7 +206,7 @@ document.addEventListener('sendReadConfirmation', async function (e)
     exceptionsList.push(normalizeJID(data.jid));
     setTimeout(function() { exceptionsList = exceptionsList.filter(i => i !== data.jid); }, 2000);
     
-    WhatsAppAPI.Seen.sendSeen(chatContainer).then(result =>
+    Promise.resolve().then(function() { return WhatsAppAPI.Seen.sendSeen(chatContainer); }).then(result =>
     {
         // TODO: remove the old blinking chats code
         if (data.jid in blinkingChats)
@@ -239,11 +220,11 @@ document.addEventListener('sendReadConfirmation', async function (e)
         }
     });
 
-    chat.unreadCount -= data.unreadCount;
+    if (chat) chat.unreadCount -= data.unreadCount;
 
     // animate out the incognito message
     var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ? document.getElementsByClassName("incognito-message")[0] : null;
-    if (warningMessage != null && warningMessage.messageID.startsWith(data.jid))
+    if (warningMessage != null && String(warningMessage.messageID || "").startsWith(data.jid))
     {
         Velocity(warningMessage, { height: 0, opacity: 0, marginTop: 0, marginBottom: 0 }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
         setTimeout(function() {warningMessage.remove();}, 300);
@@ -253,12 +234,54 @@ document.addEventListener('sendReadConfirmation', async function (e)
     //WACrypto.sendNode(node);
 });
 
+// A scheduled blue tick is due (core/receipt_scheduler.js, isolated world). Uses the newest state of the chat.
+document.addEventListener("sendReadConfirmationForJid", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var chat = null;
+    for (var attempt = 0; attempt < 5 && !chat; attempt++)
+    {
+        chat = await getChatByJID(data.jid);
+        if (!chat) await new Promise(function(resolve) { setTimeout(resolve, 2000); }); // right after startup the chats may not be loaded yet
+    }
+    if (!chat || !chat.unreadCount || !chat.lastReceivedKey) return;
+
+    var payload = { jid: getJidOfChat(chat), index: chat.lastReceivedKey.id, fromMe: chat.lastReceivedKey.fromMe, unreadCount: chat.unreadCount };
+    document.dispatchEvent(new CustomEvent('sendReadConfirmation', { detail: JSON.stringify(payload) }));
+});
+
 document.addEventListener("getDeletedMessageByID", async function(e) 
 {
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
 
-    if (window.deletedMessagesDB == null) return;
+    // the vault (core/vault.js) holds the archive once it is set up
+    if (await isVaultSetUp())
+    {
+        try
+        {
+            if (await Vault.has(msgID))
+            {
+                var reply = Vault.isUnlocked() ? {messageData: await Vault.get(msgID), messageID: msgID} : {locked: true, messageID: msgID};
+                document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify(reply)}));
+                return;
+            }
+        }
+        catch (exception)
+        {
+            console.warn("WAIncognito: vault lookup failed");
+            console.warn(exception);
+        }
+    }
+
+    // A message whose revoke we blocked this page load is marked even if its original is not in the DB (yet)
+    var blockedRevoke = typeof blockedRevokedIds != "undefined" && blockedRevokedIds.has(String(msgID));
+
+    if (window.deletedMessagesDB == null)
+    {
+        if (blockedRevoke) document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: undefined, blockedRevoke: true, messageID: msgID})}));
+        return;
+    }
 
     var transcation = window.deletedMessagesDB.transaction('msgs', "readonly");
     var msgsStore = transcation.objectStore("msgs");
@@ -282,19 +305,149 @@ document.addEventListener("getDeletedMessageByID", async function(e)
         {
             var messageData = requestByOriginalID.result;
 
-            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, messageID: msgID})}));
+            document.dispatchEvent(new CustomEvent("onDeletedMessageReceived", {detail: JSON.stringify({messageData: messageData, blockedRevoke: blockedRevoke, messageID: msgID})}));
         }
     }
     
 });
 
-document.addEventListener("getDeviceTypeForMessage", async function(e) 
+// The status viewer asks whether the status on screen was deleted by its sender and is in the archive
+document.addEventListener("waIncognitoStatusCheck", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, archived: false };
+    try
+    {
+        var viewer = document.querySelector("[data-animate-status-viewer]");
+        var fiberKey = viewer ? Object.keys(viewer).find(function(key) { return key.startsWith("__reactFiber$"); }) : null;
+        var statusId = fiberKey ? findStatusMessageIdInFiber(viewer[fiberKey]) : null;
+        if (statusId)
+        {
+            statusViewerIdResolutions++;
+            reply.archived = await isMessageArchived(statusId);
+        }
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: status check failed");
+    }
+    document.dispatchEvent(new CustomEvent("waIncognitoStatusCheckResult", { detail: JSON.stringify(reply) }));
+});
+
+// Disappearing messages saved for a chat (core/ephemeral_keeper.js): the list, and the media of one of them
+document.addEventListener("getEphemeralForChat", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, items: [], locked: false };
+    try
+    {
+        var result = await loadEphemeralForChats(data.chatJids || []);
+        reply.locked = result.locked;
+        reply.items = summarizeEphemeralRecords(result.records);
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: could not load the saved disappearing messages");
+    }
+    document.dispatchEvent(new CustomEvent("onEphemeralForChatReceived", { detail: JSON.stringify(reply) }));
+});
+
+document.addEventListener("downloadEphemeralMedia", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, ok: false, error: null };
+    try
+    {
+        var record = await loadEphemeralRecord(data.id);
+        if (!record || !record.mediaMeta) throw new Error("no-media");
+        var meta = record.mediaMeta;
+        var decrypted = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({ directPath: meta.directPath, encFilehash: meta.fileEncSha256,
+            filehash: meta.fileSha256, mediaKey: meta.mediaKey, type: meta.type, signal: (new AbortController).signal });
+        reply.b64 = arrayBufferToBase64(decrypted);
+        reply.mimetype = meta.mimetype;
+        reply.ok = true;
+    }
+    catch (exception)
+    {
+        reply.error = "media-unavailable"; // for example expired on the server
+    }
+    document.dispatchEvent(new CustomEvent("onEphemeralMediaReceived", { detail: JSON.stringify(reply) }));
+});
+
+// A scheduled message is due (core/send_scheduler.js, isolated world)
+document.addEventListener("waIncognitoSendText", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var result = await sendTextToChat(data.jid, data.text);
+    document.dispatchEvent(new CustomEvent("onSendTextResult", { detail: JSON.stringify({ id: data.id, messageID: data.id, ok: result.ok, error: result.error || null }) }));
+});
+
+// The original versions of an edited message (core/edit_tracker.js), asked for by the "Original" button
+document.addEventListener("getEditHistory", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = { messageID: data.messageID, edits: [], locked: false };
+    try
+    {
+        var history = await loadEditHistory(data.messageID);
+        reply.edits = history.edits.map(function(edit) { return { original: edit.original, newText: edit.newText, ts: edit.ts, originalTs: edit.originalTs }; });
+        reply.locked = history.locked;
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: could not load the edit history");
+    }
+    document.dispatchEvent(new CustomEvent("onEditHistoryReceived", { detail: JSON.stringify(reply) }));
+});
+
+// Vault commands from the "Vault…" menu (isolated world). The passphrase only travels through this event.
+document.addEventListener("waIncognitoVaultCommand", async function(e)
+{
+    var data = JSON.parse(e.detail);
+    var reply = {messageID: data.messageID, ok: false, error: null};
+    try
+    {
+        if (typeof Vault == "undefined") throw new Error("vault-not-loaded");
+        if (data.cmd == "setup")
+        {
+            await Vault.setup(data.passphrase);
+            reply.migrated = await Vault.migrateFromPlaintextDB();
+            reply.ok = true;
+        }
+        else if (data.cmd == "unlock")
+        {
+            reply.ok = await Vault.unlock(data.passphrase);
+            if (!reply.ok) reply.error = "wrong-passphrase";
+        }
+        else if (data.cmd == "lock")
+        {
+            Vault.lock();
+            reply.ok = true;
+        }
+        else if (data.cmd == "status")
+        {
+            reply.ok = true;
+        }
+
+        var isSetUp = await Vault.isSetUp();
+        var stats = isSetUp ? await Vault.stats() : {count: 0, bytes: 0};
+        reply.status = {isSetUp: isSetUp, isUnlocked: Vault.isUnlocked(), count: stats.count, bytes: stats.bytes};
+    }
+    catch (exception)
+    {
+        reply.ok = false;
+        reply.error = String(exception && exception.message ? exception.message : exception);
+    }
+    document.dispatchEvent(new CustomEvent("waIncognitoVaultResult", {detail: JSON.stringify(reply)}));
+});
+
+document.addEventListener("getDeviceTypeForMessage", async function(e)
 {
     var data = JSON.parse(e.detail);
     var msgID = data.messageID;
     var deviceType = null;
 
-    if (deviceTypesPerMessage[msgID] != undefined && showDeviceTypesEnabled)
+    if (deviceTypesPerMessage[msgID] != undefined && NodeHandler.contactToggle(data.chatJid, "showDeviceTypes", showDeviceTypesEnabled))
         deviceType = deviceTypesPerMessage[msgID];
 
     setTimeout(function()
@@ -336,12 +489,12 @@ function markChatAsPendingReciptsSending(chat)
         // make a warning message at the chat panel
         var warningMessage = document.createElement('div');
         warningMessage.setAttribute('class', 'incognito-message middle');
-        warningMessage.innerHTML = "Sending read receipts in " + seconds + " seconds...";
+        warningMessage.textContent = t("receipt.sending", { n: seconds });
         warningMessage.messageID = messageID;
 
         var cancelButton = document.createElement('div');
         cancelButton.setAttribute('class', 'incognito-cancel-button');
-        cancelButton.innerHTML = "Cancel";
+        cancelButton.textContent = t("common.cancel");
         warningMessage.appendChild(cancelButton);
 
         // insert it under the unread counter, or at the end of the chat panel
@@ -385,7 +538,7 @@ function markChatAsPendingReciptsSending(chat)
             seconds--;
             if (seconds > 0)
             {
-                warningMessage.firstChild.textContent = "Sending read receipts in " + seconds + " seconds...";
+                warningMessage.firstChild.textContent = t("receipt.sending", { n: seconds });
                 blinkingChats[chat.id] = { timerID: id, time: seconds, chat: chat };
             }
             else
@@ -435,12 +588,22 @@ function markChatAsBlocked(chat)
         {
             warningMessage = document.createElement('div');
             warningMessage.setAttribute('class', 'incognito-message middle');
-            warningMessage.innerHTML = "Read receipts were blocked.";
+            warningMessage.textContent = t("receipt.blocked");
 
             var sendButton = document.createElement('div');
             sendButton.setAttribute('class', 'incognito-send-button');
-            sendButton.innerHTML = "Mark as read";
+            sendButton.textContent = t("receipt.markRead");
             warningMessage.appendChild(sendButton);
+
+            // "Send later…" (receipt.later), only with the option "sendLaterEnabled". Inserted BEFORE the send button, because the
+            // send button must stay the last child
+            if ((window.WAIncognitoOptions || {}).sendLaterEnabled)
+            {
+                var scheduleButton = document.createElement('div');
+                scheduleButton.setAttribute('class', 'incognito-send-button incognito-schedule-button');
+                scheduleButton.textContent = t("receipt.later");
+                warningMessage.insertBefore(scheduleButton, sendButton);
+            }
         }
         else
         {
@@ -448,9 +611,18 @@ function markChatAsBlocked(chat)
             warningMessage.remove();
         }
 
+        var scheduleReceiptButton = warningMessage.querySelector(".incognito-schedule-button");
+        if (scheduleReceiptButton)
+        {
+            scheduleReceiptButton.onclick = function ()
+            {
+                document.dispatchEvent(new CustomEvent('onScheduleReceiptClick', { detail: JSON.stringify({ context: buildChatMenuContext(chat) }) }));
+            };
+        }
+
         var sendButton = warningMessage.lastChild;
         sendButton.setAttribute('class', 'incognito-send-button');
-        sendButton.innerHTML = "Mark as read";
+        sendButton.textContent = t("receipt.markRead");
         sendButton.onclick = function ()
         {
             var data = {
@@ -510,7 +682,7 @@ function markChatAsBlocked(chat)
         Velocity(warningMessage, { scaleY: [1, 0], opacity: [1, 0] }, { defaultDuration: 400, easing: [.1, .82, .25, 1] });
 
     if (warningMessage)
-        warningMessage.firstChild.textContent = "Read receipts were blocked.";
+        warningMessage.firstChild.textContent = t("receipt.blocked");
 }
 
 function setGlobalColorVaraibleString(variable, colorString)

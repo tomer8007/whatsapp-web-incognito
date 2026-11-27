@@ -26,6 +26,38 @@ NodeHandler.interceptOutgoingNode = async function (node)
     return [true, node];
 }
 
+// An "onOff" per-contact setting (core/contact_rules.js): the contact's choice, else the global value.
+NodeHandler.contactToggle = function (jid, field, globalValue)
+{
+    if (!jid || typeof resolveToggle != "function") return globalValue;
+    try { return resolveToggle(contactRules, jidCandidates(jid, lidPnMap), field, globalValue); }
+    catch (exception) { return globalValue; }
+}
+
+// WAIncognitoOptions with this contact's overrides applied
+NodeHandler.optionsFor = function (jid)
+{
+    var options = window.WAIncognitoOptions || {};
+    if (!jid || typeof contactOptionsFor != "function") return options;
+    try { return contactOptionsFor(jid, options, contactRules, lidPnMap); }
+    catch (exception) { return options; }
+}
+
+// The global setting, unless a rule for this contact (pn or lid form) says otherwise.
+NodeHandler.isBlockedForContact = function (jid, field, globalBlocked)
+{
+    // an empty JID, or one without a user part ("s.whatsapp.net", "call"), has no contact rules: no lookups at all
+    if (!jid || typeof resolveRule != "function" || jidParts(jid) == null) return globalBlocked;
+    try
+    {
+        return resolveRule(contactRules, jidCandidates(jid, lidPnMap), field, globalBlocked);
+    }
+    catch (exception)
+    {
+        return globalBlocked;
+    }
+}
+
 NodeHandler.isSentNodeAllowed = function (node)
 {
     var action = node.tag;
@@ -34,15 +66,20 @@ NodeHandler.isSentNodeAllowed = function (node)
     var jid = data.jid ? data.jid : data.to;
     if (jid) jid = normalizeJID(jid.toString());
 
+    // read receipts and typing can be overridden per contact (core/contact_rules.js). Online presence stays global.
+    var readBlocked = NodeHandler.isBlockedForContact(jid, "readReceipts", readConfirmationsHookEnabled);
+    var typingBlocked = NodeHandler.isBlockedForContact(jid, "typing", typingUpdatesHookEnabled);
+    var explicitReadBlock = NodeHandler.isBlockedForContact(jid, "readReceipts", false);
+
     var shouldBlock = 
-        (readConfirmationsHookEnabled && action === "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (readBlocked && action === "read") ||
+        (readBlocked && action == "receipt" && data["type"] == "read") ||
+        (readBlocked && action == "receipt" && data["type"] == "read-self") ||
+        (readBlocked && action == "receipt" && data["type"] === "played" && (isChatBlocked(jid) || explicitReadBlock)) ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-        (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-        (typingUpdatesHookEnabled && action == "chatstate" && node.content[0].tag == "composing");
+        (typingBlocked && action == "presence" && data["type"] == "composing") ||
+        (typingBlocked && action == "chatstate" && node.content[0].tag == "composing");
 
     if (shouldBlock)
     {
@@ -74,9 +111,8 @@ NodeHandler.isSentNodeAllowed = function (node)
                     // why there are read receipts we need to block after sending a message to a lot of people?
                 setTimeout(function()
                 {
-                    if (WhatsAppAPI.Communication)
+                    if (window.WhatsAppAPI && WhatsAppAPI.Communication)
                     {
-                        
                         WhatsAppAPI.Communication.ackHandlers = WhatsAppAPI.Communication.ackHandlers.filter(ack => {
                             var isMatch = (ack.stanza && ack.stanza.attrs && ack.stanza.attrs.type == "read" && ack.stanza.attrs.to.toString() == jid);
                             if (isMatch) {
@@ -177,7 +213,7 @@ NodeHandler.onOutgoingMessageNode = async function (messageNode)
 // </message>
 NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
-    if (remoteJid && isChatBlocked(remoteJid) && autoReceiptOnReplay)
+    if (remoteJid && isChatBlocked(remoteJid) && NodeHandler.contactToggle(remoteJid, "autoReceiptOnReplay", autoReceiptOnReplay))
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
@@ -220,6 +256,14 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
     participant = participant ? participant : remoteJid;
     participant = participant.toString();
 
+    // remember which lid belongs to which phone number (per-contact rules can be stored under either)
+    try
+    {
+        if (messageNode.attrs["sender_pn"] != null && typeof rememberLidPair == "function")
+            rememberLidPair(lidPnMap, remoteJid.toString(), messageNode.attrs["sender_pn"].toString());
+    }
+    catch (exception) { /* best effort */ }
+
     // check for device type
     var looksLikePhone = participant.includes(":0@") || !participant.includes(":");
     var deviceType = looksLikePhone ? "phone" : "computer";
@@ -260,7 +304,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode)
         modifiedMessageNode = deepClone(messageNode);
         modifiedMessageNode.content = [];
 
-        indexOfEncNode = 0;
+        var indexOfEncNode = 0;
         for (var i = 0; i < messageNode.content.length; i++)
         {
             var node = messageNode.content[i];
@@ -304,7 +348,9 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
     var isAllowed = true;
     var remoteJid = null;
     var participant = null;
-    
+    var messageId = null;
+    var isStatusNode = false;
+
     if (messageNode.attrs != null)
     {
         messageId = messageNode.attrs["id"];
@@ -313,17 +359,33 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         participant = messageNode.attrs["participant"];
         participant = participant ? participant : remoteJid;
 
-        if (messageNode.attrs["sender_pn"] != null)
+        isStatusNode = remoteJid == STATUS_BROADCAST_JID;
+
+        // (for a status, "from" is status@broadcast and the sender is the participant: keep it that way)
+        if (messageNode.attrs["sender_pn"] != null && !isStatusNode)
         {
             // we prefer the full phone number JID over the possible LID
             remoteJid = messageNode.attrs["sender_pn"].toString();
         }
     }
 
-    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid);
-    await interceptViewOnceMessages(e2eMessage, messageId);
+    var isRevokeMessage = NodeHandler.checkForMessageDeletionNode(e2eMessage, messageId, remoteJid, participant ? participant.toString() : null);
+    try
+    {
+        await interceptViewOnceMessages(e2eMessage, messageId);
+    }
+    catch (exception)
+    {
+        // A view-once failure must not make the whole packet pass through unmodified (that would let REVOKEs through)
+        console.error("WhatsIncognito: Ignoring error while handling a view-once message:");
+        console.error(exception);
+    }
 
-    if (!saveDeletedMsgsHookEnabled)
+    NodeHandler.trackEdits(e2eMessage, messageId, remoteJid);
+    NodeHandler.keepEphemeral(e2eMessage, messageId, remoteJid, participant ? participant.toString() : remoteJid);
+
+    var shouldBlock = NodeHandler.shouldBlockRevoke(remoteJid);
+    if (!shouldBlock)
     {
         isAllowed = true;
     }
@@ -333,10 +395,28 @@ NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
         isAllowed = false;
     }
 
+
     return isAllowed;
 }
 
-NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid)
+// Revokes in chats are blocked with "saveDeletedMsgs". Revokes of statuses are blocked with "saveDeletedStatus" or "saveDeletedMsgs".
+// Until the first real options update AND the contact rules have arrived, the settings are only defaults. Right after a reconnect
+// the offline backlog (including revokes) can arrive before them, so in that window every revoke is blocked and its original saved,
+// exactly as with "saveDeletedMsgs" on: the conservative choice, nothing is lost. After that the real setting and the rules decide.
+NodeHandler.settingsReady = function()
+{
+    return typeof optionsReceivedAt != "undefined" && optionsReceivedAt != null &&
+           (typeof contactRulesReceived == "undefined" || contactRulesReceived === true);
+}
+
+NodeHandler.shouldBlockRevoke = function(remoteJid)
+{
+    if (!NodeHandler.settingsReady()) return true;
+    if (remoteJid == STATUS_BROADCAST_JID) return saveDeletedMsgsHookEnabled || !!(window.WAIncognitoOptions || {}).saveDeletedStatus;
+    return NodeHandler.contactToggle(remoteJid, "saveDeletedMsgs", saveDeletedMsgsHookEnabled); // a contact can force it on or off
+}
+
+NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid, participant)
 {
     //
     // Check if this is a message deletion node
@@ -345,13 +425,138 @@ NodeHandler.checkForMessageDeletionNode = function(message, messageId, remoteJid
     if (message && message.protocolMessage && message.protocolMessage.type == messageRevokeValue)
     {
         var deletedMessageId = message.protocolMessage.key.id;
-        if (saveDeletedMsgsHookEnabled)
+        if (NodeHandler.shouldBlockRevoke(remoteJid))
         {
-            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId);
+            onDeletionMessageBlocked(message, remoteJid, messageId, deletedMessageId, participant);
         }
 
         return true;
     }
 
     return false;
+}
+
+//
+// Edit tracking (core/edit_tracker.js). Edits are never blocked: WhatsApp still shows the new version.
+// Active when "saveEdits" (keep the original) or "toastOnEdit" (notify) is on. Never throws.
+//
+NodeHandler.trackEdits = function(e2eMessage, messageId, remoteJid)
+{
+    try
+    {
+        var options = NodeHandler.optionsFor(remoteJid);
+        if (!options.saveEdits && !options.toastOnEdit) return;
+        if (typeof EditTracker == "undefined") return;
+
+        var edit = EditTracker.detectEdit(e2eMessage);
+        if (!edit)
+        {
+            var text = extractText(e2eMessage);
+            if (text != null && messageId) EditTracker.remember(messageId, text, Date.now());
+            return;
+        }
+
+        NodeHandler.processEdit(edit, remoteJid, options).catch(function() { console.warn("WAIncognito: edit tracking failed"); });
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: edit tracking failed");
+    }
+}
+
+// An edit was detected. Always notifies (toast); keeps the original when it is known: from the 20-minute cache, or else from
+// WhatsApp's own message model (chat.msgs), which still holds the old body at this point.
+// Versions we already stored per message id (to drop duplicate packets of the same edit)
+NodeHandler.lastEditBefore = new Map();
+var EDIT_DUPLICATE_WINDOW_MS = 5000;
+
+// How long to watch WhatsApp's own message model for the edited text (secret edits carry none)
+NodeHandler.editPoll = { intervalMs: 250, maxMs: 6000, sleep: function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); } };
+
+NodeHandler.processEdit = async function(edit, remoteJid, options)
+{
+    // Secret edits carry no text, and WhatsApp has already decrypted the earlier edits itself: its own message model
+    // holds the CURRENT body (the version this edit is about to replace). That is the most reliable "before", so it wins
+    // when the edit has no text. With text, the cache holds the latest version we saw; the model is the fallback.
+    var recalled = EditTracker.recall(edit.targetId);
+    var chat = null;
+    var fromModel = null;
+    if (!recalled || edit.newText == null)
+    {
+        try { chat = await getChatByJID(remoteJid, edit.targetId); fromModel = readOriginalFromChatModel(chat, edit.targetId); }
+        catch (e) { fromModel = null; }
+    }
+    var original = edit.newText == null ? (fromModel ? resolveEditOriginal(null, fromModel) : resolveEditOriginal(recalled, null))
+                                        : resolveEditOriginal(recalled, fromModel);
+
+    var ts = Date.now();
+    var previous = NodeHandler.lastEditBefore.get(edit.targetId);
+    var duplicate = !!(original && previous && previous.text === original.text && ts - previous.ts < EDIT_DUPLICATE_WINDOW_MS);
+    if (duplicate) return;
+
+    document.dispatchEvent(new CustomEvent("waIncognitoEdited", { detail: JSON.stringify({ targetId: edit.targetId }) }));
+
+    var newText = edit.newText;
+    var samePreview = original && newText != null && newText === original.text; // e.g. a link preview update
+    var record = null;
+
+    if (original && !samePreview && options.saveEdits)
+    {
+        record = { kind: "edit", id: "edit:" + edit.targetId + ":" + ts, targetId: edit.targetId, original: original.text,
+                   newText: newText, ts: ts, originalTs: original.ts, chatJid: remoteJid };
+        saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not save the original of an edited message"); });
+    }
+    if (original) NodeHandler.lastEditBefore.set(edit.targetId, { text: original.text, ts: ts });
+
+    // a secret edit has no text: watch the message model until WhatsApp shows the edited body
+    if (newText == null && original && chat)
+    {
+        var watched = await waitForBodyChange(function()
+        {
+            var model = readOriginalFromChatModel(chat, edit.targetId);
+            return model ? model.text : null;
+        }, original.text, NodeHandler.editPoll);
+        if (watched != null)
+        {
+            newText = watched;
+            if (record)
+            {
+                record.newText = watched;
+                saveArchiveRecord(record, "edits").catch(function() { console.warn("WAIncognito: could not update an edit record"); });
+            }
+        }
+    }
+
+    if (typeof WAdebugMode != "undefined" && WAdebugMode)
+    {
+        console.log("WAIncognito: edit detected", { hasNewText: edit.newText != null, cacheHit: !!recalled, modelHit: !!fromModel,
+                                                   original: original ? original.source : "unknown", afterKnown: newText != null,
+                                                   saveEdits: !!options.saveEdits, toastOnEdit: !!options.toastOnEdit });
+    }
+
+    // the next edit of the same message starts from this version
+    if (newText != null) EditTracker.remember(edit.targetId, newText, Date.now());
+
+    if (!samePreview) notifyEditedMessage(remoteJid, newText != null ? newText : (original ? original.text : ""), edit.targetId, original ? original.text : null, newText != null);
+}
+
+//
+// Disappearing messages (core/ephemeral_keeper.js): keep a copy when "keepDisappearing" is on. Never throws.
+//
+NodeHandler.keepEphemeral = function(e2eMessage, messageId, remoteJid, from)
+{
+    try
+    {
+        if (!NodeHandler.optionsFor(remoteJid).keepDisappearing) return;
+        if (typeof isEphemeralMessage == "undefined" || !messageId || !isEphemeralMessage(e2eMessage)) return;
+
+        // chats are looked up by their normalized JID (the same form the chat menu context uses)
+        var chatJid = (typeof normalizeJID == "function" && remoteJid) ? normalizeJID(String(remoteJid)) : remoteJid;
+        var snapshot = buildEphemeralSnapshot(e2eMessage, { messageId: messageId, chatJid: chatJid, from: from, ts: Date.now() });
+        saveArchiveRecord(snapshot, "ephemeral").catch(function() { console.warn("WAIncognito: could not save a disappearing message"); });
+    }
+    catch (exception)
+    {
+        console.warn("WAIncognito: keeping a disappearing message failed");
+    }
 }

@@ -16,6 +16,18 @@ async function injectScripts()
 	await injectScript('core/parsing/protobuf/WAProto.js');
 
 	await injectScript('core/utils.js');
+	await injectScript('core/options_schema.js');
+	await injectScript('core/i18n.js');
+	await injectScript('core/i18n_strings.js');
+	await injectScript('core/diagnostics.js');
+	await injectScript('core/vault.js');
+	await injectScript('core/contact_rules.js');
+	await injectScript('core/edit_tracker.js');
+	await injectScript('core/ephemeral_keeper.js');
+	await injectScript('core/chat_menu_context.js');
+	await injectScript('core/status_bulk.js');
+	await injectScript('core/hidetag.js');
+	await injectScript('core/revoke_window.js');
 	await injectScript('core/ui_class_names.js');
 	await injectScript('core/injected_ui.js');
 	await injectScript('lib/velocity.min.js');

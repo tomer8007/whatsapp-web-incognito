@@ -3,6 +3,109 @@
 //
 
 var allowStatusDownload = true;
+var statusCheckResponses = createResponseRouter(document, "waIncognitoStatusCheckResult", 5000);
+
+Diagnostics.register("status", "hook", "download-all-button", function() { return document.getElementsByClassName("download-all-button-incognito").length; });
+Diagnostics.register("status", "selector", "status-viewer", function() { return document.querySelectorAll("[data-animate-status-viewer]").length; });
+
+// "Deleted by sender" label: shown while a status is on screen that the sender deleted and we archived
+function checkDeletedStatusLabel()
+{
+    setTimeout(function()
+    {
+        var requestId = "status-" + Date.now() + "-" + Math.random();
+        statusCheckResponses.waitFor(requestId, function(data)
+        {
+            if (!data.archived || document.getElementsByClassName("incognito-status-deleted-label").length > 0) return;
+            var label = document.createElement("div");
+            label.className = "incognito-status-deleted-label";
+            label.textContent = t("status.deletedBySender");
+            document.body.appendChild(label);
+        });
+        document.dispatchEvent(new CustomEvent("waIncognitoStatusCheck", { detail: JSON.stringify({ messageID: requestId }) }));
+    }, 400);
+}
+
+//
+// "Download all": downloads every media status of the contact on screen (core/status_bulk.js does the work in the page world).
+// Files are saved one by one, 300 ms apart, through ordinary anchor downloads (no extra permission).
+//
+var statusBulkQueue = [];
+var statusBulkBusy = false;
+var statusBulkSaving = false;
+var STATUS_BULK_SAVE_DELAY_MS = 300;
+
+function setDownloadAllLabel(text)
+{
+    var button = document.getElementById("incognito-download-all");
+    if (button) button.textContent = text;
+}
+
+function ensureDownloadAllButton()
+{
+    if (document.getElementById("incognito-download-all")) return;
+    var button = document.createElement("button");
+    button.id = "incognito-download-all";
+    button.className = "download-all-button-incognito";
+    button.textContent = t("status.downloadAll");
+    button.title = t("status.downloadAllHint");
+    button.addEventListener("click", function()
+    {
+        if (statusBulkBusy) return;
+        statusBulkBusy = true;
+        setDownloadAllLabel(t("status.working"));
+        document.dispatchEvent(new CustomEvent("getStatusMediaForContact", { detail: JSON.stringify({}) }));
+    });
+    document.body.appendChild(button);
+}
+
+function removeDownloadAllButton()
+{
+    if (statusBulkBusy) return;
+    var button = document.getElementById("incognito-download-all");
+    if (button) button.remove();
+}
+
+async function saveQueuedStatusItems()
+{
+    if (statusBulkSaving) return;
+    statusBulkSaving = true;
+    while (statusBulkQueue.length > 0)
+    {
+        var item = statusBulkQueue.shift();
+        try { downloadBase64AsFile(item.b64, item.mimetype, item.name); }
+        catch (e) { console.warn("WAIncognito: could not save a status file"); }
+        setDownloadAllLabel(t("status.progress", { index: item.index, total: item.total }));
+        await new Promise(function(resolve) { setTimeout(resolve, STATUS_BULK_SAVE_DELAY_MS); });
+    }
+    statusBulkSaving = false;
+}
+
+document.addEventListener("onStatusMediaItem", function(e)
+{
+    statusBulkQueue.push(JSON.parse(e.detail));
+    saveQueuedStatusItems();
+});
+
+document.addEventListener("onStatusMediaDone", async function(e)
+{
+    var result = JSON.parse(e.detail);
+    while (statusBulkQueue.length > 0 || statusBulkSaving) await new Promise(function(resolve) { setTimeout(resolve, 100); });
+
+    if (result.error) setDownloadAllLabel(t("status.failedWith", { error: userErrorText(result.error) }));
+    else if (result.total == 0) setDownloadAllLabel(t("status.noMedia"));
+    else if (result.failed > 0) setDownloadAllLabel(t("status.someFailed", { n: result.failed }));
+    else setDownloadAllLabel(t("status.done", { n: result.total }));
+
+    statusBulkBusy = false;
+    setTimeout(function() { setDownloadAllLabel(t("status.downloadAll")); }, 4000);
+});
+
+function removeDeletedStatusLabel()
+{
+    var labels = document.getElementsByClassName("incognito-status-deleted-label");
+    while (labels.length > 0) labels[0].remove();
+}
 
 function determineIfNodeIsStatus(node) 
 {
@@ -57,7 +160,7 @@ function destroyOldButton(src)
 function createFailNotice(src)
 {
     var a = document.createElement("div");
-    a.innerHTML = "Please re-open the status to download.";
+    a.textContent = t("status.reopen");
     a.className = "download-button-incognito";
     a.id = "status-download-fail-button";
     a.download = "failstatus";
@@ -68,21 +171,25 @@ function createDownloadButton(src)
 {
     var a = document.createElement("a");
     a.innerHTML =
-        "<img src='" + chrome.runtime.getURL("images/download.svg") + "' >";
+        "<img src='" + extensionUrl("images/download.svg") + "' >";
     a.className = "download-button-incognito";
     a.href = src;
     a.id = src;
-    a.title = "Download this status!";
+    a.title = t("status.download");
     a.download = "status";
     document.body.appendChild(a);
 }
 
 function handleSRCAdd(src, node)
 {
+    var isStatus = determineIfNodeIsStatus(node);
+    if (isStatus) checkDeletedStatusLabel();
+
     if (!allowStatusDownload) return;
 
-    if (determineIfNodeIsStatus(node))
+    if (isStatus)
     {
+        ensureDownloadAllButton();
         if (src.startsWith("blob:")) 
         {
             createDownloadButton(src)
@@ -98,6 +205,8 @@ function handleSRCAdd(src, node)
 
 function handleSRCRemove(src, node) 
 {
+    removeDeletedStatusLabel();
+    removeDownloadAllButton();
     if (src != null)
         destroyOldButton(src)
 }
