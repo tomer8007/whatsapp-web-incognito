@@ -202,11 +202,27 @@
     pointer-events: auto;
 }
 
-.incognito-quick-options h2
+.incognito-quick-header
 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
     margin: 0 0 4px;
+}
+
+.incognito-quick-header h2
+{
+    margin: 0;
     font-size: 16px;
     font-weight: 650;
+}
+
+.incognito-version
+{
+    color: var(--settings-muted);
+    font-size: 12px;
+    white-space: nowrap;
 }
 
 .incognito-settings
@@ -255,6 +271,18 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     height: 100%;
+}
+
+.incognito-settings-shell:has(> .incognito-settings-footer)
+{
+    grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.incognito-settings-footer
+{
+    padding: 8px 24px;
+    border-top: 1px solid var(--settings-line);
+    text-align: end;
 }
 
 .incognito-settings-header

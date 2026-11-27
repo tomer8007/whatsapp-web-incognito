@@ -35,6 +35,9 @@ if (chrome != undefined)
 	var browser = chrome;
 }
 
+const extensionVersion = browser.runtime.getManifest?.().version;
+const versionLabel = extensionVersion ? "v" + extensionVersion : "";
+
 document.addEventListener("onExtendedDeletePreferenceRequested", function ()
 {
     if (extendedDeletePreference !== undefined)
@@ -481,7 +484,10 @@ async function addIconIfNeeded()
         quickOptions.setAttribute("role", "dialog");
         quickOptions.setAttribute("aria-labelledby", "incognito-quick-options-title");
         quickOptions.innerHTML = `
-            <h2 id="incognito-quick-options-title">Quick Incognito Options</h2>
+            <header class="incognito-quick-header">
+                <h2 id="incognito-quick-options-title">Quick Incognito Options</h2>
+                <span class="incognito-version">${versionLabel}</span>
+            </header>
             <p class="incognito-settings-notice" role="status" hidden>Waiting for WhatsApp to connect.</p>
             ${renderSettings([...quickActivitySettings, restoreDeletedMessagesSetting], setup.options, "incognito-quick")}
             <button class="incognito-quick-more" type="button" aria-haspopup="dialog" aria-controls="incognito-settings">More</button>`;
@@ -670,7 +676,7 @@ function generateOptionsContent(options)
         restoreDeletedMessagesSetting,
         ["show-device-type", "showDeviceTypes", "Show device of messages", "Shows whether new messages were sent from a phone or a computer."],
         ["status-downloading", "allowStatusDownload", "Allow status downloading", "Adds a download button to statuses."],
-        ["extend-delete", "extendDeleteForEveryone", "Extend “Delete for everyone” to 3 days", "Applies to your messages. WhatsApp may reject the request, and recipients may still see the message.", false],
+        ["extend-delete", "extendDeleteForEveryone", "Extend “Delete for everyone”", "Applies to your messages. WhatsApp may reject the request, and recipients may still see the message. Use it at your own risk.", false],
         ["keep-edits", "keepEditedMessages", "Keep edited messages", "Saves text and caption edits in this browser and adds an Edit history button.", false]
     ];
     return `
@@ -723,6 +729,7 @@ function generateOptionsContent(options)
                     <ul class="incognito-contact-list"></ul>
                 </section>
             </div>
+            <footer class="incognito-settings-footer incognito-version">${versionLabel}</footer>
         </div>`;
 }
 

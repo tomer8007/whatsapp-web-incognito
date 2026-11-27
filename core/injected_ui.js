@@ -2,7 +2,7 @@
 // UI Event handlers
 // ---------------------
 
-const EXTENDED_DELETE_WINDOW = 72 * 60 * 60;
+const EXTENDED_DELETE_WINDOW = 10 * 365 * 24 * 60 * 60;
 let extendDeleteForEveryone = false;
 let restoreSenderRevokeCheck;
 let keepEditedMessages = false;
