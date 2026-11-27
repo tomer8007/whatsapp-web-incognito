@@ -225,28 +225,15 @@ function onMutationsObserved(mutations)
         }
     }
 
-    const popupSelector = '[data-menu-content="true"] [role="menu"]';
-    const popups = new Set();
     for (const mutation of mutations)
     {
         if (messagePanel?.contains(mutation.target)) continue;
-        const popup = mutation.target.closest?.(popupSelector);
-        if (popup)
-        {
-            popups.add(popup);
-            continue;
-        }
         for (const node of mutation.addedNodes)
         {
             if (node.nodeType !== 1) continue;
             addContactPrivacyItem(node.matches(contactPrivacyAnchor) ? node : node.querySelector?.(contactPrivacyAnchor));
-            if (node.matches(popupSelector)) popups.add(node);
-            if (node.firstElementChild)
-                for (const popup of node.querySelectorAll(popupSelector)) popups.add(popup);
         }
     }
-    for (const popup of popups)
-        popup.dispatchEvent(new CustomEvent("onDropdownOpened", { bubbles: true }));
 }
 
 function addContactPrivacyItem(mute)

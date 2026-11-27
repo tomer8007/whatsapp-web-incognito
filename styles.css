@@ -24,25 +24,6 @@
     display: none !important;
 }
 
-.incognito-chat-read-menu-fallback
-{
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    min-height: 44px;
-    padding: 8px 16px;
-    text-align: start;
-}
-
-.incognito-chat-read-menu-icon
-{
-    display: block;
-    flex: none;
-    background: currentColor;
-    mask: center / 80% no-repeat;
-}
-
 .incognito-contact-privacy-row
 {
     display: flex;
