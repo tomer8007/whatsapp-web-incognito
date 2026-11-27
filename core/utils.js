@@ -150,6 +150,35 @@ function normalizeJID(jid)
     return prefix + "@" + suffix;
 }
 
+const contactPrivacyByJid = new Map();
+
+function contactPrivacyJid(value)
+{
+    if (typeof value === "string" && /^\d+(?::\d+)?@(?:s\.whatsapp\.net|c\.us|lid)$/.test(value))
+        return normalizeJID(value);
+}
+
+function contactPrivacyJids(chat)
+{
+    return [...new Set([chat.id, chat.accountLid, chat.lid, chat.phoneNumber, chat.contact?.id, chat.contact?.lid, chat.contact?.phoneNumber]
+        .map(id => contactPrivacyJid(id?.toString())).filter(Boolean))];
+}
+
+function getContactPrivacy(jid)
+{
+    return contactPrivacyByJid.get(contactPrivacyJid(jid));
+}
+
+function getChatContactPrivacy(chat)
+{
+    return contactPrivacyJids(chat).map(getContactPrivacy).find(Boolean);
+}
+
+function blocksReadReceipts(jid)
+{
+    return getContactPrivacy(jid)?.readConfirmationsHook ?? readConfirmationsHookEnabled;
+}
+
 const arrayBufferToBase64 = (buffer) =>
 {
     var binary = '';

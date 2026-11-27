@@ -34,16 +34,19 @@ NodeHandler.isSentNodeAllowed = function (node)
 
     var jid = data.jid ? data.jid : data.to;
     if (jid) jid = normalizeJID(jid.toString());
+    const contactPrivacy = getContactPrivacy(jid);
+    const blockRead = contactPrivacy?.readConfirmationsHook ?? readConfirmationsHookEnabled;
+    const blockTyping = contactPrivacy?.typingUpdatesHook ?? typingUpdatesHookEnabled;
 
     var shouldBlock = 
-        (readConfirmationsHookEnabled && action === "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] == "read-self") ||
-        (readConfirmationsHookEnabled && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
+        (blockRead && action === "read") ||
+        (blockRead && action == "receipt" && data["type"] == "read") ||
+        (blockRead && action == "receipt" && data["type"] == "read-self") ||
+        (blockRead && action == "receipt" && data["type"] === "played" && isChatBlocked(jid)) ||
 
         (onlineUpdatesHookEnabled && action === "presence" && data["type"] === "available") ||
-        (typingUpdatesHookEnabled && action == "presence" && data["type"] == "composing") ||
-        (typingUpdatesHookEnabled && action == "chatstate" && node.content[0].tag == "composing");
+        (blockTyping && action == "presence" && data["type"] == "composing") ||
+        (blockTyping && action == "chatstate" && node.content?.[0]?.tag == "composing");
 
     if (shouldBlock)
     {
@@ -52,7 +55,7 @@ NodeHandler.isSentNodeAllowed = function (node)
             case "read":
             case "receipt":
 
-                var isReadReceiptAllowed = readReceiptExceptions.get(jid)?.expiresAt > Date.now();
+                var isReadReceiptAllowed = !contactPrivacy?.readConfirmationsHook && readReceiptExceptions.get(jid)?.expiresAt > Date.now();
                 if (isReadReceiptAllowed)
                 {
                     // this is the user trying to send out a read receipt.
@@ -170,7 +173,7 @@ NodeHandler.onOutgoingMessageNode = async function (messageNode)
 // </message>
 NodeHandler.onSentEncNode = async function (encNode, remoteJid)
 {
-    if (autoReceiptOnReplay && isChatBlocked(remoteJid))
+    if (autoReceiptOnReplay && !getContactPrivacy(remoteJid)?.readConfirmationsHook && isChatBlocked(remoteJid))
     {
         // If the user replyed to a message from this JID,
         // It probably means we can send read receipts for it.
@@ -262,7 +265,7 @@ NodeHandler.onReceivedMessageNode = async function(messageNode, trace)
 NodeHandler.onReceivedE2EMessage = async function(messageNode, e2eMessage)
 {
     const messageId = messageNode.attrs?.id;
-    await interceptViewOnceMessages(e2eMessage, messageId);
+    interceptViewOnceMessages(e2eMessage, messageId);
     const sourceJid = messageNode.attrs?.from?.toString();
     const remoteJid = messageNode.attrs?.sender_pn?.toString() ?? sourceJid;
     const fromStatus = sourceJid === "status@broadcast" || messageNode.attrs?.jid?.toString() === "status@broadcast";

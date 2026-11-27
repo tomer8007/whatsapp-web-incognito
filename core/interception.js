@@ -357,71 +357,85 @@ async function saveDeletedMessage(deletedMessage, deletedMessageKey, revokeMessa
 // View once feature
 //
 
-async function interceptViewOnceMessages(e2eMessage, messageId) 
-{
-    if (e2eMessage.viewOnceMessageV2 !== null || e2eMessage.viewOnceMessageV2Extension !== null) 
-    {
-        var retrievedMsg = {};
-        var type = "";
-        if (e2eMessage.viewOnceMessageV2 !== null)
-        {
-            if (e2eMessage.viewOnceMessageV2.message.imageMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.imageMessage;
-                type = "image";
-            }
-            else if (e2eMessage.viewOnceMessageV2.message.videoMessage !== null) 
-            {
-                retrievedMsg = e2eMessage.viewOnceMessageV2.message.videoMessage;
-                type = "video";
-            }
-            else
-            {
-                throw new Error("Unknown viewOnceMessageV2 type");
-            }
-        }
-        else if (e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage !== null) 
-        {
-            retrievedMsg = e2eMessage.viewOnceMessageV2Extension.message.audioMessage;
-            type = "audio";
-        }
-        else 
-        {
-            throw new Error("Unknown viewOnceMessageV2 or viewOnceMessageV2Extension type");
-        }
-        const mediaKeyEncoded = btoa(String.fromCharCode.apply(null, retrievedMsg.mediaKey));
-        const encodedencFileHash = btoa(String.fromCharCode.apply(null, retrievedMsg.fileEncSha256));
-        const encodedfileSha256 = btoa(String.fromCharCode.apply(null, retrievedMsg.fileSha256));
-        
-        if (window.WhatsAppAPI !== undefined)
-        {
-            const decryptedData = await WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
-                directPath: retrievedMsg.directPath,
-                encFilehash: encodedencFileHash, filehash: encodedfileSha256, mediaKey: mediaKeyEncoded,
-                type: type, signal: (new AbortController).signal
-            });
+const pendingViewOnceMedia = new Set();
+let viewOnceMediaQueue = Promise.resolve();
 
-            const dataURI = "data:" + retrievedMsg.mimetype + ";base64," + arrayBufferToBase64(decryptedData);
-            openMessageArchive("viewOnce").then(db =>
-            {
-                const transaction = db.transaction("msgs", "readwrite");
-                const request = transaction.objectStore("msgs").add({ id: messageId, dataURI, caption: retrievedMsg.caption });
-                transaction.onabort = () =>
-                {
-                    if (request.error?.name !== "ConstraintError")
-                        console.warn("WAIncognito: Could not save view-once media", transaction.error);
-                };
-            }).catch(error => console.error("WAIncognito: Could not save view-once media", error));
-        }
-        else
+function interceptViewOnceMessages(e2eMessage, messageId)
+{
+    if (!messageId || pendingViewOnceMedia.has(messageId)) return;
+    const wrapped = e2eMessage.viewOnceMessageV2?.message;
+    const media = wrapped?.imageMessage ?? wrapped?.videoMessage ?? e2eMessage.viewOnceMessageV2Extension?.message?.audioMessage;
+    if (!media?.directPath || !media.mimetype || !media.fileEncSha256 || !media.fileSha256 || !media.mediaKey) return;
+    const { directPath, mimetype, fileEncSha256, fileSha256, mediaKey, caption } = media;
+    const type = wrapped?.imageMessage ? "image" : wrapped?.videoMessage ? "video" : "audio";
+
+    // Serialize media downloads separately so frames keep flowing without accumulating downloaded files.
+    pendingViewOnceMedia.add(messageId);
+    viewOnceMediaQueue = viewOnceMediaQueue
+        .then(() => saveViewOnceMedia({ directPath, mimetype, fileEncSha256, fileSha256, mediaKey, caption, type }, messageId))
+        .catch(error => console.warn("WAIncognito: Could not save view-once media", error))
+        .finally(() => pendingViewOnceMedia.delete(messageId));
+}
+
+async function saveViewOnceMedia(media, messageId)
+{
+    const controller = new AbortController();
+    const { signal } = controller;
+    let timeout;
+    const deadline = new Promise((resolve, reject) =>
+    {
+        timeout = setTimeout(() =>
         {
-            // retry in 5 seconds
-            // don't know why it's 5 seconds, but that's what is done for decrypting deleted messages 
-            setTimeout(function(){
-                interceptViewOnceMessages(e2eMessage, messageId)
-            }, 5000);
-        }
+            const error = new Error("View-once media save timed out");
+            reject(error);
+            controller.abort(error);
+        }, 60000);
+    });
+    try
+    {
+        await Promise.race([deadline, archiveViewOnceMedia(media, messageId, signal)]);
     }
+    finally
+    {
+        clearTimeout(timeout);
+    }
+}
+
+async function archiveViewOnceMedia(media, messageId, signal)
+{
+    const db = await openMessageArchive("viewOnce");
+    signal.throwIfAborted();
+    while (!window.WhatsAppAPI?.downloadManager?.downloadAndMaybeDecrypt)
+    {
+        await sleep(5000);
+        signal.throwIfAborted();
+    }
+    const decryptedData = await window.WhatsAppAPI.downloadManager.downloadAndMaybeDecrypt({
+        directPath: media.directPath,
+        encFilehash: btoa(String.fromCharCode(...media.fileEncSha256)),
+        filehash: btoa(String.fromCharCode(...media.fileSha256)),
+        mediaKey: btoa(String.fromCharCode(...media.mediaKey)),
+        type: media.type,
+        signal
+    });
+    signal.throwIfAborted();
+
+    const dataURI = "data:" + media.mimetype + ";base64," + arrayBufferToBase64(decryptedData);
+    await new Promise((resolve, reject) =>
+    {
+        const transaction = db.transaction("msgs", "readwrite");
+        const request = transaction.objectStore("msgs").add({ id: messageId, dataURI, caption: media.caption });
+        transaction.oncomplete = () =>
+        {
+            document.dispatchEvent(new CustomEvent("onViewOnceMediaSaved", { detail: messageId }));
+            resolve();
+        };
+        transaction.onabort = () =>
+        {
+            if (request.error?.name === "ConstraintError") resolve();
+            else reject(transaction.error);
+        };
+    });
 }
 
 

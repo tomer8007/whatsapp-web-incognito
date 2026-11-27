@@ -43,6 +43,38 @@
     mask: center / 80% no-repeat;
 }
 
+.incognito-contact-privacy-row
+{
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    width: 100%;
+    min-height: 64px;
+    padding-block: 12px;
+    padding-inline: 42px 24px;
+    border: 0;
+    background: transparent;
+    color: var(--WDS-content-default, var(--primary));
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.incognito-contact-privacy-row:hover,
+.incognito-contact-privacy-row:focus-visible
+{
+    background: var(--WDS-surface-emphasized, rgba(127, 127, 127, .12));
+}
+
+.incognito-contact-privacy-row img { flex: none; width: 20px; height: 20px; }
+
+.incognito-contact-options { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.incognito-contact-list { list-style: none; padding: 0; }
+.incognito-contact-list button { width: 100%; padding: 12px; text-align: start; }
+.incognito-contact-actions { display: flex; justify-content: end; gap: 8px; margin-top: 16px; }
+.incognito-contact-actions button { min-height: 40px; padding: 8px 12px; }
+.incognito-settings .incognito-contact-save { background: var(--settings-soft); color: var(--settings-strong); }
+
 .incognito-menu-tooltip
 {
     position: fixed;
@@ -126,8 +158,9 @@
 	background-color: rgba(255,0,0,0.3) !important;
 }
 
-/* Settings dialog */
-.incognito-settings
+/* Incognito options */
+.incognito-settings,
+.incognito-quick-options
 {
     --settings-surface: var(--WDS-surface-default, #fff);
     --settings-text: var(--WDS-content-default, #171b1a);
@@ -139,6 +172,45 @@
     --settings-strong: var(--WDS-accent-emphasized, #15603e);
     box-sizing: border-box;
     position: fixed;
+    border: 1px solid var(--settings-line);
+    background: var(--settings-surface);
+    color: var(--settings-text);
+    font: 14px/1.45 system-ui, sans-serif;
+}
+
+.incognito-quick-options
+{
+    inset: clamp(8px, var(--quick-options-top, 8px), max(8px, calc(100dvh - 21rem)))
+        auto auto clamp(8px, var(--quick-options-left, 8px), max(8px, calc(100% - 19rem - 8px)));
+    width: min(19rem, calc(100% - 16px));
+    max-height: calc(100dvh - 16px);
+    margin: 0;
+    padding: 16px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgb(9 21 17 / 24%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease, display 140ms, overlay 140ms;
+    transition-behavior: allow-discrete;
+}
+
+.incognito-quick-options:popover-open
+{
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.incognito-quick-options h2
+{
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 650;
+}
+
+.incognito-settings
+{
     inset: 0;
     margin: auto;
     padding: 0;
@@ -147,12 +219,8 @@
     max-width: none;
     max-height: none;
     overflow: hidden;
-    border: 1px solid var(--settings-line);
     border-radius: 22px;
-    background: var(--settings-surface);
-    color: var(--settings-text);
     box-shadow: 0 24px 90px rgba(9, 21, 17, .32);
-    font: 14px/1.45 system-ui, sans-serif;
     opacity: 0;
     transform: translateY(10px) scale(.98);
     transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1),
@@ -177,6 +245,7 @@
 
 @starting-style
 {
+    .incognito-quick-options:popover-open { opacity: 0; }
     .incognito-settings[open] { opacity: 0; transform: translateY(10px) scale(.98); }
     .incognito-settings[open]::backdrop { opacity: 0; }
 }
@@ -205,7 +274,7 @@
 .incognito-settings h2 { font-size: 23px; letter-spacing: -.025em; }
 .incognito-settings h3 { margin: 22px 0 6px; font-size: 13px; color: var(--settings-muted); }
 
-.incognito-settings button
+:is(.incognito-settings, .incognito-quick-options) button
 {
     box-sizing: border-box;
     border: 0;
@@ -216,8 +285,17 @@
     cursor: pointer;
 }
 
-.incognito-settings button:hover { background: var(--WDS-surface-emphasized, var(--settings-line)); }
-.incognito-settings :is(button, input):focus-visible { outline: 2px solid var(--settings-strong); outline-offset: 2px; }
+:is(.incognito-settings, .incognito-quick-options) button:hover { background: var(--WDS-surface-emphasized, var(--settings-line)); }
+:is(.incognito-settings, .incognito-quick-options) :is(button, input):focus-visible { outline: 2px solid var(--settings-strong); outline-offset: 2px; }
+
+.incognito-quick-options .incognito-quick-more
+{
+    width: 100%;
+    min-height: 40px;
+    margin-top: 8px;
+    color: var(--settings-strong);
+    font-weight: 650;
+}
 
 .incognito-settings .incognito-settings-close
 {
@@ -270,7 +348,7 @@
     animation: incognito-settings-pane-in 150ms ease-out;
 }
 
-.incognito-settings [hidden] { display: none; }
+:is(.incognito-settings, .incognito-quick-options) [hidden] { display: none; }
 
 @keyframes incognito-settings-pane-in
 {
@@ -308,7 +386,7 @@
     font-weight: 600;
 }
 
-.incognito-setting-copy > :last-child
+.incognito-setting-copy > :nth-child(2)
 {
     color: var(--settings-muted);
     font-size: 13px;
@@ -419,12 +497,13 @@
     .incognito-settings { border-radius: 16px; }
     .incognito-settings-header { padding-inline: 16px; }
     .incognito-settings-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
-    .incognito-settings-nav { flex-direction: row; padding: 8px 12px; border-inline-end: 0; border-bottom: 1px solid var(--settings-line); }
+    .incognito-settings-nav { flex-direction: row; flex-wrap: wrap; padding: 8px 12px; border-inline-end: 0; border-bottom: 1px solid var(--settings-line); }
     .incognito-settings-pane { padding-inline: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce)
 {
+    .incognito-quick-options,
     .incognito-settings,
     .incognito-settings::backdrop,
     .incognito-setting input,
@@ -457,19 +536,19 @@
     margin-inline-start: auto;
 }
 
-.incognito-edit-history-dialog
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog)
 {
     width: min(28rem, calc(100% - 2rem));
     height: fit-content;
     max-height: calc(100dvh - 2rem);
 }
 
-.incognito-edit-history-dialog .incognito-settings-shell
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog) .incognito-settings-shell
 {
     height: auto;
 }
 
-.incognito-edit-history-dialog .incognito-settings-pane
+:is(.incognito-edit-history-dialog, .incognito-contact-privacy-dialog) .incognito-settings-pane
 {
     max-height: min(28rem, calc(100dvh - 7rem));
 }
@@ -592,6 +671,8 @@ Messages
     padding: 0px 5px;
     border-radius: 11px;
 }
+
+.incognito-send-button[hidden] { display: none; }
 
 .incognito-send-button:hover
 {

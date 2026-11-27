@@ -233,7 +233,7 @@ document.addEventListener('onOptionsUpdate', function (e)
         setGlobalColorVaraibleString("--WDS-persistent-always-branded", 'rgba(9, 210, 97, 1)');
         var warningMessage = document.getElementsByClassName("incognito-message").length > 0 ?
             document.getElementsByClassName("incognito-message")[0] : null;
-        if (warningMessage != null)
+        if (warningMessage != null && !getContactPrivacy(warningMessage.dataset?.jid)?.readConfirmationsHook)
         {
             Velocity(warningMessage, { scaleY: [0, 1], opacity: [0, 1] }, { defaultDuration: 300, easing: [.1, .82, .25, 1] });
             setTimeout(function () { warningMessage.remove(); }, 300);
@@ -243,8 +243,57 @@ document.addEventListener('onOptionsUpdate', function (e)
     var unreadCounters = document.getElementsByClassName(UIClassNames.UNREAD_COUNTER_CLASS);
     for (var i = 0; i < unreadCounters.length; i++)
     {
-        unreadCounters[i].classList.remove("blocked-color");
+        if (!getContactPrivacy(unreadCounters[i].dataset?.incognitoBlockedJid)?.readConfirmationsHook)
+            unreadCounters[i].classList.remove("blocked-color");
     }
+});
+
+document.addEventListener("onContactPrivacyUpdate", function (event)
+{
+    let rules;
+    try { rules = JSON.parse(event.detail); }
+    catch { return; }
+    if (!Array.isArray(rules)) return;
+    contactPrivacyByJid.clear();
+    for (const rule of rules)
+    {
+        if (!Array.isArray(rule?.jids) || typeof rule.readConfirmationsHook !== "boolean"
+            || typeof rule.typingUpdatesHook !== "boolean") continue;
+        for (const value of rule.jids)
+        {
+            const jid = contactPrivacyJid(value);
+            if (jid) contactPrivacyByJid.set(jid, rule);
+        }
+    }
+    const warning = document.getElementsByClassName("incognito-message")[0];
+    if (warning?.dataset?.jid)
+    {
+        if (!blocksReadReceipts(warning.dataset.jid)) warning.remove();
+        else warning.lastChild.hidden = getContactPrivacy(warning.dataset.jid)?.readConfirmationsHook === true;
+    }
+    for (const counter of Array.from(document.getElementsByClassName("blocked-color")))
+        if (counter.dataset.incognitoBlockedJid && !blocksReadReceipts(counter.dataset.incognitoBlockedJid))
+            counter.classList.remove("blocked-color");
+});
+
+document.addEventListener("getActiveContactPrivacyTarget", function (event)
+{
+    const row = event.target;
+    const fiberKey = Object.keys(row).find(key => key.startsWith("__reactFiber$"));
+    let chat;
+    // shortcut: use the mute row's React props, fall back to the active chat if the drawer has no model.
+    for (let fiber = row[fiberKey], depth = 0; fiber && depth < 12; fiber = fiber.return, depth++)
+    {
+        const props = fiber.memoizedProps;
+        chat = props?.chat ?? props?.contact;
+        if (chat?.id) break;
+    }
+    if (!chat?.id) chat = getCurrentChat();
+    if (!chat?.id || chat.isGroup) return;
+    const jids = contactPrivacyJids(chat);
+    if (!jids.length) return;
+    const name = chat.contact?.name || chat.name || jids[0];
+    document.dispatchEvent(new CustomEvent("onActiveContactPrivacyTarget", { detail: JSON.stringify({ jids, name }) }));
 });
 
 document.addEventListener('onReadConfirmationBlocked', async function (e)
@@ -254,14 +303,19 @@ document.addEventListener('onReadConfirmationBlocked', async function (e)
     var blockedUser = blockedJid.substring(0, blockedJid.indexOf("@"));
 
     var chat = await getChatByJID(blockedJid);
+    if (!chat)
+    {
+        const activeChat = getCurrentChat();
+        if (activeChat && contactPrivacyJids(activeChat).includes(blockedJid)) chat = activeChat;
+    }
     if (!chat) 
     {
         console.warn("WAIncognito: Did not find chat for JID " + blockedJid);
         return;
     }
-    if (!readConfirmationsHookEnabled) return;
+    if (!blocksReadReceipts(blockedJid)) return;
 
-    if (chat.id.user == blockedUser || getJidOfChat(chat) === blockedJid)
+    if (chat.id.user == blockedUser || getJidOfChat(chat) === blockedJid || contactPrivacyJids(chat).includes(blockedJid))
     {
         markChatAsBlocked(chat);
     }
@@ -285,7 +339,7 @@ document.addEventListener('onPaneChatOpened', function ()
     {
         setTimeout(function ()
         {
-            if (readConfirmationsHookEnabled && getCurrentChat() === chat && isChatBlocked(getJidOfChat(chat)))
+            if (blocksReadReceipts(getJidOfChat(chat)) && getCurrentChat() === chat && isChatBlocked(getJidOfChat(chat)))
                 markChatAsBlocked(chat);
         }, 200);
     }
@@ -312,7 +366,11 @@ document.addEventListener("onDropdownOpened", async function (event)
             const props = fiber.memoizedProps;
             const chatId = props?.chatId?._serialized ?? props?.chatId?.toString();
             const chat = props?.chat ?? (typeof chatId === "string" && chatId.includes("@") ? await getChatByJID(chatId) : null);
-            if (!chat?.id || !(chat.unreadCount > 0) || !row.isConnected ||
+            const nativeLabel = row.getAttribute("aria-label")?.trim() || row.textContent.trim();
+            // shortcut: recognize English and Spanish at zero unread, use a native action marker when WhatsApp exposes one.
+            const canMarkAsRead = chat?.unreadCount > 0 || /^(mark as read|marcar como leído)$/i.test(nativeLabel);
+            if (!chat?.id || getChatContactPrivacy(chat)?.readConfirmationsHook ||
+                !canMarkAsRead || !row.isConnected ||
                 row.closest('[role="menu"]') !== menu || menu.querySelector("." + chatReadMenuClass)) return;
 
             const button = createChatReadMenuItem(row);
@@ -386,6 +444,7 @@ function navigateChatReadMenuItem(event)
 
 function requestMarkAsRead(chat)
 {
+    if (getChatContactPrivacy(chat)?.readConfirmationsHook) return;
     const data = {
         jid: chat.id.toString(),
         unreadCount: chat.unreadCount,
@@ -399,12 +458,14 @@ document.addEventListener('sendReadConfirmation', async function (e)
     const data = JSON.parse(e.detail);
     if (typeof data?.jid !== "string" || !data.jid.includes("@")) return;
     const jid = normalizeJID(data.jid);
+    if (getContactPrivacy(jid)?.readConfirmationsHook) return;
     const chat = await getChatByJID(jid);
     if (!chat)
     {
         console.warn("WAIncognito: Could not find the chat for Mark as read");
         return;
     }
+    if (getChatContactPrivacy(chat)?.readConfirmationsHook) return;
     const chatJid = getJidOfChat(chat);
 
     const aliases = blockedChats.get(jid) ?? blockedChats.get(chatJid);
@@ -551,9 +612,9 @@ function markChatAsBlocked(chat)
     }
 
     var currentChat = getCurrentChat();
-    var messageID = getJidOfChat(chat) + chat.lastReceivedKey.id;
+    var messageID = getJidOfChat(chat) + (chat.lastReceivedKey?.id ?? "");
 
-    if (currentChat?.id.user == chat.id.user)
+    if (currentChat?.id && getJidOfChat(currentChat) === getJidOfChat(chat))
     {
         //
         // Create a "receipts blocked" warning if needed
@@ -583,8 +644,10 @@ function markChatAsBlocked(chat)
         sendButton.setAttribute('class', 'incognito-send-button');
         sendButton.innerHTML = "Mark as read";
         sendButton.onclick = () => requestMarkAsRead(chat);
+        sendButton.hidden = getChatContactPrivacy(chat)?.readConfirmationsHook === true;
 
         warningMessage.messageID = messageID;
+        warningMessage.dataset.jid = getJidOfChat(chat);
 
         //
         // Put that warning in the chat panel, under the unread counter or at the bottom
@@ -622,8 +685,11 @@ function markChatAsBlocked(chat)
         if (blockedChatElem != null)
         {
             var unreadCounter = blockedChatElem.querySelector("html[dir] ." + UIClassNames.UNREAD_COUNTER_CLASS);
-            if (unreadCounter && !unreadCounter.className.includes("blocked-color"))
+            if (unreadCounter)
+            {
+                unreadCounter.dataset.incognitoBlockedJid = getJidOfChat(chat);
                 unreadCounter.classList.add("blocked-color");
+            }
         }
     }
 
