@@ -52,6 +52,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
         // these are the default values. we will update them according to the storage
 		var onlineUpdatesHook = false;
         var typingUpdatesHook = false;
+        var notifytyping = false;
         var readConfirmationsHook = true;
         var showReadWarning = true;
 		var safetyDelay = 0;
@@ -62,6 +63,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
 
         chrome.storage.local.get(['onlineUpdatesHook',
                                 'typingUpdatesHook',
+                                'notifytyping',
                                 'readConfirmationsHook', 
                                 'showReadWarning', 
                                 'safetyDelay', 
@@ -77,6 +79,10 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             if (storage["typingUpdatesHook"] != undefined)
             {
                 typingUpdatesHook = storage["typingUpdatesHook"];
+            }
+            if (storage["notifytyping"] != undefined)
+            {
+                notifytyping = storage["notifytyping"];
             }
             if (storage["readConfirmationsHook"] != undefined)
             {
@@ -110,6 +116,7 @@ browser.runtime.onMessage.addListener(function (messageEvent, sender, callback)
             {
                 onlineUpdatesHook: onlineUpdatesHook,
                 typingUpdatesHook: typingUpdatesHook,
+                notifytyping: notifytyping,
                 readConfirmationsHook: readConfirmationsHook,
                 showReadWarning: showReadWarning,
                 safetyDelay: safetyDelay,
